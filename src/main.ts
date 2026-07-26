@@ -7,16 +7,20 @@
 
 import * as THREE from 'three/webgpu';
 
+import { EnemyDirector } from './ai/EnemyDirector';
 import { AssetManager } from './assets/AssetManager';
 import { CameraRig } from './character/CameraRig';
 import { FootIK } from './character/FootIK';
 import { PlayerController } from './character/PlayerController';
+import { CombatSystem } from './combat/CombatSystem';
+import { CombatFeedback } from './combat/Feedback';
 import { Engine } from './core/Engine';
 import type { GameContext } from './core/types';
 import { PhysicsWorld } from './physics/PhysicsWorld';
 import { WorldColliders } from './physics/WorldColliders';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
 import { BloodMoor } from './scene/BloodMoor';
+import { CombatHud } from './ui/CombatHud';
 import { DebugOverlay } from './ui/DebugOverlay';
 
 /**
@@ -137,10 +141,22 @@ engine.add(scene);
 // order, so this list *is* the frame order.
 engine.add(new PhysicsWorld());
 engine.add(new WorldColliders());
+// Combat *before* the player: `PlayerController.init` checks for a registered
+// `combat` service and stands its placeholder attack input down when it finds
+// one, so the service has to exist by then. Combat binds to the player lazily
+// in return, which is the price of that ordering and is paid in one method.
+engine.add(new CombatSystem());
 engine.add(new PlayerController());
 engine.add(new FootIK());
 engine.add(new CameraRig());
+// Enemies after the camera so their models are posed against a settled frame.
+engine.add(new EnemyDirector());
+// Feedback last of the gameplay modules: its `lateUpdate` adds the camera
+// shake, and it must run after `CameraRig` has placed the camera or the rig
+// simply overwrites it.
+engine.add(new CombatFeedback());
 
+engine.add(new CombatHud());
 engine.add(new DebugOverlay());
 
 const ready = engine.ready

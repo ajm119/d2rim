@@ -74,6 +74,23 @@ export interface Combatant {
   receiveHit(hit: IncomingHit): AttackOutcome;
 }
 
+/**
+ * A combatant that can be tinted on impact.
+ *
+ * Optional rather than part of {@link Combatant} because the player is *not*
+ * one: flashing the model you are looking over the shoulder of tells you
+ * nothing you did not already know from the screen going red, and it costs a
+ * material clone on the one character whose materials the scene already owns.
+ */
+export interface FlashableCombatant extends Combatant {
+  /** Tint the whole model toward `color` and decay over `seconds`. */
+  flash(color: number, seconds: number): void;
+}
+
+export function isFlashable(combatant: Combatant): combatant is FlashableCombatant {
+  return typeof (combatant as Partial<FlashableCombatant>).flash === 'function';
+}
+
 export const CombatantsKey = serviceKey<CombatantRegistry>('combat.targets');
 
 /**

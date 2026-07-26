@@ -351,11 +351,19 @@ export class ComboMachine {
    * swings in one frame is never what the player asked for.
    */
   update(dt: number): MeleeMove | null {
-    if (dt > 0 && this.#buffered !== null) {
+    const started = this.#advance(dt);
+    // Buffer decay happens *after* the start attempt, never before. The other
+    // order silently loses a press whenever one frame is longer than the buffer
+    // window — rare on a good machine, routine on a bad one, and it presents as
+    // "the game dropped my input" precisely when the game is already struggling.
+    if (started === null && dt > 0 && this.#buffered !== null) {
       this.#bufferLeft -= dt;
       if (this.#bufferLeft <= 0) this.clearBuffer();
     }
+    return started;
+  }
 
+  #advance(dt: number): MeleeMove | null {
     const current = this.#current;
     if (current !== null) {
       this.#elapsed += Math.max(0, dt);
@@ -576,6 +584,22 @@ export class CombatSystem implements GameModule {
   /** Current move id, for the debug readout and the drive harness. */
   get moveId(): string | null {
     return this.#combo.current?.id ?? null;
+  }
+
+  /** Whether the player's damage window is open right now. */
+  get hitWindowOpen(): boolean {
+    return this.#activeHitbox?.isOpen ?? false;
+  }
+
+  /**
+   * Queue an attack from script rather than from the keyboard.
+   *
+   * The drive harness and the encounter tests use this; it goes through exactly
+   * the same buffer and chain the player's own press does, so a scripted combo
+   * exercises the real state machine rather than a shortcut around it.
+   */
+  press(kind: AttackKind): void {
+    this.#combo.press(kind);
   }
 
   /**

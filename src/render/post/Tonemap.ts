@@ -883,9 +883,35 @@ export class CompositePass implements PostPass {
     }
     scene = scene.max(0) as unknown as THREE.Node<'vec3'>;
 
-    // -- bloom: a convex combination, so the mean of the image is preserved
+    // -- bloom: additive, because the pyramid is thresholded ---------------
+    //
+    // This was `mix(scene, bloom, intensity)`, with a comment claiming the
+    // convex combination preserved the mean of the image. It does — but only
+    // when the second operand carries the same mean as the first, and this
+    // one cannot: `BloomPass` thresholds at 1.0 so that *only* the fire and the
+    // brightest sky bloom, which is exactly the art direction. Everywhere else
+    // in the frame the pyramid is black, so the lerp was not adding a glow, it
+    // was deleting `intensity` (0.55) of the entire scene's light and replacing
+    // it with nothing.
+    //
+    // That is what made tone a function of the quality tier. The tier table
+    // changes `bloomMips` (4 at low → 7 at ultra); more levels spread the
+    // thresholded energy across more of the frame, so how much of the image
+    // survived the lerp depended on the tier. Measured on this scene at 1280×720
+    // with the lerp in place: `ultra` put **40.5%** of the frame below luminance
+    // 0.02 against `low`'s 5.5%, and switching bloom off at `ultra` moved it to
+    // 3.5% and lifted mean luminance from 0.129 to 0.214. A "quality" setting
+    // was costing most of a stop.
+    //
+    // Adding is the composite a thresholded pyramid actually wants: the scene
+    // passes through untouched, the pyramid contributes only where it has
+    // energy, and the mip count changes the *radius* of the glow rather than
+    // the exposure of the frame. Tier-invariance then holds by construction
+    // rather than by luck.
     const bloomColor = this.#uBloom.sample(base).rgb.max(0);
-    let color = mix(scene, bloomColor, this.#uBloomIntensity) as unknown as THREE.Node<'vec3'>;
+    let color = scene.add(
+      bloomColor.mul(this.#uBloomIntensity),
+    ) as unknown as THREE.Node<'vec3'>;
 
     // -- white balance, still scene-referred ------------------------------
     color = this.#grade.whiteBalance(color);

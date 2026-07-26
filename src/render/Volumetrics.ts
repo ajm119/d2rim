@@ -1021,6 +1021,21 @@ export function bakeFogNoiseTexture(size = 32, seed: string | number = 'd2rim.fo
 
   const texture = new THREE.Data3DTexture(data, n, n, n);
   texture.name = 'fog.noise3D';
+  // `Data3DTexture` predates the node renderer and sets only `isData3DTexture`.
+  // Several of three's WebGPU paths test `is3DTexture` alone — `WGSLNodeBuilder`'s
+  // texture-uniform branch and `WebGPUBindingUtils`' storage-texture layout among
+  // them — so a volume tagged only the old way can end up bound through a 2D view
+  // of a 3D texture. Setting the flag three's own `Storage3DTexture` sets costs
+  // nothing and is inert on WebGL2, which tests both spellings.
+  //
+  // It is NOT, on its own, enough to make this volume usable on WebGPU in r185:
+  // that backend also *uploads* it as 32 separate 2D slices, which Dawn rejects
+  // with "The dimension (TextureViewDimension::e2D) of the texture view is not
+  // compatible with the dimension (TextureDimension::e3D) of [Texture
+  // "fog.noise3D"]". Measured, with and without this flag. See the note on
+  // `#renderFroxelVolume` for what that does to the frame and how the module
+  // now at least notices.
+  (texture as unknown as { is3DTexture: boolean }).is3DTexture = true;
   texture.format = THREE.RGBAFormat;
   texture.type = THREE.UnsignedByteType;
   texture.minFilter = THREE.LinearFilter;
@@ -1239,6 +1254,15 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
   #mode: VolumetricsMode = 'off';
   #graphVersion = 0;
   #froxelFailed = false;
+  /**
+   * Frames of froxel dispatch still to be watched by a WebGPU error scope.
+   *
+   * Counts down rather than latching on the first clean frame because the
+   * scatter volumes ping-pong: frame 0 writes `scatter.0` and reads nothing,
+   * frame 1 writes `scatter.1` and reads `scatter.0`, and only from frame 2 is
+   * every binding in the graph actually exercised. Four is that plus slack.
+   */
+  #froxelWatchFrames = 4;
   #warnedNoRenderer = false;
   #temporalValid = false;
   #frameCounter = 0;
@@ -1820,11 +1844,38 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
       }
     }
 
+    // WebGPU reports a bad binding as an *uncaptured device error*, not as a
+    // throw: the offending submit is silently dropped and `render()` returns
+    // normally. So the `catch` below — the only failure detector this module
+    // had — never fired, and the froxel path stayed selected while writing
+    // nothing. That is precisely how the backend divergence survived: WebGL2
+    // ray-marched real fog, WebGPU dispatched a compute pass that the driver
+    // threw away, and nothing in the engine could tell. An error scope around
+    // the dispatch turns that silence back into the observed failure that
+    // `#failFroxel` is designed to consume.
+    const device = this.#froxelWatchFrames > 0 ? errorScopeDevice(renderer) : null;
+    device?.pushErrorScope('validation');
+
     try {
       froxel.render(renderer);
     } catch (error) {
+      if (device !== null) void device.popErrorScope().catch(() => null);
       this.#failFroxel(error instanceof Error ? error.message : String(error));
+      return;
     }
+
+    if (device === null) return;
+    this.#froxelWatchFrames--;
+    void device
+      .popErrorScope()
+      .then((error) => {
+        if (error === null || error === undefined) return;
+        this.#failFroxel(`WebGPU rejected the froxel dispatch: ${error.message}`);
+      })
+      .catch(() => {
+        // The device went away between push and pop. The next frame's throw
+        // will latch the fallback; there is nothing useful to do here.
+      });
   }
 
   /**
@@ -2400,6 +2451,28 @@ function clampRange(value: number, low: number, high: number): number {
 type FloatUniform = ReturnType<typeof createMediaUniforms>['time'];
 /** A `mat4` uniform node. */
 type Mat4Uniform = ReturnType<typeof createMediaUniforms>['cameraMatrixWorld'];
+
+/**
+ * The WebGPU error-scope API, structurally.
+ *
+ * Declared here rather than imported from `@webgpu/types`, which this project
+ * does not depend on: two method signatures are all that is needed, and a
+ * structural check is also the honest test — "can this renderer tell me whether
+ * my dispatch was accepted?" — rather than a guess about the backend.
+ */
+interface ErrorScopeDevice {
+  pushErrorScope(filter: 'validation'): void;
+  popErrorScope(): Promise<{ readonly message: string } | null>;
+}
+
+/** The WebGPU device behind a node renderer, or `null` on any other backend. */
+function errorScopeDevice(renderer: NodeRenderer): ErrorScopeDevice | null {
+  const backend = (renderer as unknown as { backend?: { device?: unknown } }).backend;
+  const device = backend?.device as Partial<ErrorScopeDevice> | undefined;
+  if (typeof device?.pushErrorScope !== 'function') return null;
+  if (typeof device.popErrorScope !== 'function') return null;
+  return device as ErrorScopeDevice;
+}
 
 /**
  * Trilinear fetch from a 3D texture, at level 0 explicitly.

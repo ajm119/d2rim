@@ -403,7 +403,12 @@ export function resolveAttack(
   const unblockable = offense.unblockable === true || move.unblockable === true;
   const blockBase = defense.blocking === true && !unblockable ? (defense.blockChance ?? 0) : 0;
   const block = blockChance(blockBase, facing);
-  const blocked = block > 0 && rng() < block;
+  // Both rolls are drawn unconditionally, even when the chance is zero. Short
+  // circuiting would make the number of draws depend on the defender's gear,
+  // and a seeded encounter would then diverge the moment anyone equipped a
+  // shield — which defeats the point of seeding it.
+  const blockRoll = rng();
+  const blocked = block > 0 && blockRoll < block;
 
   const criticalChance = clamp(offense.criticalChance + (move.criticalBonus ?? 0), 0, 1);
   const critical = rng() < criticalChance;

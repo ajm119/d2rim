@@ -83,7 +83,22 @@ export interface RenderTier {
   readonly froxelDimensions: readonly [number, number, number] | null;
   /** Light-shaft buffer scale relative to the chain resolution. */
   readonly lightShaftScale: number;
-  /** Scatter multiplier for prop/vegetation instancing in the showcase scene. */
+  /**
+   * Scatter multiplier for prop/vegetation instancing in the showcase scene.
+   *
+   * **1 at every tier, deliberately.** This used to run 0.45 → 1.25 across the
+   * ladder, which meant `ultra` drew nearly three times as many props, rocks
+   * and trees as `low`: not a more expensive picture of the same world, a
+   * different world. It showed up as a tone divergence the tier gate could not
+   * be made to pass honestly — more small dark geometry is more genuinely dark
+   * pixels, so `ultra` measured 2× the unique colours and a materially lower
+   * mean luminance no matter what the renderer did — and it would have shipped
+   * as two players standing on the same hill seeing a different number of
+   * trees. A quality setting may change what a frame *costs*; it may not change
+   * what is in it. The field is kept (rather than deleted) because a future
+   * streaming/LOD system is the right owner of scatter counts, and it will want
+   * a knob here that is driven by distance rather than by a menu.
+   */
   readonly scatterDensity: number;
 }
 
@@ -103,7 +118,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 128,
     froxelDimensions: [96, 54, 48],
     lightShaftScale: 0.35,
-    scatterDensity: 0.45,
+    scatterDensity: 1,
   },
   medium: {
     post: 'medium',
@@ -120,7 +135,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 192,
     froxelDimensions: [128, 72, 64],
     lightShaftScale: 0.4,
-    scatterDensity: 0.7,
+    scatterDensity: 1,
   },
   high: {
     post: 'high',
@@ -154,7 +169,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 384,
     froxelDimensions: null,
     lightShaftScale: 0.5,
-    scatterDensity: 1.25,
+    scatterDensity: 1,
   },
 };
 
