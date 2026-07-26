@@ -1,0 +1,158 @@
+{
+  "_readme": [
+    "Declarative shot list for tools/capture/capture.mjs. See tools/capture/README.md.",
+    "",
+    "Per-shot fields:",
+    "  id           required, unique, filename-safe. Output is <out>/<id>.png.",
+    "  description  one line, shown in logs, report.json and contact-sheet labels.",
+    "  url          page path, resolved against the server origin. Query params are",
+    "               kept; the harness always forces ?autostart=0 and ?backend=<backend>.",
+    "  backend      'webgl2' (default) or 'webgpu'.",
+    "  setup        JS run after the engine is ready, BEFORE the warmup frames.",
+    "               Use for scene state that the simulation should then settle into.",
+    "  warmupFrames deterministic frames stepped at a fixed 1/60 s delta, so temporal",
+    "               effects converge and animation reaches a known pose.",
+    "  pose         JS run AFTER the warmup, immediately before the capture render.",
+    "               Use for the camera: modules re-drive the camera every update, so a",
+    "               camera set in `setup` is overwritten during the warmup.",
+    "  mode         'readback' (default, GPU->RenderTarget->PNG, no DOM) or",
+    "               'screenshot' (page.screenshot, includes DOM/HUD layers).",
+    "  guard        per-shot blank-frame threshold overrides; keys must exist in",
+    "               DEFAULT_THRESHOLDS in frame-guard.mjs.",
+    "",
+    "Scripts are strings, or arrays of lines which are joined with newlines. They run",
+    "as async function bodies with these bindings: d2rim, engine, ctx, scene, camera,",
+    "renderer, time, services, events, THREE.",
+    "",
+    "Scene facts these baselines are composed against (src/scene/ReferenceScene.ts):",
+    "  sun elevation 27 deg, azimuth 42 deg -> direction (0.596, 0.454, 0.662)",
+    "  horizontal sun bearing (0.669, 0.743); shadows fall along (-0.669, -0.743)",
+    "  torus knot at (0, 1.72, 0) r~1.03 on a 2.6 m plinth; brass posts at (+-4, 1.15, 0)",
+    "  metal roughness sweep at z ~ -4.5, red dielectric sweep at z ~ +4.0, x in [-5.2, 5.2]"
+  ],
+
+  "defaults": {
+    "url": "/",
+    "backend": "webgl2",
+    "width": 1600,
+    "height": 900,
+    "warmupFrames": 45,
+    "mode": "readback"
+  },
+
+  "shots": [
+    {
+      "id": "wide-establishing",
+      "description": "Wide establishing view: full composition, horizon, aerial perspective and the whole material chart.",
+      "warmupFrames": 60,
+      "pose": [
+        "// Fixed azimuth rather than whatever the orbit reached, so this frame is",
+        "// comparable run to run even if warmupFrames changes.",
+        "const azimuth = THREE.MathUtils.degToRad(-28);",
+        "const radius = 13.5;",
+        "camera.position.set(Math.sin(azimuth) * radius, 3.9, Math.cos(azimuth) * radius);",
+        "camera.lookAt(0, 1.5, 0);",
+        "camera.fov = 38;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "hero-material-closeup",
+      "description": "Close-up material detail: polished gold torus knot, sky reflections, plinth micro-shading and contact shadow.",
+      "warmupFrames": 60,
+      "pose": [
+        "// Tight on the hero so anisotropy, reflection sharpness and normal detail",
+        "// are readable at 1:1 rather than being three pixels wide.",
+        "camera.position.set(3.55, 2.62, 4.15);",
+        "camera.lookAt(0, 1.68, 0);",
+        "camera.fov = 26;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "roughness-sweep",
+      "description": "PBR roughness sweep: five dielectric spheres from mirror to matte, with the conductor row behind them.",
+      "warmupFrames": 30,
+      "height": 620,
+      "pose": [
+        "// Front-lit and square-on: the specular lobe broadening left to right is the",
+        "// single most diagnostic thing in the whole scene when the BRDF regresses.",
+        "//",
+        "// Deliberately a wide, short frame. Fitting an 11.6 m row of spheres needs",
+        "// ~11 m of standoff, and at a 16:9 aspect that buys seven metres of vertical",
+        "// view for a subject 1.2 m tall - the sweep ends up tiny in a sea of ground.",
+        "// Cropping the frame instead keeps the standoff and throws away only the",
+        "// empty sky and foreground.",
+        "camera.position.set(0, 1.55, 15.6);",
+        "camera.lookAt(0, 0.85, 4.2);",
+        "camera.fov = 23;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "backlit-rim",
+      "description": "Backlit rim light: camera into the sun, subjects silhouetted, shadows thrown toward the lens.",
+      "warmupFrames": 60,
+      "pose": [
+        "// On the anti-sun bearing (azimuth 222 deg) at 9.6 m, so the key light is",
+        "// directly behind the subjects and every silhouette gets a rim. This is",
+        "// where tone mapping, highlight rolloff and rim separation either hold up",
+        "// or fall apart.",
+        "//",
+        "// Raised to 2.9 m and aimed at the knot's height on purpose: the near end",
+        "// of the conductor row sits 2.5 m off this bearing, and from any lower the",
+        "// camera it fills the bottom third of the frame with an out-of-context",
+        "// sphere. At this height it falls ~40 deg off-axis, i.e. out of frame.",
+        "camera.position.set(-6.4, 2.9, -7.1);",
+        "camera.lookAt(0, 2.05, 0);",
+        "camera.fov = 36;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "shadow-detail",
+      "description": "Shadow detail: raking overhead view of the cast-shadow field, PCF softness, contact darkening and ground normals.",
+      "warmupFrames": 30,
+      "pose": [
+        "// Looking down the shadow bearing from above. Nothing but ground and",
+        "// shadows in frame, so acne, peter-panning and shadow-map aliasing have",
+        "// nowhere to hide.",
+        "camera.position.set(-9.0, 6.5, -11.0);",
+        "camera.lookAt(-2.5, 0.1, -4.5);",
+        "camera.fov = 30;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "hud-composite",
+      "description": "HUD composite (page.screenshot): the DOM overlay layered over the rendered frame, for UI legibility review.",
+      "mode": "screenshot",
+      "width": 1280,
+      "height": 720,
+      "warmupFrames": 30
+    },
+
+    {
+      "id": "webgpu-backend-check",
+      "description": "WebGPU backend proof-of-life at frame 0. Warmup is clamped to 0 here: presenting to the WebGPU canvas loses the device in this container.",
+      "backend": "webgpu",
+      "warmupFrames": 0,
+      "pose": [
+        "// Same framing as wide-establishing so the two are directly comparable.",
+        "// Animation state differs (this one is frame 0), so compare lighting,",
+        "// colour response and shadowing rather than doing a pixel diff.",
+        "const azimuth = THREE.MathUtils.degToRad(-28);",
+        "const radius = 13.5;",
+        "camera.position.set(Math.sin(azimuth) * radius, 3.9, Math.cos(azimuth) * radius);",
+        "camera.lookAt(0, 1.5, 0);",
+        "camera.fov = 38;",
+        "camera.updateProjectionMatrix();"
+      ]
+    }
+  ]
+}

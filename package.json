@@ -1,0 +1,35 @@
+{
+  "name": "d2rim",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A Skyrim-style third/first-person re-imagining of Diablo II Act I, in three.js.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "capture": "node scripts/capture.mjs",
+    "assets": "node tools/assets/fetch-assets.mjs",
+    "assets:verify": "node tools/assets/fetch-assets.mjs --verify",
+    "shots": "node tools/capture/capture.mjs",
+    "contact-sheet": "node tools/capture/contact-sheet.mjs",
+    "guard": "node tools/capture/frame-guard.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.14.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/three": "^0.185.0",
+    "playwright": "^1.56.0",
+    "sharp": "^0.35.3",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.0"
+  }
+}

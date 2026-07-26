@@ -1,0 +1,32 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.local
+
+# Throwaway GPU capability probe (see README architecture notes)
+.probe/
+
+# Fetched third-party asset binaries. Reproducible byte-for-byte from
+# tools/assets/manifest.json + assets.lock.json via `npm run assets`, so they
+# are not worth carrying in git history.
+#
+# Deliberately NOT ignored, because they are the licence record and must be
+# reviewable in the repo: public/ATTRIBUTIONS.md, public/ATTRIBUTIONS.json,
+# public/assets/licenses/ (the licence text archived from each source).
+public/assets/*
+!public/assets/licenses/
+
+# Headless capture output
+captures/
+test-results/
+playwright-report/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.log
+npm-debug.log*

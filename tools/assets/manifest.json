@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "comment": [
+    "Declarative asset manifest for d2rim. `tools/assets/fetch-assets.mjs` is the only",
+    "thing that reads it; nothing else in the project may hardcode an asset URL.",
+    "",
+    "NETWORK REALITY (measured, not assumed). Exactly two hosts are reachable from this",
+    "container: registry.npmjs.org and raw.githubusercontent.com. Poly Haven, ambientCG,",
+    "Kenney.nl, Quaternius, Mixamo, Freesound, OpenGameArt, Sketchfab, poly.pizza, the CMU",
+    "mocap library, threejs.org, jsDelivr and unpkg are all 403-at-CONNECT by egress policy.",
+    "github.com / api.github.com / codeload.github.com are also blocked, so there is no",
+    "directory listing and no tarball download -- every path below is an exact, verified path.",
+    "",
+    "LICENSING RULE. An asset is only in the `core` tier if its licence is documented at",
+    "source in a file we can fetch and archive. `licenseEvidence` names that file, and the",
+    "fetcher downloads it alongside the asset so the claim is auditable offline. Anything",
+    "whose licence we cannot prove lives in the `review-required` tier and is NOT downloaded",
+    "unless the operator passes --include-review-required."
+  ],
+
+  "outputDir": "public/assets",
+  "cacheDir": "node_modules/.cache/d2rim-assets",
+  "generated": {
+    "registry": "src/assets/registry.generated.ts",
+    "attributionsJson": "public/ATTRIBUTIONS.json",
+    "attributionsMd": "public/ATTRIBUTIONS.md"
+  },
+
+  "licenses": {
+    "CC0-1.0": {
+      "name": "Creative Commons Zero v1.0 Universal (public domain dedication)",
+      "url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+      "requiresAttribution": false,
+      "requiresShareAlike": false,
+      "permitsCommercial": true,
+      "redistributable": true
+    },
+    "CC-BY-4.0": {
+      "name": "Creative Commons Attribution 4.0 International",
+      "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+      "requiresAttribution": true,
+      "requiresShareAlike": false,
+      "permitsCommercial": true,
+      "redistributable": true
+    },
+    "LicenseRef-Mixamo-Unclear": {
+      "name": "Mixamo-derived, redistribution rights unresolved",
+      "url": "https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html",
+      "requiresAttribution": true,
+      "requiresShareAlike": false,
+      "permitsCommercial": false,
+      "redistributable": false,
+      "notes": "Adobe's terms permit use of Mixamo content inside a project but restrict standalone redistribution. The hosting repositories publish no per-asset grant that we can verify (three.js's MIT LICENSE covers the library, not the example art; BabylonJS blanket-relabels its mixamo/ subtree CC BY 4.0, which is a claim it is not obviously entitled to make). Prototype-only pending a human legal decision."
+    }
+  },
+
+  "sources": {
+    "pmndrs-assets": {
+      "kind": "npm",
+      "package": "@pmndrs/assets",
+      "version": "1.7.0",
+      "homepage": "https://github.com/pmndrs/assets",
+      "comment": "Self-hosted on npm, so it is immune to the CDN egress block. This is our stand-in for Poly Haven: the HDRIs ship as base64 data-URI JS modules that the `data-uri-module` transform decodes back into real .exr binaries."
+    },
+    "three-examples": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/mrdoob/three.js/r185/examples/",
+      "homepage": "https://github.com/mrdoob/three.js",
+      "comment": "Pinned to tag r185 (matching our three dependency) rather than the moving `dev` branch, so a re-fetch a year from now returns identical bytes. NOTE: three.js publishes per-asset licences for only a handful of examples. We take exactly one asset from here -- the one with an explicit CC0 README."
+    },
+    "khronos-samples": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/",
+      "homepage": "https://github.com/KhronosGroup/glTF-Sample-Assets",
+      "comment": "Licences are per-model and stated in each Models/<name>/README.md. There is no repo-wide grant, so every asset taken from here names its README as licenceEvidence."
+    }
+  },
+
+  "assets": [
+    {
+      "key": "env.overcast",
+      "tier": "core",
+      "role": "hdri",
+      "source": "pmndrs-assets",
+      "member": "hdri/forest.exr.js",
+      "transform": "data-uri-module",
+      "out": "hdri/overcast.exr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "forest (equirectangular HDRI)",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Blood Moor / overcast exteriors.",
+      "selectionRationale": "Chosen on measured radiance, not on filename. Decoded and analysed: mean luminance 0.699, blue/red ratio 1.80 (cool), peak/mean 57. That low peak/mean is the important number -- it means there is no hard sun disc, i.e. genuinely diffuse overcast light, which is exactly the cold flat key Act I wants. `park` and `sky` were rejected for peak/mean of 3958 and 29613 (harsh direct sun)."
+    },
+    {
+      "key": "env.dusk",
+      "tier": "core",
+      "role": "hdri",
+      "source": "pmndrs-assets",
+      "member": "hdri/sunset.exr.js",
+      "transform": "data-uri-module",
+      "out": "hdri/dusk.exr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "sunset (equirectangular HDRI)",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Rogue Encampment at dusk; the hub's default mood.",
+      "selectionRationale": "Mean luminance 0.409 (dim), blue/red 1.37 (cool-leaning rather than a warm tropical sunset), peak/mean 600 (a low sun disc is present and will read as a real light source). Cold dusk, not golden hour."
+    },
+    {
+      "key": "env.cave",
+      "tier": "core",
+      "role": "hdri",
+      "source": "pmndrs-assets",
+      "member": "hdri/night.exr.js",
+      "transform": "data-uri-module",
+      "out": "hdri/cave.exr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "night (equirectangular HDRI)",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Den of Evil and all cave interiors.",
+      "selectionRationale": "Mean luminance 0.066 -- roughly 10x darker than the overcast plate -- and upper-hemisphere luminance 0.009, i.e. effectively black overhead. That near-zero ambient is the point: it lets torches and spell light dominate the interior instead of competing with an IBL floor."
+    },
+
+    {
+      "key": "detail.normal.coarse",
+      "tier": "core",
+      "role": "normal",
+      "source": "pmndrs-assets",
+      "member": "normals/0015.webp.js",
+      "transform": "data-uri-module",
+      "out": "normals/detail-coarse.webp",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "tiling normal map 0015",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "High-frequency detail normal layered over procedural rock and cliff materials.",
+      "selectionRationale": "512x512 and tiling. Verified as a real WebP (VP8 chunk, 512x512) by decoding the data URI."
+    },
+    {
+      "key": "detail.normal.fine",
+      "tier": "core",
+      "role": "normal",
+      "source": "pmndrs-assets",
+      "member": "normals/0019.webp.js",
+      "transform": "data-uri-module",
+      "out": "normals/detail-fine.webp",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "tiling normal map 0019",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Fine grain over mud, wet stone and worn wood.",
+      "selectionRationale": "512x512 and tiling; finer grain than 0015, so the two layer without moire."
+    },
+    {
+      "key": "detail.normal.organic",
+      "tier": "core",
+      "role": "normal",
+      "source": "pmndrs-assets",
+      "member": "normals/0003.webp.js",
+      "transform": "data-uri-module",
+      "out": "normals/detail-organic.webp",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "tiling normal map 0003",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Bark and organic surfaces.",
+      "selectionRationale": "512x512 and tiling; irregular organic pattern rather than a machined one."
+    },
+
+    {
+      "key": "character.robot",
+      "tier": "core",
+      "role": "gltf",
+      "source": "three-examples",
+      "path": "models/gltf/RobotExpressive/RobotExpressive.glb",
+      "out": "models/RobotExpressive.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "three-examples:models/gltf/RobotExpressive/README.md",
+      "credit": {
+        "title": "RobotExpressive",
+        "author": "Tomas Laulhe (Quaternius), modified by Don McCurdy",
+        "sourceUrl": "https://github.com/mrdoob/three.js/tree/r185/examples/models/gltf/RobotExpressive",
+        "supportUrl": "https://www.patreon.com/quaternius"
+      },
+      "usage": "The clean-licence rigged humanoid. Placeholder Barbarian body and the reference target for the procedural combat-clip system.",
+      "selectionRationale": "The ONLY rigged, animated, humanoid-ish GLB reachable from this container whose licence is explicitly documented at source ('CC0 1.0.' in its README). 43 joints, 14 clips including Punch (0.83s), Death (0.96s), Idle, Walking, Running. Its combat clips are sparse (Punch is 15 channels over 13 nodes) so they are timing reference rather than shippable motion -- but the rig itself is unambiguously ours to use."
+    },
+    {
+      "key": "creature.fox",
+      "tier": "core",
+      "role": "gltf",
+      "source": "khronos-samples",
+      "path": "Fox/glTF-Binary/Fox.glb",
+      "out": "models/Fox.glb",
+      "license": "CC-BY-4.0",
+      "licenseEvidence": "khronos-samples:Fox/README.md",
+      "credit": {
+        "title": "Fox",
+        "author": "PixelMannen (model, CC0); tomkranis (rigging and animation, CC BY 4.0); @AsoboStudio and @scurest (glTF conversion, CC BY 4.0)",
+        "sourceUrl": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox"
+      },
+      "usage": "Blood Moor wildlife; also the test case that proves the attribution generator handles a licence that actually requires attribution.",
+      "selectionRationale": "Cleanly documented per-model licence, 24 bones, three clips (Survey/Walk/Run), only 162 KB. Effective licence is CC BY 4.0 because the rig and animation -- the parts we use -- are CC BY even though the base mesh is CC0."
+    },
+
+    {
+      "key": "character.bigvegas",
+      "tier": "review-required",
+      "role": "gltf",
+      "source": "http",
+      "url": "https://raw.githubusercontent.com/BabylonJS/Assets/master/meshes/mixamo/Characters/Big%20Vegas.glb",
+      "out": "models/review/BigVegas.glb",
+      "license": "LicenseRef-Mixamo-Unclear",
+      "credit": {
+        "title": "Big Vegas",
+        "author": "Adobe Mixamo (via BabylonJS/Assets)",
+        "sourceUrl": "https://github.com/BabylonJS/Assets"
+      },
+      "usage": "NOT FETCHED BY DEFAULT. The best Barbarian silhouette reachable anywhere: 86 mixamorig joints, large muscular male with cape/pec/belly/collar secondary bones that a spring pass can drive for free production value.",
+      "selectionRationale": "Held out of the core tier purely on licence, not on quality. Requires a human decision before it can ship. Pass --include-review-required to fetch it for prototype evaluation."
+    },
+    {
+      "key": "animation.xbot",
+      "tier": "review-required",
+      "role": "gltf",
+      "source": "three-examples",
+      "path": "models/gltf/Xbot.glb",
+      "out": "models/review/Xbot.glb",
+      "license": "LicenseRef-Mixamo-Unclear",
+      "credit": {
+        "title": "Xbot",
+        "author": "Adobe Mixamo (via mrdoob/three.js examples)",
+        "sourceUrl": "https://github.com/mrdoob/three.js/tree/r185/examples/models/gltf"
+      },
+      "usage": "NOT FETCHED BY DEFAULT. Locomotion donor: 67 mixamorig joints, dense 201-channel clips (idle, walk, run) that are a strict superset of every other reachable mixamorig skeleton.",
+      "selectionRationale": "three.js ships no licence file for this asset and it is visibly Mixamo-derived (mixamorig:* bone namespace). Prototype-only."
+    }
+  ]
+}

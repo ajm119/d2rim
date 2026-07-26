@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-25T22:02:59.046Z",
+  "assets": {
+    "env.overcast": {
+      "url": "npm:@pmndrs/assets@1.7.0/hdri/forest.exr.js",
+      "out": "hdri/overcast.exr",
+      "bytes": 312862,
+      "sha256": "6fff311b5f3dad0910d8f334a6d9d88218ffd873d72c679ee1b7e4bccfa140e3",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "env.dusk": {
+      "url": "npm:@pmndrs/assets@1.7.0/hdri/sunset.exr.js",
+      "out": "hdri/dusk.exr",
+      "bytes": 148357,
+      "sha256": "d09a4d7581f5454f13c3da3c323a231d00a34e60200de7654a895d2d41a7ceb7",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "env.cave": {
+      "url": "npm:@pmndrs/assets@1.7.0/hdri/night.exr.js",
+      "out": "hdri/cave.exr",
+      "bytes": 154431,
+      "sha256": "9509f1b917dbb4c98d63b92e9fd12fb79e3376d17ec3186e2de39543e32ce5ff",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "detail.normal.coarse": {
+      "url": "npm:@pmndrs/assets@1.7.0/normals/0015.webp.js",
+      "out": "normals/detail-coarse.webp",
+      "bytes": 115088,
+      "sha256": "f8606c84cfcb8ed0dff37ee457b37c4c50ba50347fef259ecefc945aa91a857d",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "detail.normal.fine": {
+      "url": "npm:@pmndrs/assets@1.7.0/normals/0019.webp.js",
+      "out": "normals/detail-fine.webp",
+      "bytes": 66246,
+      "sha256": "b3141d549811dbab3ed05683cbacf2f9775d02999dec6ac0767322d26bf34a29",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "detail.normal.organic": {
+      "url": "npm:@pmndrs/assets@1.7.0/normals/0003.webp.js",
+      "out": "normals/detail-organic.webp",
+      "bytes": 94568,
+      "sha256": "01804607a0e340d338e47b1b1fb5f4ce3503f6f35261934b283067f3120bc6a9",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "character.robot": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r185/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+      "out": "models/RobotExpressive.glb",
+      "bytes": 463988,
+      "sha256": "047f5e5fb3bb6d378bd1df16ca6137f2a596c99b3a1b5690b4020c05aaf6f319",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    },
+    "creature.fox": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb",
+      "out": "models/Fox.glb",
+      "bytes": 162852,
+      "sha256": "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7",
+      "fetchedAt": "2026-07-25T21:29:39.518Z"
+    }
+  }
+}
