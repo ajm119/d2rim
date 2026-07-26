@@ -281,7 +281,7 @@ export interface GTAOOptions {
    * Compensates for the sub-texel camera-ward bias that nearest-depth
    * downsampling introduces; without it, flat ground at a grazing angle
    * occludes itself. Larger values erase more genuine contact darkening.
-   * Default 0.04.
+   * Default 0.02.
    */
   horizonBias?: number;
   /**
@@ -766,7 +766,7 @@ export class GTAOModule implements GameModule, GTAOService {
   readonly #falloff = uniform(0.4);
   readonly #intensity = uniform(1.15);
   readonly #thinOccluder = uniform(0.6);
-  readonly #horizonBias = uniform(0.04);
+  readonly #horizonBias = uniform(0.02);
   readonly #sliceRotation = uniform(0);
   readonly #stepOffset = uniform(0);
   readonly #frameIndex = uniform(0);
@@ -805,7 +805,7 @@ export class GTAOModule implements GameModule, GTAOService {
       intensity: options.intensity ?? 1.15,
       falloff: options.falloff ?? 0.4,
       thinOccluderCompensation: options.thinOccluderCompensation ?? 0.6,
-      horizonBias: options.horizonBias ?? 0.04,
+      horizonBias: options.horizonBias ?? 0.02,
       multiBounce: options.multiBounce ?? 1,
       resolutionScale: options.resolutionScale ?? 0.5,
       temporalMinAlpha: options.temporalMinAlpha ?? 0.1,
