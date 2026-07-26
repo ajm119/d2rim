@@ -360,6 +360,16 @@ export interface BloodMoorOptions {
   /** Drive the camera every frame. Capture shots override the pose anyway. */
   readonly driveCamera?: boolean;
   readonly settings?: RenderSettings;
+  /**
+   * Animate the Barbarian from this module. Default true.
+   *
+   * `false` still loads, scales, weathers and places him — the composition
+   * needs its scale reference either way — but leaves the clips unplayed and
+   * publishes them on {@link BloodMoor.heroClips} instead, so that
+   * `character/PlayerController` can take ownership of the figure. Two mixers
+   * on one skeleton is the one arrangement that cannot work.
+   */
+  readonly controlHero?: boolean;
 }
 
 export class BloodMoor implements GameModule {
@@ -393,6 +403,8 @@ export class BloodMoor implements GameModule {
   readonly #fireTime = uniform(0);
   #mixer: THREE.AnimationMixer | null = null;
   #hero: THREE.Object3D | null = null;
+  #heroClips: THREE.AnimationClip[] = [];
+  #terrainSegments = 192;
   #scatterDensity = 1;
   /** Measured normalising scale per asset key; see `#normalisingScale`. */
   readonly #scaleCache = new Map<AssetKey, number>();
@@ -611,6 +623,7 @@ export class BloodMoor implements GameModule {
     // that and the normal map is doing the work anyway; coarser and the basin
     // rim faceted visibly against the fog.
     const segments = Math.max(48, Math.round(192 * Math.sqrt(this.#scatterDensity)));
+    this.#terrainSegments = segments;
     const geometry = this.field.buildGeometry(TERRAIN_SIZE, segments);
 
     // The worn track. This is a *composition* element written into the ground
@@ -1901,6 +1914,11 @@ export class BloodMoor implements GameModule {
         console.warn('[BloodMoor] the Barbarian GLTF has no animation clips; pose is the bind pose.');
         return;
       }
+      this.#heroClips = clips;
+      if (this.#options.controlHero === false) {
+        console.info(`[BloodMoor] Barbarian: ${clips.length} clips, handed to the player module`);
+        return;
+      }
       const idle = clips.find((clip) => /idle/i.test(clip.name)) ?? clips[0];
       if (idle === undefined) return;
       if (!/idle/i.test(idle.name)) {
@@ -1954,6 +1972,21 @@ export class BloodMoor implements GameModule {
 
   get hero(): THREE.Object3D | null {
     return this.#hero;
+  }
+
+  /** The Barbarian's clips, for whoever is animating him. */
+  get heroClips(): readonly THREE.AnimationClip[] {
+    return this.#heroClips;
+  }
+
+  /** Width of the ground mesh in metres. The physics heightfield matches it. */
+  get terrainSize(): number {
+    return TERRAIN_SIZE;
+  }
+
+  /** Segment count the ground mesh was built at. See {@link terrainSize}. */
+  get terrainSegments(): number {
+    return this.#terrainSegments;
   }
 
   /** Where the composition wants the camera. Capture shots start from here. */

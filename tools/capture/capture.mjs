@@ -273,6 +273,43 @@ function pageRunScript({ source, label }) {
 }
 
 /**
+ * Advance the world by `frames`, optionally without ever presenting to the
+ * canvas.
+ *
+ * The warmup is not decoration: TAA, the froxel fog volume, the SSR history and
+ * the environment probe all converge over the first dozen frames, and an
+ * unconverged frame is a visibly different picture — measured at ~0.12 of mean
+ * luminance and a whole colour temperature away from the settled one.
+ *
+ * Which is why the old "clamp `warmupFrames` to 0 on WebGPU" workaround was not
+ * a workaround at all but a silent divergence generator: it made
+ * `webgpu-backend-check` photograph frame 0 of a scene whose WebGL2 reference
+ * was photographed at frame 20, and then the parity gate reported the
+ * difference as a backend bug. The two backends are in fact bit-comparable —
+ * captured cold at 0 warmup they agree to 0.0004 of mean luminance.
+ *
+ * The reason the clamp existed is real, though: *presenting* a WebGPU swapchain
+ * in this container loses the device after a few frames, and that takes the
+ * readback down with it. So the warmup is routed into the same render target
+ * the capture itself uses, via `PostStack.setHeadlessPresentation`. No
+ * swapchain is touched, the chain runs at exactly the capture resolution, and
+ * both backends can converge identically.
+ */
+async function pageStepFrames({ frames, headless, width, height }) {
+  const d2rim = window.__d2rim;
+  const post = d2rim.render?.post;
+  const canDivert = headless && typeof post?.setHeadlessPresentation === 'function';
+
+  if (canDivert) post.setHeadlessPresentation(width, height);
+  try {
+    await d2rim.engine.stepFrames(frames);
+  } finally {
+    if (canDivert) post.setHeadlessPresentation(null);
+  }
+  return canDivert;
+}
+
+/**
  * Render one frame into an offscreen target, read it back, and re-encode it as
  * a PNG data URL via a 2D canvas.
  *
@@ -384,30 +421,35 @@ async function captureShot(page, shot, { origin, outDir, ignorePageErrors }) {
       );
     }
 
-    let warmupFrames = shot.warmupFrames;
-    // Presenting to the WebGPU canvas swapchain in this container eventually
-    // loses the device ("A valid external Instance reference no longer exists"),
-    // which takes the readback down with it. Stepping zero frames renders
-    // nothing to the canvas, so the device stays healthy. Animated WebGPU shots
-    // are a platform limitation here, not an engine one.
-    if (actualBackend === 'webgpu' && warmupFrames > 0) {
+    const warmupFrames = shot.warmupFrames;
+    // A readback shot warms up into the capture target rather than the canvas.
+    // On WebGPU that is mandatory — presenting the swapchain in this container
+    // loses the device within a few frames, and the readback dies with it — and
+    // on WebGL2 it is used anyway so that both backends converge through
+    // byte-for-byte the same path. A screenshot shot keeps the canvas, because
+    // the canvas is the thing it photographs.
+    const headless = shot.mode === 'readback';
+    if (!headless && actualBackend === 'webgpu' && warmupFrames > 0) {
       process.stdout.write(
-        `    ! webgpu: clamping warmupFrames ${warmupFrames} -> 0 (canvas presentation loses\n` +
-          '      the device in this container; use backend "webgl2" for animated shots)\n',
+        '    ! webgpu + mode "screenshot": the warmup must present to the swapchain, which\n' +
+          '      loses the device in this container. Expect a failure; use mode "readback".\n',
       );
-      warmupFrames = 0;
-      entry.warmupFrames = 0;
-      entry.warmupClamped = true;
     }
 
     if (warmupFrames > 0) {
       const steppedAt = Date.now();
-      process.stdout.write(`    step ${warmupFrames} frames`);
-      await withTimeout(
-        page.evaluate((n) => window.__d2rim.engine.stepFrames(n), warmupFrames),
+      process.stdout.write(`    step ${warmupFrames} frames${headless ? ' (offscreen)' : ''}`);
+      const diverted = await withTimeout(
+        page.evaluate(pageStepFrames, {
+          frames: warmupFrames,
+          headless,
+          width: shot.width,
+          height: shot.height,
+        }),
         TIMEOUTS.step,
         `stepFrames(${warmupFrames})`,
       );
+      entry.headlessWarmup = diverted;
       process.stdout.write(` (${since(steppedAt)})\n`);
     }
 

@@ -8,8 +8,13 @@
 import * as THREE from 'three/webgpu';
 
 import { AssetManager } from './assets/AssetManager';
+import { CameraRig } from './character/CameraRig';
+import { FootIK } from './character/FootIK';
+import { PlayerController } from './character/PlayerController';
 import { Engine } from './core/Engine';
 import type { GameContext } from './core/types';
+import { PhysicsWorld } from './physics/PhysicsWorld';
+import { WorldColliders } from './physics/WorldColliders';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
 import { BloodMoor } from './scene/BloodMoor';
 import { DebugOverlay } from './ui/DebugOverlay';
@@ -110,11 +115,32 @@ const engine = new Engine({ canvas, autoStart });
 //   - the frame graph next: twelve render modules in dependency order.
 //   - content last, so the scene resolves a fully-built renderer.
 const render = buildFrameGraph();
-const scene = new BloodMoor({ settings: render.settings });
+// `driveCamera: false` and `controlHero: false` hand the two things the scene
+// used to own — the camera pose and the Barbarian's mixer — to the gameplay
+// modules. The scene still builds, scales and weathers the figure; it just no
+// longer animates him, because two mixers on one skeleton cannot work.
+const scene = new BloodMoor({
+  settings: render.settings,
+  driveCamera: false,
+  controlHero: false,
+});
 
 engine.add(new AssetManager());
 for (const module of render.modules) engine.add(module);
 engine.add(scene);
+
+// Gameplay, in dependency order. Physics first so its service exists before
+// anything resolves it; colliders next, because they read a fully built scene;
+// then the player, whose capsule needs a world to stand on; then foot IK, which
+// re-poses the legs after the animation graph has run; then the camera, which
+// must observe a settled character. `lateUpdate` order follows registration
+// order, so this list *is* the frame order.
+engine.add(new PhysicsWorld());
+engine.add(new WorldColliders());
+engine.add(new PlayerController());
+engine.add(new FootIK());
+engine.add(new CameraRig());
+
 engine.add(new DebugOverlay());
 
 const ready = engine.ready

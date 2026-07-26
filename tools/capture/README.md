@@ -275,11 +275,25 @@ Two container-specific quirks, neither of which is an engine bug:
    Hence the readback capture route.
 2. **Presenting to the WebGPU canvas eventually loses the device**
    (`A valid external Instance reference no longer exists`), which takes the
-   readback down with it. So `warmupFrames` is **automatically clamped to 0** on
-   WebGPU, with a warning. Animated shots must use `webgl2`.
+   readback down with it.
 
-Both paths render the same scene identically otherwise — compare
-`wide-establishing` against `webgpu-backend-check` on the contact sheet.
+The second one used to be handled by **clamping `warmupFrames` to 0 on WebGPU**,
+and that clamp was itself a bug factory. A warmup is not optional: TAA, the
+froxel fog volume, the SSR history and the environment probe all converge over
+the first dozen frames, so frame 0 and frame 20 of this scene are ~0.12 of mean
+luminance and a visible colour temperature apart. Clamping made
+`webgpu-backend-check` photograph frame 0 against a 20-frame WebGL2 reference,
+and the parity gate then reported the difference as a *backend* divergence. It
+was not. Captured cold at the same warmup, the two backends agree to **0.0004**
+of mean luminance.
+
+So the warmup no longer presents at all. Every `mode: "readback"` shot — on
+**both** backends, so they stay byte-comparable — steps its warmup with
+`PostStack.setHeadlessPresentation(w, h)`, which routes the frames that would
+have gone to the canvas into the same render target the capture itself uses.
+Identical chain, identical resolution, no swapchain. `mode: "screenshot"` still
+presents, because the canvas is what it photographs, and so it is still
+WebGL2-only.
 
 ---
 

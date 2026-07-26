@@ -538,6 +538,8 @@ export class PostStack implements GameModule {
   #passDraws = 0;
   #active: string[] = [];
   #inRender = false;
+  /** Offscreen presentation size, or `null` to present to the canvas. */
+  #headless: THREE.Vector2 | null = null;
 
   /** Blit material for the degenerate "nothing is enabled" path. */
   #copyMaterial: THREE.NodeMaterial | null = null;
@@ -794,26 +796,32 @@ export class PostStack implements GameModule {
     if (this.#inRender) return;
     this.#inRender = true;
 
+    // A caller asking for the canvas gets the offscreen surface instead while
+    // headless presentation is on. See `setHeadlessPresentation`.
+    const headless = this.#headless;
+    const target =
+      destination ?? (headless === null ? null : this.#ensureCaptureTarget(headless.x, headless.y));
+
     const internals = renderer as unknown as RendererInternals;
     const previousOutput = internals.getOutputRenderTarget();
     const previousColorSpace = renderer.outputColorSpace;
 
     try {
-      const targetWidth = destination === null ? this.#drawingBufferSize().x : destination.width;
-      const targetHeight = destination === null ? this.#drawingBufferSize().y : destination.height;
+      const targetWidth = target === null ? this.#drawingBufferSize().x : target.width;
+      const targetHeight = target === null ? this.#drawingBufferSize().y : target.height;
       this.#resize(targetWidth, targetHeight);
 
-      if (destination !== null) internals.setOutputRenderTarget(destination);
+      if (target !== null) internals.setOutputRenderTarget(target);
 
       const sceneTarget = this.#ensureSceneTarget();
       this.#renderScene(renderer, internals, scene, camera, sceneTarget);
 
       if (!this.enabled) {
-        this.#copyToDestination(sceneTarget.textures[0] ?? sceneTarget.texture, destination);
+        this.#copyToDestination(sceneTarget.textures[0] ?? sceneTarget.texture, target);
         return;
       }
 
-      this.#runChain(renderer, capabilities, camera, sceneTarget, destination);
+      this.#runChain(renderer, capabilities, camera, sceneTarget, target);
     } finally {
       internals.setOutputRenderTarget(previousOutput);
       renderer.outputColorSpace = previousColorSpace;
@@ -822,6 +830,41 @@ export class PostStack implements GameModule {
       this.#frameIndex++;
       this.#inRender = false;
     }
+  }
+
+  /**
+   * Send frames that would go to the canvas into the capture target instead.
+   *
+   * This exists for one reason, and it is the same reason {@link captureFrame}
+   * exists: in the headless container this project is graded in, *presenting* a
+   * WebGPU swapchain kills the device after a handful of frames ("A valid
+   * external Instance reference no longer exists"), which takes the readback
+   * down with it. The capture harness worked around that by refusing to run any
+   * warmup frames on WebGPU — and a warmup is not optional here. TAA, the
+   * froxel volume and the environment probe all converge over the first dozen
+   * frames, so an unwarmed frame is a different picture, roughly 0.12 of mean
+   * luminance and a whole colour temperature away from the converged one. The
+   * "WebGPU/WebGL2 backend divergence" was that: a converged frame compared
+   * against an unconverged one.
+   *
+   * Rendering the warmup into a render target exercises the identical chain at
+   * the identical resolution and never touches the swapchain, so both backends
+   * can now converge the same number of frames. `null` restores the canvas.
+   *
+   * @param width  offscreen width, normally the capture width
+   * @param height offscreen height
+   */
+  setHeadlessPresentation(width: number | null, height = 0): void {
+    if (width === null) {
+      this.#headless = null;
+      return;
+    }
+    this.#headless = new THREE.Vector2(Math.max(1, Math.floor(width)), Math.max(1, Math.floor(height)));
+  }
+
+  /** Whether {@link setHeadlessPresentation} is currently diverting the canvas. */
+  get headlessPresentation(): boolean {
+    return this.#headless !== null;
   }
 
   /**
@@ -1230,13 +1273,31 @@ export class PostStack implements GameModule {
 
   #captureTarget: THREE.RenderTarget | null = null;
 
+  /**
+   * The target every readback capture is rendered into.
+   *
+   * `colorSpace` is **`LinearSRGBColorSpace`, and that is not a typo** — it is
+   * the difference between a capture that matches the screen and one that does
+   * not. The tag does not describe the values; it selects the texture *format*,
+   * and `SRGBColorSpace` gets an `rgba8unorm-srgb` (GL: `SRGB8_ALPHA8`) surface
+   * whose hardware writes apply the sRGB OETF. `render()` designates this
+   * target as the renderer's output target, which makes `Renderer.currentColorSpace`
+   * report `outputColorSpace`, so three's own output pass *already* encodes.
+   * Tagged sRGB the frame is therefore encoded twice — measured on both
+   * backends: display-linear 0.5 came back as byte 223 where the canvas, and a
+   * PNG, want 188. Every readback capture in the project was reading roughly
+   * one stop brighter than the image a player sees, which is exactly how
+   * `hud-composite` (a real screenshot of the canvas) ended up "disagreeing"
+   * with every other shot. Linear-tagged storage stores what the output pass
+   * wrote, i.e. exactly one encode.
+   */
   #ensureCaptureTarget(width: number, height: number): THREE.RenderTarget {
     let target = this.#captureTarget;
     if (target === null) {
       target = new THREE.RenderTarget(width, height, {
         format: THREE.RGBAFormat,
         type: THREE.UnsignedByteType,
-        colorSpace: THREE.SRGBColorSpace,
+        colorSpace: THREE.LinearSRGBColorSpace,
         depthBuffer: false,
         stencilBuffer: false,
         generateMipmaps: false,

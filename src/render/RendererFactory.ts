@@ -221,7 +221,15 @@ export async function createRenderer(
         captureTarget = new THREE.RenderTarget(w, h, {
           format: THREE.RGBAFormat,
           type: THREE.UnsignedByteType,
-          colorSpace: THREE.SRGBColorSpace,
+          // Linear-tagged, i.e. "store the bytes as written". The target is
+          // designated the renderer's *output* target below, which makes three
+          // run its output pass (tone mapping + the sRGB OETF) into it — so the
+          // frame is encoded exactly once, in the shader, and this capture
+          // matches what the canvas shows. Tagging it `SRGBColorSpace` would
+          // instead select an sRGB texture format whose hardware writes encode
+          // as well, and the readback would come back a stop bright. See the
+          // note on `PostStack.#ensureCaptureTarget`.
+          colorSpace: THREE.LinearSRGBColorSpace,
           samples: Math.min(4, capabilities.maxSamples),
         });
         captureTarget.depthTexture = new THREE.DepthTexture(w, h);
@@ -230,9 +238,12 @@ export async function createRenderer(
       }
 
       const previousTarget = three.getRenderTarget();
+      const previousOutput = three.getOutputRenderTarget();
+      three.setOutputRenderTarget(captureTarget);
       three.setRenderTarget(captureTarget);
       three.render(scene, camera);
       three.setRenderTarget(previousTarget);
+      three.setOutputRenderTarget(previousOutput);
 
       const data = await three.readRenderTargetPixelsAsync(captureTarget, 0, 0, w, h);
       const pixels = unpackRows(
