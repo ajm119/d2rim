@@ -353,6 +353,19 @@ export interface WetnessInput {
   readonly ao: FloatNode;
   readonly porosity: FloatNode;
   readonly exposure: FloatNode;
+  /**
+   * Low-frequency bias on the local waterline, in `[-1, 1]`.
+   *
+   * Water does not pool evenly: it collects where the *terrain* dips, over tens
+   * of metres, and the mesoscale cavity map only decides the shape of the edge
+   * once it is there. Driving the waterline from cavity depth alone produces
+   * puddles that trace every crack in the height map — a filigree lacework that
+   * reads as a shader artefact rather than as standing water. Biasing the level
+   * with the macro-variation noise clusters them into broad pools with detailed
+   * edges, which is what a wet field actually looks like, and costs nothing
+   * because the noise has already been evaluated for the albedo.
+   */
+  readonly puddleBias: FloatNode;
   /** Peak clearcoat for the film, from the archetype. 0 disables it entirely. */
   readonly clearcoat: number;
 }
@@ -381,14 +394,18 @@ export interface WetnessOutput {
 export function applyWetness(input: WetnessInput, uniforms: WetnessUniforms): WetnessOutput {
   const wet = saturate(uniforms.wetness.mul(input.exposure)).toVar('wetLevel');
 
-  // Standing water gates the film term by cavity depth. The softness scales
-  // with wetness so the waterline is crisp in a shallow puddle and diffuse as
-  // the whole surface floods.
+  // Standing water gates the film term by cavity depth, with the waterline
+  // pushed up and down by the low-frequency bias. The softness scales with
+  // wetness so the edge is crisp in a shallow puddle and diffuse once the whole
+  // surface has flooded.
+  const level = saturate(uniforms.puddleLevel.add(input.puddleBias.mul(0.45))).toVar('wetLevelLocal');
   const puddle = puddleMaskNode(
     input.cavity,
-    uniforms.puddleLevel.oneMinus(),
+    level.oneMinus(),
     float(0.08).add(wet.mul(0.12)),
-  ).mul(wet).toVar('wetPuddle');
+  )
+    .mul(wet)
+    .toVar('wetPuddle');
 
   const soak = wet.mul(saturate(input.porosity)).toVar('wetSoak');
   const film = max(wet.mul(saturate(input.porosity).oneMinus()), puddle).toVar('wetFilm');

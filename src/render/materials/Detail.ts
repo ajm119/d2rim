@@ -110,6 +110,14 @@ export function detailFade(distance: number, texelWidth: number, start: number, 
  * @param detailUv the *detail-scale* UV. The density term is measured on this,
  *                 not on the base UV, because they differ by an order of
  *                 magnitude and it is the fine layer that aliases.
+ *
+ * Deliberately *not* given a `setLayout`. A laid-out `Fn` becomes a real shader
+ * function whose only inputs are its declared parameters, and this one reads
+ * `positionView` — a varying. Emitting a varying's supporting vertex-stage
+ * assignment from inside a fragment function scope produces a vertex shader
+ * that assigns to an undeclared `modelViewMatrix`, which fails to compile with
+ * an error that names neither this function nor the varying. Inlining costs
+ * nothing here: the body is a dozen instructions.
  */
 export const detailFadeNode = /*@__PURE__*/ Fn(
   ([detailUv, fadeStart, fadeEnd]: [Vec2Node, FloatNode, FloatNode]) => {
@@ -124,15 +132,7 @@ export const detailFadeNode = /*@__PURE__*/ Fn(
     const byDensity = smoothstep(float(0.25), float(0.5), width).oneMinus();
     return saturate(byDistance.mul(byDensity));
   },
-).setLayout({
-  name: 'detailFade',
-  type: 'float',
-  inputs: [
-    { name: 'detailUv', type: 'vec2' },
-    { name: 'fadeStart', type: 'float' },
-    { name: 'fadeEnd', type: 'float' },
-  ],
-});
+);
 
 /**
  * Sample the detail normal map and scale it by strength and fade in one step.

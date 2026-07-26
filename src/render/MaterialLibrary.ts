@@ -525,6 +525,10 @@ function finishSurface(input: FinishInput): SurfaceNodes {
     saturate(scalars.roughnessRaw),
   ).toVar('surfaceRoughnessDry');
 
+  // Reused by the wetness stage to decide where water pools, so a surface with
+  // no macro variation still gets an even waterline rather than a broken one.
+  let puddleBias: FloatNode = float(0);
+
   if (spec.macro !== null) {
     const macro = macroVariation({
       positionWorld,
@@ -540,6 +544,7 @@ function finishSurface(input: FinishInput): SurfaceNodes {
       macro.tintWeight,
     ).toVar('surfaceAlbedoMacro');
     roughness = saturate(roughness.add(macro.roughnessDelta)).toVar('surfaceRoughnessMacro');
+    puddleBias = macro.noise;
   }
 
   const ao = mix(float(1), saturate(scalars.ao), float(spec.aoStrength)).toVar('surfaceAo');
@@ -556,6 +561,7 @@ function finishSurface(input: FinishInput): SurfaceNodes {
       ao,
       porosity: float(spec.porosity),
       exposure: float(spec.wetnessExposure),
+      puddleBias,
       clearcoat: spec.clearcoat,
     },
     uniforms,

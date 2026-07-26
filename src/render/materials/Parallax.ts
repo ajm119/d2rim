@@ -45,6 +45,23 @@
  * is why {@link ParallaxSpec.clipSilhouette} is per-archetype and off by
  * default.
  *
+ * ### The march is emitted twice, and the step counts account for it
+ *
+ * three evaluates a material's `normalNode` inside its own *sub-build*, a
+ * separate variable scope from the one `colorNode` is built in. A graph shared
+ * between the two is therefore entered twice, and `once()` can only cache it
+ * *per sub-build* — caching it globally makes the two scopes interleave and
+ * produces a shader that does not compile (three reports it as "Recursion
+ * detected"). three's own `normalView`, `tangentView` and `bitangentView` use
+ * exactly the same `once([ 'NORMAL', 'VERTEX' ])` pattern for the same reason.
+ *
+ * The consequence is real and is not hidden: reading back the generated GLSL for
+ * the masonry material shows the march loop emitted twice, so a 16-step
+ * archetype costs 32 dependent texture fetches at grazing incidence. The step
+ * counts in the archetype table are chosen against the doubled figure. If a
+ * future three release lets a fragment-stage value cross the sub-build boundary,
+ * the counts can go back up.
+ *
  * ### Deliberately not implemented
  *
  * Tatarchuk's approximate soft self-shadowing needs a second march towards the
@@ -295,7 +312,14 @@ export function parallaxOcclusion(options: ParallaxOptions): ParallaxResult {
     // Blend back towards the undisplaced UV as the effect fades, so there is no
     // discontinuity at the fade boundary.
     return vec4(mix(uv, hitUv, strength), hitDepth.oneMinus(), strength);
-  })().toVar('pomResult');
+  })
+    // `once()` is load-bearing, not an optimisation. three evaluates a
+    // material's `normalNode` inside its own *sub-build*, so a graph shared
+    // between the normal and the colour slots is entered twice; without the
+    // cache the march is emitted twice per fragment and its internal variables
+    // interleave across the two scopes, which three reports as
+    // "Recursion detected" and which produces a shader that does not compile.
+    .once(['NORMAL'])().toVar('pomResult');
 
   return { uv: marched.xy, height: marched.z, strength: marched.w };
 }

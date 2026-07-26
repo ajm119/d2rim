@@ -94,7 +94,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'mud',
     useProceduralBase: false,
-    albedoTint: [0.82, 0.76, 0.68],
+    albedoTint: [0.52, 0.55, 0.58],
     roughnessRange: [0.55, 0.96],
     metalness: 0,
     reflectance: 0.042,
@@ -111,8 +111,8 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
       roughnessAmount: 0.14,
       // A rust-brown that reads as iron-rich soil and dried blood, not as a
       // warm filter. Very dark, so it darkens *and* separates hue.
-      tint: [0.055, 0.036, 0.026],
-      tintAmount: 0.35,
+      tint: [0.05, 0.036, 0.028],
+      tintAmount: 0.28,
     },
     parallax: null,
     porosity: 0.95,
@@ -133,7 +133,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'grass',
     useProceduralBase: false,
-    albedoTint: [0.78, 0.78, 0.62],
+    albedoTint: [0.56, 0.60, 0.50],
     roughnessRange: [0.68, 0.99],
     metalness: 0,
     reflectance: 0.035,
@@ -257,7 +257,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'wetStone',
     useProceduralBase: false,
-    albedoTint: [0.68, 0.69, 0.72],
+    albedoTint: [0.44, 0.47, 0.52],
     roughnessRange: [0.32, 0.88],
     metalness: 0,
     reflectance: 0.05,
@@ -279,9 +279,14 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
       tintAmount: 0.32,
     },
     parallax: {
+      // 16 rather than the 24 the relief could use: three emits the march once
+      // in the normal sub-build and once in the main flow, so the shader
+      // actually runs 32 samples at grazing incidence. See the note in
+      // `Parallax.ts` — the step counts here are the *emitted* ones, and the
+      // real cost is double.
       scale: 0.045,
-      maxSteps: 24,
-      minSteps: 8,
+      maxSteps: 16,
+      minSteps: 6,
       fadeEnd: 14,
       clipSilhouette: false,
     },
@@ -304,7 +309,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'bark',
     useProceduralBase: false,
-    albedoTint: [0.72, 0.68, 0.62],
+    albedoTint: [0.62, 0.60, 0.56],
     roughnessRange: [0.6, 0.97],
     metalness: 0,
     reflectance: 0.038,
@@ -341,7 +346,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'planks',
     useProceduralBase: false,
-    albedoTint: [0.74, 0.7, 0.64],
+    albedoTint: [0.64, 0.62, 0.58],
     roughnessRange: [0.5, 0.92],
     metalness: 0,
     reflectance: 0.04,
@@ -361,8 +366,8 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     parallax: {
       scale: 0.03,
-      maxSteps: 16,
-      minSteps: 6,
+      maxSteps: 12,
+      minSteps: 5,
       fadeEnd: 10,
       clipSilhouette: false,
     },
@@ -404,8 +409,8 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     parallax: {
       scale: 0.022,
-      maxSteps: 12,
-      minSteps: 5,
+      maxSteps: 10,
+      minSteps: 4,
       fadeEnd: 8,
       clipSilhouette: false,
     },
