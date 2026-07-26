@@ -63,17 +63,7 @@
  */
 
 import * as THREE from 'three/webgpu';
-import {
-  dot,
-  mix,
-  normalWorldGeometry,
-  positionWorld,
-  saturate,
-  smoothstep,
-  texture as textureNode,
-  uv,
-  vec3,
-} from 'three/tsl';
+import { normalWorldGeometry, positionWorld, saturate, smoothstep } from 'three/tsl';
 
 import { AssetManagerKey, type AssetKey, type AssetManager } from '../assets/AssetManager';
 import {
@@ -206,6 +196,9 @@ const CAMPFIRE = new THREE.Vector2(3.1, -5.2);
 /** Where the Barbarian stands: between the camera and the fire, off-centre. */
 const HERO = new THREE.Vector2(1.1, 0.4);
 
+/** Standing height of the figure, in metres. The scene's scale reference. */
+const HERO_HEIGHT = 1.85;
+
 /** Half-width of the playable ground mesh, in metres. */
 const TERRAIN_SIZE = 260;
 
@@ -296,6 +289,16 @@ export class BloodMoor implements GameModule {
           'The frame will be props on nothing.',
       );
     }
+
+    // Wait for the photoscanned sets to settle before building anything that
+    // uses them. `MaterialLibrary` resolves textures asynchronously and swaps
+    // them in when they arrive, so a material built before its set has landed
+    // renders the procedural fallback — a flat, untextured surface — for as
+    // long as it takes. That is invisible in a live session, where the swap
+    // happens in the first second, and permanently visible in a capture, which
+    // steps a fixed number of frames as fast as it can and photographs
+    // whatever state the loader happens to be in.
+    await this.#materials?.ready();
 
     this.#configureCamera(ctx.camera);
     this.#buildTerrain();
@@ -1085,6 +1088,18 @@ export class BloodMoor implements GameModule {
       const x = HERO.x;
       const z = HERO.y;
       hero.name = 'barbarian';
+      // Normalised to a human 1.85 m by measurement, exactly as the props are.
+      // The character packs are authored at their own scale, and a figure that
+      // is not human-sized destroys the one thing having a figure in frame is
+      // for — it is the only object in the picture whose real size the viewer
+      // already knows.
+      const measured = new THREE.Box3().setFromObject(hero);
+      const height = measured.max.y - measured.min.y;
+      if (Number.isFinite(height) && height > 1e-3) {
+        hero.scale.setScalar(THREE.MathUtils.clamp(HERO_HEIGHT / height, 0.05, 20));
+      } else {
+        console.warn('[BloodMoor] the Barbarian has no measurable height; leaving it unscaled.');
+      }
       hero.position.set(x, this.field.heightAt(x, z), z);
       // Facing the fire, so the camera sees a three-quarter back view: the
       // silhouette reads and the warm light rims one shoulder.
@@ -1185,8 +1200,6 @@ export class BloodMoor implements GameModule {
  */
 const WEATHERING_TINT = new THREE.Color(0.30, 0.31, 0.34);
 
-/** How far a prop albedo is pulled toward its own luminance. */
-const WEATHERING_DESATURATION = 0.66;
 
 /** Sodium-lamp orange would be wrong; wood fire is redder and dirtier. */
 const FIRE_COLOR = 0xff7a30;
@@ -1218,42 +1231,6 @@ const FIRE_INTENSITY = 9.5;
  * which is what keeps the props from becoming grey cutouts, and everything
  * lands within about a stop of the mud it stands on.
  */
-function weatherMaterial(source: THREE.Material): THREE.Material {
-  // Duck-typed rather than `instanceof`. The `three` -> `three/webgpu` alias in
-  // `vite.config.ts` should make the two identical, but a material that arrives
-  // from a second copy of three would fail an `instanceof` check silently and
-  // pass straight through unweathered — which is a bug that only shows up as a
-  // colour that is subtly wrong. The `isMeshStandardMaterial` flag is three's
-  // own cross-realm type tag and cannot lie.
-  const standard = isStandardLike(source) ? source : null;
-  if (standard === null) return source.clone();
-
-  const material = new THREE.MeshStandardNodeMaterial();
-  material.name = `${standard.name}.weathered`;
-  material.side = standard.side;
-  material.transparent = standard.transparent;
-  material.alphaTest = standard.alphaTest;
-  material.normalMap = standard.normalMap;
-  material.normalScale.copy(standard.normalScale);
-  material.roughness = THREE.MathUtils.clamp(standard.roughness * 0.6 + 0.42, 0.5, 1);
-  material.metalness = Math.min(standard.metalness, 0.2);
-  material.envMapIntensity = 0.75;
-  material.vertexColors = standard.vertexColors;
-
-  const base = standard.map;
-  if (base !== null) {
-    const sampled = textureNode(base, uv()).rgb;
-    const luma = dot(sampled, vec3(0.2126, 0.7152, 0.0722));
-    material.colorNode = mix(sampled, vec3(luma), WEATHERING_DESATURATION).mul(
-      vec3(WEATHERING_TINT.r, WEATHERING_TINT.g, WEATHERING_TINT.b),
-    );
-    material.map = base;
-  } else {
-    material.color.copy(standard.color).multiply(WEATHERING_TINT);
-  }
-  return material;
-}
-
 type GLTFLike = { scene: THREE.Group; animations: THREE.AnimationClip[] };
 
 /**
@@ -1268,6 +1245,35 @@ function isGLTF(value: unknown): value is GLTFLike {
     'scene' in value &&
     (value as { scene: unknown }).scene instanceof THREE.Object3D
   );
+}
+
+function weatherMaterial(source: THREE.Material): THREE.Material {
+  // Duck-typed rather than `instanceof`: three's own cross-realm type tags
+  // cannot be defeated by a second copy of the library arriving through the
+  // example loaders, and a material that fell through this check would pass
+  // straight out unweathered — a bug whose only symptom is a colour that is
+  // subtly wrong, three layers away from its cause.
+  if (!isStandardLike(source)) return source.clone();
+
+  const clone = source.clone();
+  // Multiply the base-colour *factor* and leave the map on the built-in path.
+  //
+  // The obvious alternative — a `colorNode` that samples the atlas and mixes it
+  // toward its own luminance — would desaturate as well as darken, which is
+  // what this really wants. It is not used because a hand-built `colorNode`
+  // bypasses the transfer-function decode the built-in map path applies to an
+  // sRGB texture: the sampled value comes back encoded and is then used as if
+  // it were linear, which is roughly a doubling in the midtones, in the exact
+  // opposite direction from the point of this pass, and invisible until you
+  // measure it. Desaturation is handled globally by the colour grade instead.
+  clone.color.multiply(WEATHERING_TINT);
+  clone.roughness = THREE.MathUtils.clamp(clone.roughness * 0.6 + 0.42, 0.5, 1);
+  clone.metalness = Math.min(clone.metalness, 0.2);
+  // Trimmed so a bright overcast sky does not relight the props past the
+  // terrain they stand on.
+  clone.envMapIntensity = 0.7;
+  clone.name = `${source.name}.weathered`;
+  return clone;
 }
 
 /** three's own cross-realm type tag for the standard/physical material family. */

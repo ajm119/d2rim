@@ -173,8 +173,15 @@ export const BLOOD_MOOR_WEATHER: Readonly<WeatherState> = {
   // into a mirror of the sky and blows the ground out to white. The read the
   // brief asks for (dark, saturated, wet-looking mud) comes from the darkening,
   // and the darkening saturates well before the specular does.
-  wetness: 0.45,
-  puddleLevel: 0.32,
+  wetness: 0.38,
+  // Near zero, and this one is not an art call so much as a rendering one.
+  // Puddles are modelled as mirror-flat patches: under an overcast sky — a
+  // single enormous bright source — each patch becomes a hard-edged specular
+  // highlight, and across a 260 m ground plane at a grazing angle those
+  // highlights alias into a field of white speckles that no amount of TAA
+  // resolves. Standing water in this scene comes from the mud archetype's own
+  // darkening in the hollows instead, which costs nothing and cannot sparkle.
+  puddleLevel: 0.06,
   rainIntensity: 0,
 };
 

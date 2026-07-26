@@ -870,9 +870,9 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // the 96 m volume is under 1, so the far ridge is *veiled* rather than
       // erased. Fog that hides the composition is not atmosphere, it is a
       // missing composition.
-      density: 0.0105,
-      height: 2.2,
-      heightFalloff: 0.5,
+      density: 0.016,
+      height: 2.0,
+      heightFalloff: 0.62,
       // Cold and very slightly blue. Water droplets scatter almost neutrally;
       // the blue comes from what is lighting them, which is the sky.
       albedo: new THREE.Color(0.80, 0.83, 0.88),
