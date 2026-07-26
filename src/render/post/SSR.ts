@@ -621,8 +621,12 @@ function ssrTraceFragment(
   u: TraceUniforms,
 ): THREE.Node {
   const guideNode = texture(res.guide);
-  const hiZNode = texture(res.hiZ);
-  const colorNode = texture(res.color);
+  // Explicit-level sampling has to go through `texture(tex, uv, level)`:
+  // `TextureNode.sample()` only takes a UV.
+  const hiZAt = (uvNode: Vec2Node, levelNode: FloatNode): FloatNode =>
+    texture(res.hiZ, uvNode, levelNode).x;
+  const colorAt = (uvNode: Vec2Node, levelNode: FloatNode): Vec3Node =>
+    texture(res.color, uvNode, levelNode).xyz;
   const surfaceNode = res.surface === null ? null : texture(res.surface);
   const velocityNode = res.velocity === null ? null : texture(res.velocity);
   const coneOffsets = vogelDisk(tier.coneTaps);
@@ -736,7 +740,7 @@ function ssrTraceFragment(
 
           const rayZ = float(1).div(max(q0.add(dq.mul(s)), float(1e-6))).toVar('rayZ');
           // Level `L` texel = closest surface in a 2^L block. Stored normalised.
-          const cellZ = hiZNode.sample(sampleUv, level).x.mul(u.cameraFar).toVar('cellZ');
+          const cellZ = hiZAt(sampleUv, level).mul(u.cameraFar).toVar('cellZ');
 
           If(rayZ.lessThan(cellZ), () => {
             /* Ray is in front of everything in this cell: skip the whole cell
@@ -785,7 +789,7 @@ function ssrTraceFragment(
             const sMid = sBefore.add(s).mul(0.5).toVar(`sMid${i}`);
             const midUv = uv0.add(duv.mul(sMid)).toVar(`midUv${i}`);
             const midRayZ = float(1).div(max(q0.add(dq.mul(sMid)), float(1e-6)));
-            const midSceneZ = hiZNode.sample(midUv, float(0)).x.mul(u.cameraFar);
+            const midSceneZ = hiZAt(midUv, float(0)).mul(u.cameraFar);
             If(midRayZ.lessThan(midSceneZ), () => {
               sBefore.assign(sMid);
             }).Else(() => {
@@ -820,16 +824,14 @@ function ssrTraceFragment(
 
         const radiance = vec3(0).toVar('radiance');
         if (coneOffsets.length <= 1) {
-          radiance.assign(colorNode.sample(colorUv, mip).xyz);
+          radiance.assign(colorAt(colorUv, mip));
         } else {
           // Average the cone's screen footprint with a golden-angle disk. The
           // mip already carries most of the blur; these taps remove the boxy
           // structure a single mip fetch leaves on a wide cone.
           const tapScale = coneRadius.mul(texel).toVar('tapScale');
           for (const [ox, oy] of coneOffsets) {
-            radiance.addAssign(
-              colorNode.sample(colorUv.add(tapScale.mul(vec2(ox, oy))), mip).xyz,
-            );
+            radiance.addAssign(colorAt(colorUv.add(tapScale.mul(vec2(ox, oy))), mip));
           }
           radiance.assign(radiance.div(coneOffsets.length));
         }
@@ -916,7 +918,7 @@ export class SSRModule implements GameModule, SSRService {
   readonly #defaultRoughness = uniform(0.28);
   readonly #defaultMetalness = uniform(0);
   readonly #defaultReflectance = uniform(0.05);
-  readonly #fallbackRadiance = uniform(new THREE.Color(0.055, 0.062, 0.075));
+  readonly #fallbackRadiance = uniform(new THREE.Vector3(0.055, 0.062, 0.075));
   readonly #intensity = uniform(1);
   readonly #useVelocity = uniform(0);
   readonly #viewToWorld = uniform(new THREE.Matrix3());
@@ -982,7 +984,8 @@ export class SSRModule implements GameModule, SSRService {
     this.#defaultMetalness.value = this.#options.defaultMetalness;
     this.#defaultReflectance.value = this.#options.defaultReflectance;
     this.#intensity.value = this.#options.intensity;
-    this.#fallbackRadiance.value.copy(this.#options.fallbackRadiance);
+    const fallback = this.#options.fallbackRadiance;
+    this.#fallbackRadiance.value.set(fallback.r, fallback.g, fallback.b);
 
     const guide = acquireGuideBuffer(ctx, { resolutionScale: this.#options.resolutionScale });
     this.#guide = guide.provider;
