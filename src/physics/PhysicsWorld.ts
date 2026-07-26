@@ -40,12 +40,33 @@ import * as THREE from 'three/webgpu';
 import { serviceKey } from '../core/ServiceLocator';
 import type { GameContext, GameModule } from '../core/types';
 import {
+  ALL_LAYERS,
   COLLISION_GROUPS,
   CollisionLayer,
   interactionGroups,
   layerMask,
   type LayerMask,
 } from './Layers';
+
+/**
+ * Every object belonging to a skinned character under `root`.
+ *
+ * For each `SkinnedMesh`, the highest ancestor still inside `root` is treated
+ * as that character's root and its whole subtree is marked. That catches the
+ * skinned body, the armature, and anything parented to a bone socket.
+ */
+function collectCharacterSubtrees(root: THREE.Object3D): Set<THREE.Object3D> {
+  const roots = new Set<THREE.Object3D>();
+  root.traverse((object) => {
+    if (!(object instanceof THREE.SkinnedMesh)) return;
+    let top: THREE.Object3D = object;
+    while (top.parent !== null && top.parent !== root) top = top.parent;
+    roots.add(top);
+  });
+  const parts = new Set<THREE.Object3D>();
+  for (const characterRoot of roots) characterRoot.traverse((object) => parts.add(object));
+  return parts;
+}
 
 /** Service key for the physics world. */
 export const PhysicsWorldKey = serviceKey<PhysicsWorld>('physics.world');
@@ -438,11 +459,21 @@ export class PhysicsWorld implements GameModule {
       this.addCollider(desc, { kind: 'prop', label, source: mesh });
     };
 
+    // Everything belonging to a character, found before anything is emitted.
+    //
+    // Skipping `SkinnedMesh` alone is not enough, and the way it fails is
+    // memorable: the Barbarian GLB parents a `1H_Axe`, a `2H_Axe`, a shield and
+    // a `Mug` to his hand sockets as ordinary meshes, unused by the game and
+    // invisible in the frame. As world geometry they become four static boxes
+    // at chest height, arranged in a ring around wherever he spawned — a cage
+    // he cannot walk out of, made of props nobody can see. Anything under a
+    // character's root is a character's problem, and characters get capsules.
+    const characterParts = collectCharacterSubtrees(root);
+
     root.traverse((object) => {
       if (object.userData['noCollide'] === true) return;
       if (config.exclude.test(object.name)) return;
-      // Skinned meshes are characters. They get capsules, not bounds boxes.
-      if (object instanceof THREE.SkinnedMesh) return;
+      if (characterParts.has(object)) return;
 
       if (object instanceof THREE.InstancedMesh) {
         for (let i = 0; i < object.count; i++) {
@@ -558,22 +589,145 @@ export class PhysicsWorld implements GameModule {
     this.#world?.updateSceneQueries();
   }
 
-  /** Ground height under a point, or `null` when there is nothing below it. */
-  groundHeight(x: number, z: number, from = 200, range = 400): number | null {
-    const hit = this.raycast(
-      new THREE.Vector3(x, from, z),
-      new THREE.Vector3(0, -1, 0),
-      range,
-      { layers: layerMask(CollisionLayer.Terrain, CollisionLayer.Prop) },
+  /**
+   * Is anything on `layers` overlapping a sphere at `point`?
+   *
+   * Used to answer "can a body stand here" without moving one there first.
+   * Returns the offending collider's record so the caller can say *what* is in
+   * the way, which turns "the player cannot move" into "the player spawned
+   * inside prop.barrel.large#3".
+   */
+  overlapSphere(
+    point: THREE.Vector3,
+    radius: number,
+    layers: LayerMask = CollisionLayer.Prop,
+  ): ColliderRecord | null {
+    const world = this.#world;
+    if (world === null) return null;
+    const hit = world.intersectionWithShape(
+      { x: point.x, y: point.y, z: point.z },
+      { x: 0, y: 0, z: 0, w: 1 },
+      new RAPIER.Ball(radius),
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+      interactionGroups(ALL_LAYERS, layers),
     );
+    return hit === null ? null : (this.recordFor(hit) ?? null);
+  }
+
+  /**
+   * Every collider on `layers` overlapping a sphere at `point`.
+   *
+   * The single-hit {@link overlapSphere} answers "is this blocked"; this
+   * answers "by what", which is the question you have at 2am when a character
+   * will not move and the scene has 120 derived colliders in it.
+   */
+  overlapAll(
+    point: THREE.Vector3,
+    radius: number,
+    layers: LayerMask = CollisionLayer.Prop,
+    exclude?: RAPIER.Collider,
+  ): ColliderRecord[] {
+    const world = this.#world;
+    if (world === null) return [];
+    const out: ColliderRecord[] = [];
+    world.intersectionsWithShape(
+      { x: point.x, y: point.y, z: point.z },
+      { x: 0, y: 0, z: 0, w: 1 },
+      new RAPIER.Ball(radius),
+      (collider) => {
+        const record = this.recordFor(collider);
+        if (record !== null) out.push(record);
+        return true;
+      },
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+      interactionGroups(ALL_LAYERS, layers),
+      exclude,
+    );
+    return out;
+  }
+
+  /**
+   * Find somewhere near `x, z` a body of `radius` can actually stand.
+   *
+   * The scene is composed for a camera, so the spot the composition wants the
+   * hero to occupy is not necessarily a spot he can walk out of — a barrel
+   * placed for the frame sits half a metre in front of him and he is pinned on
+   * his first step, which reads as broken controls rather than as a prop.
+   *
+   * A ring search, widening outward, keeping the requested point when it is
+   * already clear. Returns `null` when nothing within `maxRadius` works, which
+   * the caller should treat as a content bug rather than paper over.
+   */
+  findClearSpot(
+    x: number,
+    z: number,
+    radius: number,
+    height: number,
+    maxRadius = 4,
+  ): THREE.Vector3 | null {
+    const probe = new THREE.Vector3();
+    const rings = [0, 0.7, 1.4, 2.1, 2.8, 3.5].filter((r) => r <= maxRadius);
+    for (const ring of rings) {
+      const steps = ring === 0 ? 1 : 12;
+      for (let i = 0; i < steps; i++) {
+        const angle = (i / steps) * Math.PI * 2;
+        const px = x + Math.cos(angle) * ring;
+        const pz = z + Math.sin(angle) * ring;
+        const ground = this.groundHeight(px, pz);
+        if (ground === null) continue;
+        // Two probes up the body: ankles clear of rubble, chest clear of a rail.
+        probe.set(px, ground + radius * 1.1, pz);
+        if (this.overlapSphere(probe, radius) !== null) continue;
+        probe.set(px, ground + height * 0.6, pz);
+        if (this.overlapSphere(probe, radius) !== null) continue;
+        return new THREE.Vector3(px, ground, pz);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Height of the highest surface under a point, or `null` when there is
+   * nothing below it.
+   *
+   * `layers` defaults to the terrain alone, not terrain + props: the usual
+   * caller is asking "where does something stand here", and answering with the
+   * lid of a crate the ray happened to pass through spawns the player on top of
+   * the scenery.
+   */
+  groundHeight(
+    x: number,
+    z: number,
+    layers: LayerMask = CollisionLayer.Terrain,
+    from = 200,
+    range = 400,
+  ): number | null {
+    const hit = this.raycast(new THREE.Vector3(x, from, z), new THREE.Vector3(0, -1, 0), range, {
+      layers,
+    });
     return hit === null ? null : hit.point.y;
   }
 
+  /**
+   * Interaction groups for a query.
+   *
+   * The membership half must be `ALL_LAYERS`, and this is the single most
+   * error-prone line in the whole physics layer. Rapier's rule is symmetric:
+   * a hit requires `query.membership & collider.filter` *and*
+   * `collider.membership & query.filter`. The terrain's filter lists the things
+   * that may stand on it — players, enemies, projectiles, the camera — and
+   * deliberately does not list "terrain". So a query that declares itself a
+   * member of the layers it wants to hit fails the first half of the test
+   * against every one of them and silently returns `null` forever.
+   *
+   * The symptom of getting this wrong is not an error. It is a character who
+   * has no ground normal (so slopes stop working), a camera arm that never
+   * finds a wall (so it clips through the ruined masonry) and a foot IK solver
+   * that never finds a floor — three unrelated-looking failures from one line.
+   */
   #queryGroups(options: QueryOptions): number {
     const layers = options.layers ?? layerMask(CollisionLayer.Terrain, CollisionLayer.Prop);
-    // A query has no membership of its own, so it borrows one broad enough to
-    // satisfy the symmetric rule against anything it is allowed to hit.
-    return interactionGroups(layers, layers);
+    return interactionGroups(ALL_LAYERS, layers);
   }
 
   #queryFlags(options: QueryOptions): RAPIER.QueryFilterFlags | undefined {

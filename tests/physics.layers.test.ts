@@ -63,6 +63,22 @@ describe('the game collision matrix', () => {
     expect(groupsInteract(COLLISION_GROUPS.trigger, COLLISION_GROUPS.projectile)).toBe(false);
   });
 
+  it('answers scene queries, which must declare universal membership', () => {
+    // The one construction that works for a query: membership ALL, filter =
+    // what you want to hit. Declaring membership as the layers you are looking
+    // for fails Rapier's symmetric test against every one of them, and every
+    // raycast in the game silently returns null.
+    const probe = (layers: number): number => interactionGroups(ALL_LAYERS, layers);
+    expect(groupsInteract(probe(CollisionLayer.Terrain), COLLISION_GROUPS.terrain)).toBe(true);
+    expect(groupsInteract(probe(CollisionLayer.Prop), COLLISION_GROUPS.prop)).toBe(true);
+    expect(groupsInteract(probe(CollisionLayer.Camera), COLLISION_GROUPS.terrain)).toBe(true);
+    // ...and it still filters: a terrain-only probe must not hit a prop.
+    expect(groupsInteract(probe(CollisionLayer.Terrain), COLLISION_GROUPS.prop)).toBe(false);
+    // The broken construction, kept as a regression guard.
+    const broken = interactionGroups(CollisionLayer.Terrain, CollisionLayer.Terrain);
+    expect(groupsInteract(broken, COLLISION_GROUPS.terrain)).toBe(false);
+  });
+
   it('lets projectiles hit everything that can be hit', () => {
     for (const target of ['terrain', 'prop', 'player', 'enemy'] as const) {
       expect(groupsInteract(COLLISION_GROUPS.projectile, COLLISION_GROUPS[target])).toBe(true);

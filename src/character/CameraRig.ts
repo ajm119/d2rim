@@ -56,9 +56,16 @@ export interface CameraRigOptions {
   readonly mode?: CameraMode;
   /** Vertical FOV in degrees for gameplay. Default 55. */
   readonly fov?: number;
-  /** Arm length in metres. Default 3.9. */
+  /**
+   * Arm length in metres. Defaults to 2.1 character-heights, so the framing is
+   * the same whatever size the character turns out to be.
+   */
   readonly distance?: number;
-  /** Pivot height above the feet, metres. Default 1.45 (shoulder). */
+  /**
+   * Pivot height above the feet, metres. Defaults to 0.86 of the player's
+   * measured height — shoulder level on whatever the character actually is,
+   * rather than a constant that only suits one model.
+   */
   readonly pivotHeight?: number;
   /** Lateral shoulder offset, metres. Positive is the character's right. */
   readonly shoulder?: number;
@@ -111,6 +118,8 @@ export class CameraRig implements GameModule {
   readonly name = 'character.cameraRig';
 
   readonly #options: Required<CameraRigOptions>;
+  /** The caller's options, unresolved — `undefined` means "derive it". */
+  readonly #given: CameraRigOptions;
   readonly #pivot = new THREE.Vector3();
   readonly #smoothPivot = new THREE.Vector3();
   readonly #lookAhead = new THREE.Vector3();
@@ -131,14 +140,20 @@ export class CameraRig implements GameModule {
   #mode: CameraMode;
   #blend = 0;
   #arm: number;
+  /** Resolved from the player's measured height unless explicitly configured. */
+  #pivotHeight: number;
+  #distance: number;
   #initialised = false;
   #toggleFrame = -1;
 
   constructor(options: CameraRigOptions = {}) {
+    this.#given = options;
     this.#options = { ...DEFAULTS, ...options };
     this.#mode = this.#options.mode;
     this.#blend = this.#mode === 'first' ? 1 : 0;
-    this.#arm = this.#options.distance;
+    this.#pivotHeight = this.#options.pivotHeight;
+    this.#distance = this.#options.distance;
+    this.#arm = this.#distance;
   }
 
   /* -- public ------------------------------------------------------------- */
@@ -168,6 +183,7 @@ export class CameraRig implements GameModule {
   }
 
   init(ctx: GameContext): void {
+    const options = this.#given;
     this.#ctx = ctx;
     ctx.services.register(CameraRigKey, this);
     this.#player = ctx.services.tryGet<PlayerController>(PlayerKey) ?? null;
@@ -183,6 +199,19 @@ export class CameraRig implements GameModule {
     const object = this.#player.object;
     this.#head = object === null ? null : findBone(object, 'head');
     if (this.#head !== null) this.#headScale = this.#head.scale.clone();
+
+    // Frame the character that actually loaded, not the one the defaults
+    // assumed. The Barbarian measures well under the nominal 1.85 m, and a
+    // pivot fixed at shoulder height for a 1.85 m figure floats above his head
+    // and pushes him into the bottom of frame.
+    const height = this.#player.height;
+    if (options.pivotHeight === undefined) this.#pivotHeight = height * 0.86;
+    if (options.distance === undefined) this.#distance = height * 2.1;
+    this.#arm = this.#distance;
+    console.info(
+      `[CameraRig] third person: pivot ${this.#pivotHeight.toFixed(2)} m, ` +
+        `arm ${this.#distance.toFixed(2)} m, fov ${this.#options.fov}`,
+    );
   }
 
   lateUpdate(ctx: GameContext, dt: number): void {
@@ -233,7 +262,7 @@ export class CameraRig implements GameModule {
 
   #updatePivot(player: PlayerController, dt: number): void {
     const position = player.object?.position ?? player.position;
-    this.#pivot.set(position.x, position.y + this.#options.pivotHeight, position.z);
+    this.#pivot.set(position.x, position.y + this.#pivotHeight, position.z);
 
     // Look-ahead. The pivot leads the character slightly in the direction of
     // travel, which opens up the space they are moving into instead of framing
@@ -270,9 +299,9 @@ export class CameraRig implements GameModule {
       .copy(this.#smoothPivot)
       .addScaledVector(this.#right, options.shoulder);
 
-    this.#desired.copy(origin).addScaledVector(this.#forward, -options.distance);
+    this.#desired.copy(origin).addScaledVector(this.#forward, -this.#distance);
 
-    let wanted = options.distance;
+    let wanted = this.#distance;
     const physics = this.#physics;
     if (physics !== null && physics.ready) {
       const direction = this.#armDir.copy(this.#desired).sub(origin);

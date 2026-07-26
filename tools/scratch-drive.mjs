@@ -83,8 +83,23 @@ async function snapshot(label) {
       colliders: physics.colliders.length,
       actions: graph ? graph.activeActions.map((a) => `${a.action}@${a.normalizedTime.toFixed(2)}`) : [],
       camera: { mode: rig.mode, blend: +rig.blend.toFixed(2), arm: +rig.armLength.toFixed(2) },
-      // Negative means the camera sits behind the character's facing direction,
-      // which is the whole point of an over-the-shoulder rig.
+      groundNormal: player.controller.groundNormal.toArray().map((v) => +v.toFixed(3)),
+      slopeDeg: +((player.controller.slope.angle * 180) / Math.PI).toFixed(1),
+      walkable: player.controller.slope.walkable,
+      vy: +player.controller.verticalVelocity.toFixed(2),
+      near: (() => {
+        const p = player.position;
+        const T = window.__d2rim.three;
+        const own = player.controller.collider;
+        const out = [];
+        for (const h of [0.2, 0.6, 1.2]) {
+          for (const r of physics.overlapAll(new T.Vector3(p.x, p.y + h, p.z), 1.6, 0xffff, own)) {
+            const c = r.collider.translation();
+            out.push(`${r.label}@(${c.x.toFixed(2)},${c.y.toFixed(2)},${c.z.toFixed(2)})`);
+          }
+        }
+        return [...new Set(out)];
+      })(),
       behindness: +window.__d2rim.ctx.camera.position
         .clone()
         .sub(player.position)
@@ -118,39 +133,20 @@ async function snapshot(label) {
 
 await step(16);
 await snapshot('01-idle');
-
 await page.keyboard.down('w');
-await step(30);
+await step(34);
 await snapshot('02-run');
 await step(8);
 await snapshot('03-run-later');
-
-await page.keyboard.down('Shift');
-await step(24);
-await snapshot('04-sprint');
-await page.keyboard.up('Shift');
 await page.keyboard.up('w');
-
-await page.keyboard.down('d');
-await step(30);
-await snapshot('05-strafe-right');
-await page.keyboard.up('d');
-
-await step(24);
+await step(14);
 await page.mouse.down({ button: 'left' });
 await step(1);
 await page.mouse.up({ button: 'left' });
 await step(6);
-await snapshot('06-attack');
-
-await step(24);
-await page.keyboard.press('f');
-await step(24);
-await snapshot('07-first-person');
+await snapshot('04-attack');
 
 writeFileSync(`${OUT}/console.log`, logs.join('\n'));
-console.log(`\nlogged ${logs.length} console lines -> ${OUT}/console.log`);
-
 await browser.close();
 server.kill();
 process.exit(0);

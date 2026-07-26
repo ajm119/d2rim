@@ -20,12 +20,19 @@
  *    pinned to a small negative constant instead of integrating gravity. An
  *    integrated fall speed grows every frame the character is on the ground and
  *    is spent the instant it steps off a lip, which reads as being yanked down.
- * 2. **Movement projected onto the ground plane.** Horizontal intent is rotated
- *    into the slope, so downhill motion follows the surface rather than
- *    launching off it, and uphill motion does not silently lose speed.
- *    Critically, that projected `y` is spent on this step only and never enters
- *    the persistent vertical velocity — which is exactly why cresting a ramp
- *    does not fling the character into the air.
+ * 2. **Horizontal intent, handed to Rapier unmodified.** It is tempting to
+ *    rotate the movement into the slope plane before the sweep, and it is
+ *    wrong: `computeColliderMovement` already climbs, slides and steps for
+ *    itself, and pre-tilting the input fights it. Uphill, the added `+y` is
+ *    swamped by the ground-stick bias and the net vector drives *into* the
+ *    hillside — the character walks at a few centimetres per second up a
+ *    13-degree bank and appears to be stuck on nothing. The projection helper
+ *    is still exported below, because animation and camera code legitimately
+ *    want "this velocity, laid onto that surface"; the controller just does not
+ *    use it on the way in.
+ *
+ *    Because the vertical is never derived from horizontal intent, cresting a
+ *    ramp cannot fling the character into the air.
  * 3. **Snap to ground.** A short downward search after each move keeps the
  *    capsule welded to the surface across the sub-centimetre gaps a heightfield
  *    leaves between triangles, which is where slope jitter comes from.
@@ -82,11 +89,14 @@ export function classifySlope(
  * Rotate a horizontal motion vector into the plane of a slope, preserving its
  * length.
  *
- * Preserving length is the whole point: the naive `v - n * dot(v, n)` shortens
- * the vector by `cos(slope)`, so a character walking up a 30-degree bank
- * silently loses 13% of its speed and the animation — which is driven by ground
- * speed — starts sliding its feet. Here the direction is taken from the
- * projection and the magnitude is taken from the input.
+ * Preserving length matters: the naive `v - n * dot(v, n)` shortens the vector
+ * by `cos(slope)`, so a body on a 30-degree bank silently loses 13% of its
+ * speed. Here the direction comes from the projection and the magnitude from
+ * the input.
+ *
+ * Not used by the sweep — see the module docs — but exported because it is the
+ * right way to ask "how fast is this body travelling *along the ground*", which
+ * is what a slope-aware camera or a stride-matched animation wants.
  */
 export function projectOntoGroundPlane(
   motion: THREE.Vector3,
@@ -430,14 +440,11 @@ export class CharacterController {
     const requested = Math.hypot(motion.x, motion.z);
 
     if (this.#grounded && !jumped) {
-      if (this.#slope.walkable) {
-        projectOntoGroundPlane(motion, this.#groundNormal, motion);
-      } else {
-        // Too steep to stand on: keep the player's input but bias it downhill,
-        // so a failed climb becomes a slide rather than a stall.
+      if (!this.#slope.walkable) {
+        // Too steep to stand on: bias the input downhill so a failed climb
+        // becomes a slide rather than a stall.
         const downhill = downhillDirection(this.#groundNormal);
         motion.addScaledVector(downhill, options.slideAcceleration * dt);
-        projectOntoGroundPlane(motion, this.#groundNormal, motion);
       }
     }
 
@@ -531,6 +538,20 @@ export class CharacterController {
     // below the surface; flip it rather than reporting an upside-down floor.
     this.#groundNormal.copy(hit.normal);
     if (this.#groundNormal.y < 0) this.#groundNormal.negate();
+
+    // A single downward ray from inside the capsule is a cheap probe, not a
+    // ground-truth contact: standing at the foot of a crate it happily returns
+    // the crate's vertical *side*. Taking that as the floor makes the character
+    // believe it is on an unclimbable slope and stops it dead a step away from
+    // an obstacle it never touched.
+    //
+    // Rapier's `computedGrounded()` is the authority on whether there is ground;
+    // this probe only supplies a normal to lean the movement into. So when the
+    // probe returns something the character could not possibly be standing on,
+    // discard it and use up. The worst case is a step of unprojected movement
+    // on a slope, which the sweep corrects anyway.
+    const limit = Math.cos(THREE.MathUtils.degToRad(this.#options.maxClimbAngle));
+    if (this.#groundNormal.y < limit) this.#groundNormal.copy(UP);
   }
 
   /**

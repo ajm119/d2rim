@@ -514,11 +514,23 @@ export class PlayerController implements GameModule {
     // only works because `PhysicsWorld.syncQueries` has already been run: an
     // unstepped query pipeline reports empty space everywhere, and the
     // character spawns at y=0 and free-falls into the moor.
-    const ground = this.#physics?.groundHeight(x, z);
-    if (ground === null || ground === undefined) {
-      console.warn('[PlayerController] no ground under the spawn point; dropping from y=2');
+    const radius = controller.dimensions.radius;
+    const spot = this.#physics?.findClearSpot(x, z, radius, this.#height) ?? null;
+    if (spot === null) {
+      const ground = this.#physics?.groundHeight(x, z);
+      console.warn(
+        `[PlayerController] no clear ground within 4 m of ${x}, ${z}; spawning anyway`,
+      );
+      controller.setPosition(this.#scratch.set(x, (ground ?? 2) + 0.05, z));
+    } else {
+      if (Math.hypot(spot.x - x, spot.z - z) > 0.05) {
+        console.info(
+          `[PlayerController] spawn point ${x}, ${z} is occupied; moved to ` +
+            `${spot.x.toFixed(2)}, ${spot.z.toFixed(2)}`,
+        );
+      }
+      controller.setPosition(this.#scratch.set(spot.x, spot.y + 0.05, spot.z));
     }
-    controller.setPosition(this.#scratch.set(x, (ground ?? 2) + 0.05, z));
     this.#fallStart = controller.position.y;
 
     // Facing the campfire, which is where the composition wants him looking and
