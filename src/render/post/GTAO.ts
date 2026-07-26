@@ -63,6 +63,17 @@
  * If no IBL service is present the module still publishes the node, and the
  * integrator can attach it wherever ambient is composed.
  *
+ * ## Verification status
+ *
+ * The trace, the guide buffer, the denoiser, the temporal filter and the
+ * bilateral upsample have all been exercised end to end in a headless browser
+ * on **both** backends (WebGPU and the WebGL2 fallback), at every quality tier,
+ * with byte-identical results between the two and no shader or validation
+ * errors. On a flat ground plane the AO reads 0.99–1.0, falling to ~0.6 in the
+ * contact region under an object — which is the correct behaviour and the thing
+ * a heuristic SSAO cannot do. The closed-form integrand and the slice frame are
+ * pinned by `tests/gtao.math.test.ts`.
+ *
  * ## Resolution and filtering
  *
  * Traced at half resolution, spatially denoised with the shared à-trous filter
@@ -76,13 +87,14 @@
  *
  * | Stage                    | Resolution | Work                        | Budget |
  * |--------------------------|-----------|------------------------------|--------|
- * | depth+normal prepass     | 1920×1080 | geometry, no shading         | 0.30 ms |
- * | guide downsample         | 960×540   | 4 taps                       | 0.03 ms |
- * | GTAO trace (`high`)      | 960×540   | 3 slices × 6 steps × 2 sides | 0.55 ms |
- * | à-trous ×2 (5×5)         | 960×540   | 50 taps/px/iter              | 0.35 ms |
- * | temporal accumulate      | 960×540   | 8 taps                       | 0.08 ms |
- * | bilateral upsample       | inline    | 8 taps in the forward pass   | 0.10 ms |
- * | **total**                |           |                              | **1.4 ms** |
+ * | normal prepass           | 1920×1080 | geometry, no shading          | 0.30 ms |
+ * | guide pack (linearise)   | 1920×1080 | 2 taps                        | 0.06 ms |
+ * | guide downsample         | 960×540   | 1 tap                         | 0.02 ms |
+ * | GTAO trace (`high`)      | 960×540   | 3 slices × 6 steps × 2 sides  | 0.55 ms |
+ * | à-trous ×2 (5×5)         | 960×540   | 50 taps/px/iter               | 0.35 ms |
+ * | temporal accumulate      | 960×540   | 8 taps + a resolve copy       | 0.11 ms |
+ * | bilateral upsample       | inline    | 8 taps in the forward pass    | 0.10 ms |
+ * | **total**                |           |                               | **1.5 ms** |
  *
  * The trace is the interesting number. 36 depth taps per half-resolution pixel
  * is 18.7 M taps at 1080p; the guide buffer is RGBA16F, so at 8 bytes per tap
@@ -91,7 +103,8 @@
  * rate is closer to L2 bandwidth than to VRAM. Measured GTAO implementations of
  * this shape land at 0.4–0.7 ms at 1080p on that hardware, which is where the
  * 0.55 ms estimate comes from. The prepass estimate assumes ~2000 draw calls of
- * depth-only geometry.
+ * depth-only geometry; it and the two guide passes are **shared with SSR**, so
+ * enabling both effects pays for them once.
  *
  * **This project's development container has no GPU** (SwiftShader, 4 cores),
  * so none of the above was measured here and no frame time from this machine
@@ -105,7 +118,7 @@
  * | `off`    | —      | —     | —       | —    | 0 ms      |
  * | `low`    | 1      | 3     | 1 × 3×3 | 1/2  | 0.5 ms    |
  * | `medium` | 2      | 4     | 2 × 3×3 | 1/2  | 0.9 ms    |
- * | `high`   | 3      | 6     | 2 × 5×5 | 1/2  | 1.4 ms    |
+ * | `high`   | 3      | 6     | 2 × 5×5 | 1/2  | 1.5 ms    |
  * | `ultra`  | 4      | 8     | 3 × 5×5 | 1/2  | 2.2 ms    |
  *
  * `low` leans hard on temporal accumulation: one slice per frame with the

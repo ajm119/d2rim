@@ -42,7 +42,24 @@
  * *or* adopted wholesale from an existing G-buffer if one is registered under
  * {@link GuideBufferKey} — see {@link acquireGuideBuffer}.
  *
- * ## 2. Pyramids
+ * ## 2. Two things that will bite anyone editing this file
+ *
+ * Both were found the expensive way, and both fail *silently* — no warning, no
+ * shader error, just a buffer full of its clear value.
+ *
+ * 1. **A `NodeMaterial`'s `fragmentNode` cannot request a new varying.** three
+ *    closes the vertex stage before building `fragmentNode`, so referencing
+ *    `positionView` (or any accessor whose varying the standard material setup
+ *    did not already create) from there produces a material that compiles,
+ *    draws, and writes nothing useful. That is why the prepass writes only the
+ *    normal and linear depth is reconstructed in a separate quad pass.
+ * 2. **`cameraNear` / `cameraFar` bind to whatever camera is rendering.** A
+ *    full-screen quad renders through `QuadMesh`'s private orthographic camera
+ *    (`near = 0`, `far = 1`), so those accessors are meaningless in any pass in
+ *    this file. Every quad pass here takes the scene camera's parameters as
+ *    explicit uniforms.
+ *
+ * ## 3. Pyramids
  *
  * {@link MipChain} builds a mip pyramid by repeated 2×2 reduction: `min` for
  * the Hi-Z depth pyramid SSR marches against, `average` for the blurred colour
@@ -57,7 +74,7 @@
  * Two tiny passes per level, no aliasing hazard, no copies, and both chains end
  * up complete.
  *
- * ## 3. À-trous denoise
+ * ## 4. À-trous denoise
  *
  * Dammertz, Sewtz, Hanika & Lensch, *"Edge-Avoiding À-Trous Wavelet Transform
  * for fast Global Illumination Filtering"*, HPG 2010. A fixed 5×5 B3-spline
@@ -68,7 +85,7 @@
  * Filtering"*, HPG 2017, §4.2), so the filter never blurs across a silhouette
  * or a crease — which is the difference between "denoised" and "smeared".
  *
- * ## 4. Temporal accumulation
+ * ## 5. Temporal accumulation
  *
  * History is reprojected with the velocity buffer published by
  * {@link module:render/post/Motion} when it exists, and by camera-only
@@ -78,7 +95,7 @@
  * that a wrong reprojection produces one soft frame rather than a permanent
  * smear.
  *
- * ## 5. Joint bilateral upsample
+ * ## 6. Joint bilateral upsample
  *
  * Kopf, Cohen, Lischinski & Uyttendaele, *"Joint Bilateral Upsampling"*,
  * SIGGRAPH 2007. The four half-resolution taps around a full-resolution pixel
@@ -625,10 +642,11 @@ export function createTarget(name: string, options: TargetOptions = {}): THREE.R
  *   `n · 0.5 + 0.5`, `a` = linear view depth divided by `camera.far`, cleared
  *   to `(0.5, 0.5, 1, 1)` where there is no geometry.
  * - `halfGuideTexture` — the same, at {@link GuideBufferOptions.resolutionScale}
- *   resolution, produced by *selecting* the nearest of each 2×2 block rather
- *   than averaging (an averaged normal or depth belongs to no real surface and
- *   breaks the bilateral upsample). May be `null`, in which case the effects
- *   sample the full-resolution buffer with point filtering.
+ *   resolution, produced by *selecting* one texel of each 2×2 block rather than
+ *   averaging (an averaged normal is not a unit vector and an averaged depth
+ *   belongs to no real surface, which breaks the bilateral upsample). May be
+ *   `null`, in which case the effects sample the full-resolution buffer with
+ *   point filtering.
  * - Both textures must use `NearestFilter`.
  */
 export interface GuideBufferProvider {
@@ -748,7 +766,7 @@ export class GuideBufferPass implements GuideBufferProvider {
     );
     this.#downsample = new FullScreenPass(
       'guide.downsample',
-      nearestDepthDownsampleNode(this.#full.texture, this.#sourceTexel),
+      guideDownsampleNode(this.#full.texture, this.#sourceTexel),
     );
   }
 
@@ -945,7 +963,7 @@ function packGuideNode(
  * filter guided by them matches nothing and degenerates into a box blur across
  * exactly the silhouettes it exists to protect.
  */
-function nearestDepthDownsampleNode(
+function guideDownsampleNode(
   source: THREE.Texture,
   sourceTexel: THREE.Node<'vec2'>,
 ): THREE.Node {

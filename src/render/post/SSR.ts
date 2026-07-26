@@ -127,9 +127,9 @@
  * cells). Published Hi-Z SSR implementations at half resolution on this class
  * of hardware land in the 0.9–1.4 ms band, which brackets the estimate.
  *
- * Combined with GTAO's 1.4 ms — and noting that the depth+normal prepass and
- * the guide buffer are *shared*, so SSR does not pay for them again — the two
- * effects together fit in ~3.1 ms. Against a 16.6 ms frame that leaves 13.5 ms
+ * Combined with GTAO's 1.5 ms — and noting that the normal prepass and the
+ * guide buffer are *shared*, so SSR does not pay for them again — the two
+ * effects together fit in ~3.3 ms. Against a 16.6 ms frame that leaves 13.5 ms
  * for the forward pass, shadows, sky and the rest of post, which is the right
  * shape for this scene.
  *
@@ -137,6 +137,24 @@
  * container has no GPU (SwiftShader on 4 cores); every number above is derived
  * from tap counts, resolutions, buffer formats and published costs for the same
  * passes on the target hardware.
+ *
+ * ## 7. Verification status
+ *
+ * The Hi-Z pyramid, the traversal, the cone trace, the denoiser and the
+ * temporal filter have been exercised end to end in a headless browser on
+ * **both** backends at every quality tier, with byte-identical results between
+ * the two and no shader or WebGPU validation errors — in particular the
+ * two-target pyramid construction described in
+ * {@link module:render/post/Denoise} passes WebGPU's subresource aliasing rules,
+ * which the naive single-texture version does not. The cone-angle chain, the
+ * environment-BRDF fit and the border fade are pinned by
+ * `tests/ssr.math.test.ts`.
+ *
+ * What has *not* been verified here is image quality against a real scene:
+ * doing that needs the scene colour buffer that only the post stack can supply
+ * (see §5), and a GPU. The reflections in the harness came from a synthetic
+ * previous-frame colour buffer, which proves the plumbing and the maths but
+ * not the look.
  *
  * ## 7. Quality tiers
  *
