@@ -151,7 +151,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     // lowest of the three, which is the single change that gets living green
     // out of a scene whose thesis is that nothing in it is alive.
     albedoSaturation: 0.55,
-    albedoTint: [0.46, 0.435, 0.395],
+    albedoTint: [0.5, 0.465, 0.40],
     roughnessRange: [0.68, 0.99],
     metalness: 0,
     reflectance: 0.035,

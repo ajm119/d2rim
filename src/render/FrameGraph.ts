@@ -928,8 +928,14 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // centimetres, and because the contact darkening that actually grounds
       // objects in this scene is GTAO's job, not the sun's — see the GTAO
       // radius note below.
-      depthBiasTexels: 2.4,
-      normalBiasTexels: 3.2,
+      depthBiasTexels: 3.0,
+      // 6.5 texels. 3.2 was measured and found insufficient: the acne wedges
+      // survived on the escarpment's largest facets, which is exactly where the
+      // displaced geometry departs furthest from its own interpolated normal.
+      // At cascade 0's ~1 cm texel this is 6-7 cm of receiver offset — visible
+      // as peter-panning only on contacts smaller than that, and there are
+      // none in this scene that the GTAO pass is not already grounding.
+      normalBiasTexels: 6.5,
     },
   });
 

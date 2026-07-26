@@ -140,10 +140,12 @@ export function generateDeadTreeGeometry(options: DeadTreeOptions = {}): THREE.B
     {
       origin: new THREE.Vector3(0, 0, 0),
       direction: trunkDirection,
-      // The trunk is 38% of the tree; the crown is built out of the remaining
-      // 62% by the recursion. A trunk that is half the height reads as a
-      // telegraph pole with sticks on it.
-      length: height * 0.38,
+      // The trunk is 46% of the tree, up from 38%. At 38% with the limb radii
+      // raised for coverage, the trees came out baobab-shaped: a short fat bole
+      // under a wide low crown. A dead hardwood carries its fork well above
+      // head height, and that clear trunk is most of what makes the treeline
+      // read as trees rather than as bushes.
+      length: height * 0.46,
       radius,
       depth,
       upBias,
@@ -205,13 +207,21 @@ function growBranch(
   // Taper along the limb. The tip is never zero-radius: a cone that closes to
   // a point aliases into a shimmering needle at distance, and a 12 mm twig end
   // is both cheaper to shade and closer to what a dead branch looks like.
-  // 30 mm floor, up from 12. A 12 mm twig on the ridge is well under a pixel
+  // 32 mm floor and a 0.45 taper ratio, both raised deliberately.
+  //
+  // Measured off the ridge: the trunks were landing at 47-77/255 against a
+  // 195 sky, which is a textbook 3:1 silhouette — and the crowns still read as
+  // pale haze, because the twigs were thin enough that most of their pixels
+  // were mostly sky. Value was never the problem; *coverage* was. Stylized art
+  // direction has the honest answer here, and it is the same one Fortnite and
+  // Torchlight use on every prop they ship: make the shape bolder. A chunky
+  // twig is not a compromise, it is the style. A 12 mm twig on the ridge is well under a pixel
   // wide at 47 m, and a sub-pixel bright-on-dark edge is where every temporal
   // and spatial artefact in the stack shows up at once: it crawls under TAA,
   // it aliases without it, and the grade's lateral aberration paints it
   // magenta. Stylized silhouettes want to be *bold* anyway — thin is not the
   // same as delicate.
-  const tipRadius = Math.max(0.03, spec.radius * 0.34);
+  const tipRadius = Math.max(0.032, spec.radius * 0.45);
 
   for (let node = 0; node <= nodes; node++) {
     const t = node / nodes;
@@ -264,8 +274,14 @@ function growBranch(
       }
     }
 
-    // Advance, then bend. Bending after the ring is emitted is what makes the
-    // limb curve smoothly rather than kink at each node.
+    // Advance, then bend — but only while there is another ring to place.
+    //
+    // Advancing on the final iteration too was a real bug with a very visible
+    // symptom: `point` ended up one whole segment *past* the limb's tip, and
+    // since the children are seeded from `point`, every fork in every tree was
+    // detached from its parent by that distance. On the ridge it read as limbs
+    // and whole crown sections floating unsupported in the air.
+    if (node === nodes) break;
     point.addScaledVector(direction, step);
     perturb(direction, rng, 0.16 + 0.1 * spec.upBias);
     // Gravity on the heavy low limbs, reach on the fine high ones. Sign flip
@@ -376,11 +392,11 @@ export const DEAD_TREE_VARIANTS: readonly DeadTreeOptions[] = [
   // a television aerial. The last level is what supplies the fine twig mass
   // that makes a bare crown look like a *crown* — it is roughly 60% of the
   // triangles and 100% of whether the silhouette is convincing.
-  { height: 6.6, radius: 0.22, depth: 5, spread: 0.56, upBias: 0.3, lean: 0.08 },
+  { height: 6.6, radius: 0.25, depth: 5, spread: 0.56, upBias: 0.3, lean: 0.08 },
   // Wind-bent, wide and clawed. Reads strongly in profile.
-  { height: 5.4, radius: 0.185, depth: 5, spread: 0.74, upBias: 0.12, lean: 0.26 },
+  { height: 5.4, radius: 0.175, depth: 5, spread: 0.74, upBias: 0.12, lean: 0.26 },
   // Younger, narrower, more upright — fills between the heroes.
-  { height: 4.6, radius: 0.14, depth: 4, spread: 0.5, upBias: 0.42, lean: 0.14 },
+  { height: 4.6, radius: 0.17, depth: 4, spread: 0.5, upBias: 0.42, lean: 0.14 },
   // A broken snag: two forks and a blunt top. Every treeline needs a stump.
-  { height: 3.0, radius: 0.24, depth: 2, spread: 0.9, upBias: 0.05, lean: 0.19 },
+  { height: 3.0, radius: 0.28, depth: 2, spread: 0.9, upBias: 0.05, lean: 0.19 },
 ] as const;

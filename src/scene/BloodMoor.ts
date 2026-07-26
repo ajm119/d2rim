@@ -661,9 +661,19 @@ export class BloodMoor implements GameModule {
       });
       const mesh = new THREE.Mesh(geometry, index === 2 ? mossy : cliff);
       mesh.name = `escarpment.${index}`;
-      // Sunk by a third of its height: the formation reads as bedrock breaking
-      // through the bank, not as boulders resting on it.
-      mesh.position.set(block.x, this.field.heightAt(block.x, block.z) - block.s[1] * 0.34, block.z);
+      // Sunk by half its height, up from a third.
+      //
+      // A third was not enough, and the symptom was the frame's most persistent
+      // artefact: hard-edged black and pale wedges scattered across the cliff
+      // faces, which survived two separate rounds of shadow-bias increases
+      // because they were never shadow acne. They were the *terrain mesh*
+      // poking through the rock. `TerrainField`'s west bank is a smooth ramp
+      // rising 4.6 m over 14 m, so a rock keyed to the height at its own centre
+      // has ground well above its base at the uphill end, and the ground's
+      // triangles cut straight out through the rock's faces. Sinking half the
+      // height buries the intersection, and the rocks still read as bedrock
+      // breaking through the bank rather than as boulders resting on it.
+      mesh.position.set(block.x, this.field.heightAt(block.x, block.z) - block.s[1] * 0.5, block.z);
       mesh.rotation.y = rng.next() * Math.PI * 2;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -871,9 +881,13 @@ export class BloodMoor implements GameModule {
     // radiance of the flanks without any extra geometry. A tapering,
     // vertically-graded, self-overlapping emitter is a readable flame; a
     // constant-radiance blob is not, no matter what value it is set to.
-    const flameGeometry = new THREE.CylinderGeometry(0.015, 0.19, 0.78, 9, 5, true);
-    flameGeometry.translate(0, 0.39, 0);
-    const flameHeight = positionLocal.y.div(0.78).clamp(0, 1);
+    // Smaller than it was, twice. A 0.9 m plume on a 1.4 m fire ring is a
+    // bonfire, not a campfire, and the extra size was most of why the mesh read
+    // as a paper cone: the more screen area a soft emitter covers, the more it
+    // has to be *structured* to stay convincing.
+    const flameGeometry = new THREE.CylinderGeometry(0.012, 0.15, 0.60, 9, 6, true);
+    flameGeometry.translate(0, 0.30, 0);
+    const flameHeight = positionLocal.y.div(0.60).clamp(0, 1);
     const flameMaterial = new THREE.MeshBasicNodeMaterial({
       transparent: true,
       depthWrite: false,
@@ -906,7 +920,7 @@ export class BloodMoor implements GameModule {
     const flameAlpha = oneMinus(smoothstep(0.02, 0.86, flameHeight))
       .mul(lick)
       .mul(this.#fireFlicker)
-      .mul(0.46);
+      .mul(0.34);
     flameMaterial.colorNode = vec4(flameColour.mul(flameAlpha), flameAlpha);
     // Break the cone.
     //
@@ -924,8 +938,8 @@ export class BloodMoor implements GameModule {
     // additive overdraw it sits inside.
     const wobbleSpace = positionLocal.mul(vec3(3.1, 1.7, 3.1)).add(vec3(0, this.#fireTime.mul(-2.6), 0));
     const wobble = mx_noise_float(wobbleSpace)
-      .mul(0.055)
-      .add(mx_noise_float(wobbleSpace.mul(2.7).add(vec3(11, 0, 5))).mul(0.028));
+      .mul(0.12)
+      .add(mx_noise_float(wobbleSpace.mul(2.7).add(vec3(11, 0, 5))).mul(0.06));
     flameMaterial.positionNode = positionLocal.add(
       vec3(positionLocal.x, 0, positionLocal.z).mul(wobble.mul(flameHeight.add(0.25)).mul(9)),
     );
@@ -944,7 +958,13 @@ export class BloodMoor implements GameModule {
       this.#lighting?.addLight({
         kind: 'point',
         name: 'campfire',
-        position: { x, y: base + 0.45, z },
+        // Raised from 0.45 m to 0.62 m. Inverse-square is brutal at this
+        // scale: at 0.45 m the ring stones sat about 0.3 m from a point source
+        // and were being lit ten times harder than the ground a metre away, so
+        // a ring of *sooted* stone came back as the brightest object in the
+        // shot. Lifting the source into the flame body — which is also where it
+        // physically belongs — flattens the falloff across the ring.
+        position: { x, y: base + 0.62, z },
         color: FIRE_COLOR,
         intensity: FIRE_INTENSITY,
         radius: 7,
@@ -970,7 +990,7 @@ export class BloodMoor implements GameModule {
     // work: that *is* what `traverseVisible` filters on.
     const glow = new THREE.PointLight(new THREE.Color(FIRE_COLOR), FIRE_INTENSITY, 7, 2);
     glow.name = 'campfire.scatter';
-    glow.position.set(x, base + 0.45, z);
+    glow.position.set(x, base + 0.62, z);
     glow.castShadow = false;
     glow.layers.set(VOLUMETRIC_ONLY_LAYER);
     ctx.camera.layers.disable(VOLUMETRIC_ONLY_LAYER);
@@ -1070,6 +1090,15 @@ export class BloodMoor implements GameModule {
     // node. This is why the trunks ground into the mud instead of floating on
     // it, and why no two trees are quite the same value.
     bark.vertexColors = true;
+    // 0.28. Bare limbs are the most sky-exposed geometry in the scene — a
+    // cylinder always presents some of itself to the zenith, and nothing
+    // occludes a tree on a ridge — so at a normal environment response they
+    // came back at roughly half the sky's own value: a pale blue-grey tree
+    // against a pale grey sky, which is not a silhouette, it is camouflage. The
+    // fix is to cut the *environment* term specifically rather than the albedo,
+    // because the albedo is what the rim light and the fire still have to work
+    // against, and darkening that would kill the rim too.
+    bark.envMapIntensity = 0.28;
     this.#disposables.push(bark);
 
     const geometries = DEAD_TREE_VARIANTS.map((variant, index) =>
@@ -1085,7 +1114,7 @@ export class BloodMoor implements GameModule {
       // 34 deg lens — the overwhelming majority of those trees landed outside
       // the frustum, which is why a 96-tree "treeline" arrived on screen as
       // four twigs. The band is now sized to the crest the lens actually sees.
-      count: Math.round(130 * this.#scatterDensity),
+      count: Math.round(165 * this.#scatterDensity),
       area: 62,
       center: new THREE.Vector3(4, 0, -36),
       seed: `${SCATTER_SEED}.trees`,
@@ -1114,7 +1143,7 @@ export class BloodMoor implements GameModule {
         // erupting out of the cliff face. The exclusion has to be authored
         // against the rock's footprint, because the terrain function does not
         // know the rock is there.
-        const escarpment = smootherstep(2.0, 7.0, x + 8.0);
+        const escarpment = smootherstep(-1.0, 4.0, x + 8.0);
         return ridge * clearing * escarpment;
       },
     });
@@ -1309,37 +1338,65 @@ export class BloodMoor implements GameModule {
   }
 
   /** Rubble, weighted toward the wall it fell off. */
+  /**
+   * Masonry debris — at the foot of the wall, and nowhere else.
+   *
+   * This used to be a 34-instance scatter across a 26 m square centred on the
+   * midground, and it was the source of the frame's most persistent-looking
+   * "rendering bug": hard-edged black shards littered across the mud and the
+   * cliff, which survived two rounds of shadow-bias increases because they were
+   * never a shading artefact at all. `prop.rubble.*` are dungeon *floor* pieces
+   * — near-flat debris authored to sit on a tile — so scattered across open
+   * ground, aligned to the terrain normal and seen at a grazing angle, each one
+   * presents as a dark irregular sliver. Fifty of them read as damage to the
+   * image.
+   *
+   * They are correct in the one place they were always meant to be: piled
+   * against a collapsing wall, which is where fallen masonry actually goes, and
+   * which does real compositional work — it welds the wall's base into the
+   * ground instead of leaving it standing on a hard line, and it puts a band of
+   * broken detail along the leading edge that carries the eye toward the fire.
+   *
+   * Walked along the wall's own axis rather than scattered, with the spread
+   * biased toward the collapsed (low) end. A ruin sheds most of its stone where
+   * it has fallen furthest.
+   */
   #placeRubble(keys: readonly AssetKey[]): void {
     if (keys.length === 0) return;
-    const samples = scatter({
-      count: Math.round(34 * this.#scatterDensity),
-      area: 26,
-      center: new THREE.Vector3(-5.0, 0, -10.0),
-      seed: `${SCATTER_SEED}.rubble`,
-      scaleRange: [0.6, 1.35],
-      surface: this.field.surface,
-      maxSlopeDegrees: 40,
-      minSpacing: 1.1,
-      alignToNormal: true,
-    });
+    const rng = createRng(`${SCATTER_SEED}.rubble`);
+    const origin = new THREE.Vector2(-5.6, -11.4);
+    const yaw = THREE.MathUtils.degToRad(24);
+    const samples: ScatterSample[] = [];
+    const count = Math.round(18 * this.#scatterDensity);
+
+    for (let i = 0; i < count; i++) {
+      // Biased toward the broken end: `t^0.65` clusters samples at the high
+      // end of the run, which is where the courses step down to nothing.
+      const t = Math.pow(rng.next(), 0.65);
+      const along = -5.4 + t * 12.4;
+      // Off the wall face, mostly on the camera side so the pile is visible.
+      const off = (rng.next() - 0.28) * 2.6;
+      const x = origin.x + Math.cos(yaw) * along + Math.sin(yaw) * off;
+      const z = origin.y - Math.sin(yaw) * along + Math.cos(yaw) * off;
+      samples.push({
+        position: new THREE.Vector3(x, this.field.heightAt(x, z), z),
+        normal: this.field.normalAt(x, z),
+        scale: 0.55 + rng.next() * 0.85,
+        rotation: rng.next() * Math.PI * 2,
+        index: i,
+      });
+    }
+
     this.#instance(keys, samples, 'rubble', {
       alignToGround: 1,
       shadow: true,
-      sink: 0.08,
-      targetHeight: 0.6,
+      // Sunk further than before. These pieces carry their own base plate, and
+      // burying it is what stops the plate reading as a shard in its own right.
+      sink: 0.22,
+      targetHeight: 0.55,
     });
   }
 
-  /**
-   * Clone a prop per sample and place it.
-   *
-   * Clones share geometry and materials with the cached GLTF, so N copies of a
-   * tree cost N draw calls but one upload. That is the right trade at this
-   * count: `InstancedMesh` would collapse the draws but a GLTF prop is a small
-   * hierarchy of several meshes with different materials, and flattening it
-   * per-material for ~250 objects buys less than it costs in complexity here.
-   * Phase 3's streaming zone is where instancing earns its keep.
-   */
   #instance(
     keys: readonly AssetKey[],
     samples: readonly ScatterSample[],
@@ -1651,7 +1708,7 @@ interface WeatheringGrade {
   readonly envMapIntensity: number;
 }
 
-const WEATHERING_TINT = new THREE.Color(0.30, 0.31, 0.34);
+const WEATHERING_TINT = new THREE.Color(0.235, 0.243, 0.268);
 
 /**
  * How far every prop albedo is dragged toward its own luminance.
@@ -1682,7 +1739,7 @@ const PROP_WEATHERING: WeatheringGrade = {
  */
 const HERO_WEATHERING: WeatheringGrade = {
   desaturation: 0.44,
-  tint: new THREE.Color(0.5, 0.51, 0.55),
+  tint: new THREE.Color(0.4, 0.408, 0.44),
   roughnessFloor: 0.3,
   envMapIntensity: 0.7,
 };
@@ -1705,7 +1762,7 @@ const DEAD_WOOD_OVERRIDES: Partial<SurfaceSpec> = {
   // 0.45 in display space against a 0.75 sky, which is a mid-grey tree — and a
   // mid-grey tree is not a silhouette, it is a smudge. A silhouette is a *value*
   // relationship and it needs at least a 3:1 separation from what is behind it.
-  albedoTint: [0.075, 0.073, 0.086],
+  albedoTint: [0.062, 0.060, 0.072],
   roughnessRange: [0.78, 1],
   normalStrength: 1.35,
   porosity: 0.86,
@@ -1731,7 +1788,7 @@ const DEAD_WOOD_OVERRIDES: Partial<SurfaceSpec> = {
  * against, and at the sky's own colour it would simply add to it.
  */
 const RIM_COLOR = 0x9fc2e8;
-const RIM_INTENSITY = 0.85;
+const RIM_INTENSITY = 0.7;
 
 /**
  * The shadow fill. Deep blue-teal at a tenth of the rim's strength — enough to
@@ -1760,7 +1817,7 @@ const FIRE_COLOR = 0xff7a30;
  * stops being the dominant illuminant at about six metres is the right size of
  * source — which is what a ~1 kW wood fire actually is.
  */
-const FIRE_INTENSITY = 3.4;
+const FIRE_INTENSITY = 2.3;
 
 /**
  * Layer for objects that exist only so a screen-space or volumetric pass can
