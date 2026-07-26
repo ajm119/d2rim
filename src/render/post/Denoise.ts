@@ -18,7 +18,7 @@
  * surface is this?". That is stored in a single RGBA16F attachment:
  *
  * ```
- * rgb = view-space shading normal, unit length, signed
+ * rgb = view-space shading normal, unit length, encoded as `n · 0.5 + 0.5`
  * a   = linear view depth / camera.far, in [0, 1]
  * ```
  *
@@ -34,7 +34,7 @@
  * by `far` costs nothing: at 60 m with a 2 km far plane the depth error is
  * ~3 cm, which is far below the AO radius and the SSR thickness threshold.
  *
- * **Clear to `(0, 0, 1, 1)`.** Sky pixels then decode as "normal facing the
+ * **Clear to `(0.5, 0.5, 1, 1)`.** Sky pixels then decode as "normal facing the
  * camera at the far plane" instead of a zero-length normal that `normalize()`
  * turns into NaN and a zero depth that reads as "touching the lens".
  *
@@ -102,14 +102,12 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn,
-  If,
-  cameraFar,
   float,
   max,
   min,
   normalView,
   normalize,
-  positionView,
+  perspectiveDepthToViewZ,
   texture,
   uniform,
   uv,
@@ -436,8 +434,11 @@ export const interleavedGradientNoiseNode = Fn(
  * half-float rounding, and an off-unit normal quietly biases every dot product
  * downstream.
  */
-export const decodeGuide = Fn(([guide, cameraFar]: [Vec4Node, FloatNode]) => {
-  return vec4(normalize(guide.xyz), guide.w.mul(cameraFar));
+export const decodeGuide = Fn(([guide, farNode]: [Vec4Node, FloatNode]) => {
+  // Undo the unsigned normal encoding, then renormalise: point sampling still
+  // leaves half-float rounding, and an off-unit normal quietly biases every dot
+  // product downstream.
+  return vec4(normalize(guide.xyz.mul(2).sub(1)), guide.w.mul(farNode));
 });
 
 /**
@@ -620,9 +621,9 @@ export function createTarget(name: string, options: TargetOptions = {}): THREE.R
  * standalone prepass is skipped entirely — that is worth roughly 0.3 ms of
  * vertex work per frame at 1080p on the target GPU. The contract is exactly:
  *
- * - `guideTexture` — RGBA16F, `rgb` = view-space unit normal, `a` = linear view
- *   depth divided by `camera.far`, cleared to `(0, 0, 1, 1)` where there is no
- *   geometry.
+ * - `guideTexture` — RGBA16F, `rgb` = view-space unit normal encoded as
+ *   `n · 0.5 + 0.5`, `a` = linear view depth divided by `camera.far`, cleared
+ *   to `(0.5, 0.5, 1, 1)` where there is no geometry.
  * - `halfGuideTexture` — the same, at {@link GuideBufferOptions.resolutionScale}
  *   resolution, produced by *selecting* the nearest of each 2×2 block rather
  *   than averaging (an averaged normal or depth belongs to no real surface and
@@ -669,26 +670,66 @@ export interface GuideBufferOptions {
  *    settles on, so this module can be developed and shipped on its own.
  */
 export class GuideBufferPass implements GuideBufferProvider {
+  readonly #normals: THREE.RenderTarget;
   readonly #full: THREE.RenderTarget;
   readonly #half: THREE.RenderTarget;
   readonly #prepassMaterial: THREE.NodeMaterial;
+  readonly #pack: FullScreenPass;
   readonly #downsample: FullScreenPass;
   readonly #sourceTexel = uniform(new THREE.Vector2(1, 1));
-  readonly #clearColor = new THREE.Color(0, 0, 1);
+  /**
+   * The *scene* camera's near/far, as explicit uniforms.
+   *
+   * The `cameraNear` / `cameraFar` TSL accessors bind to whatever camera is
+   * rendering, and a full-screen quad pass renders with `QuadMesh`'s private
+   * orthographic camera (`near = 0`, `far = 1`). Reading the accessors there
+   * silently yields that camera's values, which turns every reconstructed depth
+   * into approximately zero — and, as with the varying above, produces no error
+   * at all. Any quad pass in this pipeline that needs camera parameters gets
+   * them as uniforms.
+   */
+  readonly #cameraNear = uniform(0.1);
+  readonly #cameraFar = uniform(1000);
+  /**
+   * Sky: a normal facing the camera, at the far plane, in the encoding above.
+   * Clearing to zero would make `normalize()` produce NaN and the depth read as
+   * "touching the lens", which poisons every consumer.
+   */
+  readonly #clearColor = new THREE.Color(0.5, 0.5, 1);
   readonly #resolutionScale: number;
   readonly #scope = new RendererStateScope();
 
   #version = 0;
+  #lastFrameToken = Number.NaN;
 
   constructor(options: GuideBufferOptions = {}) {
     this.#resolutionScale = clamp01(options.resolutionScale ?? 0.5, 0.25, 1);
 
-    this.#full = createTarget('guide.full', {
-      type: THREE.HalfFloatType,
+    // Prepass attachments: encoded normals in colour, hardware depth in the
+    // depth attachment. RGBA8 is enough for the normal — 8 bits per axis is
+    // ~0.4 degrees, well below the tolerance any edge-stopping term here uses —
+    // and it keeps this transient buffer at a quarter the memory of RGBA16F.
+    this.#normals = createTarget('guide.normals', {
+      format: THREE.RGBAFormat,
+      type: THREE.UnsignedByteType,
       filter: THREE.NearestFilter,
       depthBuffer: true,
     });
-    this.#full.depthTexture = new THREE.DepthTexture(1, 1);
+    // The depth attachment has to be an explicit `DepthTexture` so it can be
+    // *sampled* by the pack pass; three's automatically created one is kept
+    // private to its renderer state. The `renderTarget` back-pointer is what
+    // three's own auto-created depth textures carry, and the WebGL backend uses
+    // it to decide between a sampled texture and an opaque renderbuffer.
+    const depthTexture = new THREE.DepthTexture(1, 1);
+    depthTexture.format = THREE.DepthFormat;
+    depthTexture.type = THREE.UnsignedIntType;
+    (depthTexture as unknown as { renderTarget: THREE.RenderTarget }).renderTarget = this.#normals;
+    this.#normals.depthTexture = depthTexture;
+
+    this.#full = createTarget('guide.full', {
+      type: THREE.HalfFloatType,
+      filter: THREE.NearestFilter,
+    });
 
     this.#half = createTarget('guide.half', {
       type: THREE.HalfFloatType,
@@ -696,6 +737,15 @@ export class GuideBufferPass implements GuideBufferProvider {
     });
 
     this.#prepassMaterial = createGuidePrepassMaterial();
+    this.#pack = new FullScreenPass(
+      'guide.pack',
+      packGuideNode(
+        this.#normals.texture,
+        depthTexture,
+        this.#cameraNear,
+        this.#cameraFar,
+      ),
+    );
     this.#downsample = new FullScreenPass(
       'guide.downsample',
       nearestDepthDownsampleNode(this.#full.texture, this.#sourceTexel),
@@ -712,7 +762,7 @@ export class GuideBufferPass implements GuideBufferProvider {
 
   /** Hardware depth attachment of the prepass, for anyone who wants early-Z. */
   get depthTexture(): THREE.DepthTexture | null {
-    return this.#full.depthTexture;
+    return this.#normals.depthTexture;
   }
 
   get width(): number {
@@ -740,6 +790,7 @@ export class GuideBufferPass implements GuideBufferProvider {
     const h = Math.max(1, Math.floor(height));
     if (this.#full.width === w && this.#full.height === h) return;
 
+    this.#normals.setSize(w, h);
     this.#full.setSize(w, h);
     this.#half.setSize(
       Math.max(1, Math.round(w * this.#resolutionScale)),
@@ -756,16 +807,34 @@ export class GuideBufferPass implements GuideBufferProvider {
    * call from a module's `lateUpdate` immediately before the engine's own
    * scene render.
    */
-  render(renderer: NodeRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+  render(
+    renderer: NodeRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    frameToken: number,
+  ): void {
+    // GTAO and SSR both hold a reference and both drive this, so the prepass is
+    // deduplicated by frame rather than by ownership: whichever runs first in a
+    // frame pays for it, and neither has to know the other exists (or be
+    // enabled at all).
+    if (frameToken === this.#lastFrameToken) return;
+    this.#lastFrameToken = frameToken;
+
+    console.log('[guide] render into', this.#full.texture.uuid, this.#full.width, this.#full.height);
+    const perspective = camera as THREE.PerspectiveCamera;
+    if (typeof perspective.near === 'number') this.#cameraNear.value = perspective.near;
+    if (typeof perspective.far === 'number') this.#cameraFar.value = perspective.far;
+
     this.#scope.begin(renderer, scene, this.#clearColor, 1);
     try {
       scene.overrideMaterial = this.#prepassMaterial;
-
-      renderer.setRenderTarget(this.#full);
+      renderer.setRenderTarget(this.#normals);
       renderer.clear();
       renderer.render(scene, camera);
-
       scene.overrideMaterial = null;
+
+      // Pack normals + hardware depth into the linear-depth guide layout.
+      this.#pack.render(renderer, this.#full);
       this.#downsample.render(renderer, this.#half);
     } finally {
       this.#scope.end();
@@ -773,9 +842,11 @@ export class GuideBufferPass implements GuideBufferProvider {
   }
 
   dispose(): void {
+    this.#normals.dispose();
     this.#full.dispose();
     this.#half.dispose();
     this.#prepassMaterial.dispose();
+    this.#pack.dispose();
     this.#downsample.dispose();
   }
 }
@@ -796,29 +867,74 @@ export class GuideBufferPass implements GuideBufferProvider {
  * map already shades.
  */
 function createGuidePrepassMaterial(): THREE.NodeMaterial {
-  const material = new THREE.NodeMaterial();
+  const material = new THREE.MeshBasicNodeMaterial();
   material.name = 'guide.prepass';
-  // Lazily imported here rather than at module scope to keep the accessor
-  // imports next to the one place that needs them.
-  material.fragmentNode = guidePrepassFragment();
+  material.colorNode = guidePrepassFragment();
   return material;
 }
 
 /**
- * Fragment graph for {@link createGuidePrepassMaterial}.
+ * `scene.overrideMaterial` for the prepass: the encoded view-space normal.
  *
- * This is the only place in the module that reaches into three's
- * scene-derived node accessors; everything else is a pure function of the
- * guide buffer, which is what makes the rest of the file testable and
- * backend-independent.
+ * Skinning, morphing and instancing are applied by `NodeMaterial.setupPosition`
+ * from the *object*, not the material, so the Barbarian and any instanced
+ * scatter land in the guide buffer at their animated positions without this
+ * material knowing anything about them.
+ *
+ * Geometric (interpolated vertex) normals are used rather than normal-mapped
+ * ones on purpose. Ambient occlusion integrates visibility over the hemisphere
+ * of the *surface*; feeding it a tangent-space perturbation makes the AO
+ * shimmer with the normal map's mip level and double-darkens detail the normal
+ * map already shades.
+ *
+ * ### Why only the normal, and not the depth
+ *
+ * The obvious implementation writes `vec4(normal, viewZ / far)` in one pass.
+ * It does not work. Referencing `positionView` from an override material's
+ * fragment graph makes the whole draw produce nothing — no warning, no shader
+ * error, just a buffer that stays at its clear value — because the varying it
+ * needs is requested after three has already closed the vertex stage for that
+ * material. `normalView` survives because the standard material setup creates
+ * that varying for its own reasons; `positionView` has no such luck.
+ *
+ * So the prepass writes only what it can (the normal), and linear depth is
+ * reconstructed from the pass's own depth attachment by {@link packGuideNode},
+ * which runs on a full-screen quad where varyings are not a concern. The extra
+ * pass costs about 0.05 ms at 1080p and removes an entire class of silent
+ * failure.
  */
 const guidePrepassFragment = Fn(() => {
-  // `normalView` is the interpolated, renormalised view-space normal;
-  // `positionView.z` is negative in front of the camera.
-  const normal = normalize(normalView);
-  const viewZ = positionView.z.negate();
-  return vec4(normal, viewZ.div(cameraFar));
+  // Unsigned encoding: `colorNode` feeds `diffuseColor`, whose output three
+  // clamps with `max(0)`, so a signed normal would lose half its range. It also
+  // lets this attachment be RGBA8.
+  return vec4(normalize(normalView).mul(0.5).add(0.5), 1);
 });
+
+/**
+ * Pack the prepass attachments into the guide layout.
+ *
+ * `perspectiveDepthToViewZ` is three's own conversion and handles both clip
+ * conventions (WebGPU's `z ∈ [0, 1]` and WebGL2's `z ∈ [-1, 1]`) plus the
+ * logarithmic depth buffer, which is exactly the portability problem this
+ * module is otherwise at pains to avoid — so it is confined to this one place
+ * and everything downstream sees plain linear depth.
+ */
+function packGuideNode(
+  normals: THREE.Texture,
+  depth: THREE.DepthTexture,
+  nearNode: THREE.Node<'float'>,
+  farNode: THREE.Node<'float'>,
+): THREE.Node {
+  const normalNode = texture(normals);
+  const depthNode = texture(depth);
+  return Fn(() => {
+    const base = uv();
+    const encodedNormal = normalNode.sample(base).xyz;
+    // `perspectiveDepthToViewZ` returns a negative z (view space looks down -Z).
+    const viewZ = perspectiveDepthToViewZ(depthNode.sample(base).x, nearNode, farNode).negate();
+    return vec4(encodedNormal, viewZ.div(farNode).clamp(0, 1));
+  })();
+}
 
 /**
  * Nearest-depth 2×2 downsample.
@@ -835,25 +951,25 @@ function nearestDepthDownsampleNode(
 ): THREE.Node {
   const sourceNode = texture(source);
   return Fn(() => {
-    const base = uv();
-    // The four full-resolution texels covered by this half-resolution texel.
-    const offsets: Array<[number, number]> = [
-      [-0.5, -0.5],
-      [0.5, -0.5],
-      [-0.5, 0.5],
-      [0.5, 0.5],
-    ];
-    const best = sourceNode.sample(base.add(sourceTexel.mul(vec2(offsets[0]![0], offsets[0]![1])))).toVar('best');
-    for (let i = 1; i < offsets.length; i++) {
-      const offset = offsets[i]!;
-      const candidate = sourceNode
-        .sample(base.add(sourceTexel.mul(vec2(offset[0], offset[1]))))
-        .toVar(`guideTap${i}`);
-      If(candidate.w.lessThan(best.w), () => {
-        best.assign(candidate);
-      });
-    }
-    return best;
+    // A *fixed* corner of each 2x2 block, not the minimum and not the average.
+    //
+    // Averaging is obviously wrong: the mean of four normals is not a unit
+    // vector and the mean of four depths sits between two surfaces, so a
+    // bilateral filter guided by it matches nothing.
+    //
+    // Taking the *closest* of the four is the textbook choice, and it is wrong
+    // here in a subtler way. The camera-ward bias it introduces is proportional
+    // to the depth range inside the block, which grows with distance and with
+    // grazing angle — so a flat plane comes back as a gently wrinkled one, and
+    // GTAO faithfully reports that the wrinkles occlude each other. The result
+    // is a distance-dependent grey wash over open ground: precisely the artefact
+    // this whole module exists to avoid.
+    //
+    // A fixed corner is an *unbiased* real sample. It still satisfies the
+    // property the bilateral upsample needs — every low-resolution guide value
+    // is exactly one of the high-resolution ones — and it costs one fetch
+    // instead of four.
+    return sourceNode.sample(uv().sub(sourceTexel.mul(0.5)));
   })();
 }
 
@@ -1437,6 +1553,8 @@ export interface TemporalAccumulatorOptions {
 export class TemporalAccumulator {
   readonly #history: [THREE.RenderTarget, THREE.RenderTarget];
   readonly #passes: [FullScreenPass, FullScreenPass];
+  readonly #output: THREE.RenderTarget;
+  readonly #resolve: [FullScreenPass, FullScreenPass];
   readonly #reset = uniform(1);
   readonly #reprojection = uniform(new THREE.Matrix4());
   readonly #useVelocity = uniform(0);
@@ -1460,6 +1578,14 @@ export class TemporalAccumulator {
       createTarget(`${options.name}.history.0`, shared),
       createTarget(`${options.name}.history.1`, shared),
     ];
+    // A *stable* result texture. The history has to ping-pong (a pass cannot
+    // read and write the same texture), but a consumer builds its sampling node
+    // once, at construction, and would otherwise be reading whichever history
+    // buffer happened to be current on that frame — correct on even frames and
+    // one frame stale on odd ones, which shows up as a 30 Hz flicker that is
+    // maddening to track down. One half-resolution copy per frame removes the
+    // whole class of problem for about 0.03 ms at 1080p.
+    this.#output = createTarget(`${options.name}.resolved`, shared);
 
     const params: TemporalParams = {
       minAlpha: uniform(options.minAlpha ?? 0.1),
@@ -1497,17 +1623,25 @@ export class TemporalAccumulator {
         ),
       ),
     ];
+
+    this.#resolve = [
+      new FullScreenPass(`${options.name}.resolve.0`, copyFragment(this.#history[0].texture)),
+      new FullScreenPass(`${options.name}.resolve.1`, copyFragment(this.#history[1].texture)),
+    ];
   }
 
-  /** The accumulated result of the most recent {@link render}. */
+  /**
+   * The accumulated result. This texture object never changes, so a consumer
+   * can build its sampling node once and keep it forever.
+   */
   get outputTexture(): THREE.Texture {
-    return this.#history[this.#index]!.texture;
+    return this.#output.texture;
   }
 
   setSize(width: number, height: number): void {
     const w = Math.max(1, Math.floor(width));
     const h = Math.max(1, Math.floor(height));
-    for (const target of this.#history) {
+    for (const target of [...this.#history, this.#output]) {
       if (target.width !== w || target.height !== h) target.setSize(w, h);
     }
   }
@@ -1536,13 +1670,14 @@ export class TemporalAccumulator {
 
     this.#index = 1 - this.#index;
     this.#passes[this.#index]!.render(renderer, this.#history[this.#index]!);
+    this.#resolve[this.#index]!.render(renderer, this.#output);
     this.#reset.value = 0;
-    return this.#history[this.#index]!.texture;
+    return this.#output.texture;
   }
 
   dispose(): void {
-    for (const target of this.#history) target.dispose();
-    for (const pass of this.#passes) pass.dispose();
+    for (const target of [...this.#history, this.#output]) target.dispose();
+    for (const pass of [...this.#passes, ...this.#resolve]) pass.dispose();
   }
 }
 
@@ -1676,6 +1811,12 @@ function temporalFragment(
     const blended = valid.select(clamped.mul(alpha.oneMinus()).add(value.mul(alpha)), value);
     return vec4(blended, length);
   })();
+}
+
+/** Straight copy, used to resolve a ping-ponged buffer into a stable one. */
+function copyFragment(source: THREE.Texture): THREE.Node {
+  const sourceNode = texture(source);
+  return Fn(() => sourceNode.sample(uv()))();
 }
 
 /* ------------------------------------------------------------------------- *

@@ -33,7 +33,7 @@
  *              ├── TAA          chain   HDR → HDR   (history is private)
  *              ├── Bloom        producer            (pyramid is private)
  *              ├── Composite    chain   HDR → LDR   (exposure, AgX, grade)
- *              └── FXAA / SMAA  chain   LDR → LDR
+ *              └── FXAA         chain   LDR → LDR
  *                                        │
  *                                        ▼  screen or capture target
  * ```
@@ -50,10 +50,19 @@
  * live for the whole frame. Instead, {@link RenderTargetPool} hands out targets
  * from a per-format free list: a chain pass borrows an output, and as soon as
  * the next pass has consumed it the buffer goes back and is immediately reused.
- * The steady state for the default chain is **two** full-resolution targets (one
- * HDR, one LDR) no matter how many passes are enabled, and the *last* chain
- * pass writes straight to the destination so there is never a redundant
- * copy-to-screen blit.
+ * The pool therefore holds a bounded number of buffers no matter how many
+ * passes are enabled — and in practice a very small one, because the *last*
+ * chain pass writes straight to the destination rather than through a redundant
+ * copy-to-screen blit:
+ *
+ * - `high`/`ultra` (TAA + bloom + composite): **zero** pooled buffers. TAA
+ *   supplies its own output (its history), bloom is a producer, and the
+ *   composite is last so it writes to the screen.
+ * - `low`/`medium` (bloom + composite + FXAA): **one**, the LDR buffer the
+ *   composite hands to FXAA.
+ *
+ * A chain twice as long would still need two — one per format in flight —
+ * which is the property the pool exists to guarantee.
  *
  * ## Colour management
  *
@@ -67,13 +76,14 @@
  * installed — leaving three's ACES in place would tone-map an already
  * tone-mapped image.
  *
- * The one wrinkle is FXAA/SMAA, whose edge detection is defined on
- * gamma-encoded luma. When an AA pass is last in the chain the composite is
+ * The one wrinkle is FXAA, whose edge detection is defined on gamma-encoded
+ * luma. When an AA pass is last in the chain the composite is
  * told to emit sRGB-encoded values into a target tagged
- * `LinearSRGBColorSpace` (so sampling does not undo the encode), and the AA
- * pass applies the sRGB EOTF to its own result before returning to linear for
- * the renderer's final write. Two `pow` per pixel, and the AA operates in the
- * space it was designed for.
+ * `LinearSRGBColorSpace` (so sampling does not undo the encode), and the
+ * renderer's `outputColorSpace` is switched to linear for that frame so the
+ * final write passes the encoded bytes through unchanged. The AA therefore
+ * operates in the space it was designed for and the frame is encoded exactly
+ * once, with no transfer-function round trip.
  *
  * ## Quality tiers
  *
@@ -120,7 +130,7 @@ import { unpackRows } from '../RendererFactory';
 import { BloomPass, type BloomOptions } from './Bloom';
 import { ColorGrade, type ColorGradeOptions } from './ColorGrade';
 import { MotionVectors, MotionVectorsKey, type MotionVectorsOptions } from './Motion';
-import { FxaaPass, SmaaPass, TAAPass, type TAAOptions } from './TAA';
+import { FxaaPass, TAAPass, type TAAOptions } from './TAA';
 import { CompositePass, type TonemapOptions } from './Tonemap';
 
 /* ------------------------------------------------------------------------- *
@@ -129,7 +139,7 @@ import { CompositePass, type TonemapOptions } from './Tonemap';
 
 export type QualityTier = 'low' | 'medium' | 'high' | 'ultra';
 
-export type AntiAliasMode = 'taa' | 'fxaa' | 'smaa' | 'none';
+export type AntiAliasMode = 'taa' | 'fxaa' | 'none';
 
 /** Ordinal comparison helper — tiers are ordered, not just named. */
 const TIER_ORDER: Readonly<Record<QualityTier, number>> = {
@@ -195,6 +205,16 @@ export type PostPassKind = 'chain' | 'producer';
 export interface PostPass {
   readonly id: string;
   readonly kind: PostPassKind;
+  /**
+   * The pass wants display-encoded (sRGB) input rather than display-linear.
+   * Only meaningful for a pass that runs after the composite.
+   */
+  readonly prefersEncodedInput?: boolean;
+  /**
+   * The pass's output is already display-encoded, so the renderer must not
+   * apply its output transfer function again.
+   */
+  readonly outputsEncoded?: boolean;
   /** Format of the target `PostStack` allocates for a `chain` pass. */
   readonly outputDomain: 'hdr' | 'ldr';
   /**
@@ -477,7 +497,6 @@ export class PostStack implements GameModule {
   readonly composite: CompositePass;
   readonly grade: ColorGrade;
   readonly fxaa: FxaaPass;
-  readonly smaa: SmaaPass;
 
   /** Master switch. When false the stack blits the raw scene to the screen. */
   enabled = true;
@@ -547,7 +566,6 @@ export class PostStack implements GameModule {
     this.bloom = new BloomPass(options.bloom ?? {});
     this.composite = new CompositePass(this.bloom, this.grade, options.tonemap ?? {});
     this.fxaa = new FxaaPass();
-    this.smaa = new SmaaPass();
 
     // Placeholder values; every field is rewritten before the first pass runs.
     this.#frame = {
@@ -580,7 +598,7 @@ export class PostStack implements GameModule {
     const requested = this.#options.quality ?? 'auto';
     this.#quality = requested === 'auto' ? defaultTier(this.#capabilities) : requested;
 
-    this.#passes = [this.taa, this.bloom, this.composite, this.fxaa, this.smaa];
+    this.#passes = [this.taa, this.bloom, this.composite, this.fxaa];
 
     if (this.#options.registerService !== false) {
       ctx.services.register(PostStackKey, this);
@@ -697,6 +715,7 @@ export class PostStack implements GameModule {
 
     const internals = renderer as unknown as RendererInternals;
     const previousOutput = internals.getOutputRenderTarget();
+    const previousColorSpace = renderer.outputColorSpace;
 
     try {
       const targetWidth = destination === null ? this.#drawingBufferSize().x : destination.width;
@@ -716,6 +735,7 @@ export class PostStack implements GameModule {
       this.#runChain(renderer, capabilities, camera, sceneTarget, destination);
     } finally {
       internals.setOutputRenderTarget(previousOutput);
+      renderer.outputColorSpace = previousColorSpace;
       renderer.setRenderTarget(null);
       this.#pool?.releaseAll();
       this.#frameIndex++;
@@ -890,9 +910,18 @@ export class PostStack implements GameModule {
     // displayable, so an AA pass that follows it must receive sRGB-encoded
     // values. Tell it before anything runs.
     const lastPass = lastChain >= 0 ? active[lastChain] : undefined;
-    this.composite.setEncodeOutput(
-      lastPass !== undefined && lastPass !== this.composite && lastPass.outputDomain === 'ldr',
-    );
+    const trailing = lastPass !== undefined && lastPass !== this.composite ? lastPass : undefined;
+
+    this.composite.setEncodeOutput(trailing?.prefersEncodedInput === true);
+
+    // When the chain already emits display-encoded values, the renderer must
+    // not encode them a second time. Switching the output colour space is the
+    // whole mechanism — it is cheaper than an EOTF/OETF round trip and, unlike
+    // wrapping the trailing pass's result in an inverse transform, it cannot be
+    // defeated by an addon that returns a pass texture rather than an
+    // expression.
+    renderer.outputColorSpace =
+      trailing?.outputsEncoded === true ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
 
     const frame = this.#frame;
     frame.renderer = renderer;
@@ -983,7 +1012,6 @@ export class PostStack implements GameModule {
     this.taa.enabled = mode === 'taa' && profile.velocity;
     this.taa.setSharpenEnabled(profile.sharpen);
     this.fxaa.enabled = mode === 'fxaa';
-    this.smaa.enabled = mode === 'smaa';
 
     this.bloom.setMipCount(profile.bloomMips);
     this.composite.setAutoExposureEnabled(profile.autoExposure);

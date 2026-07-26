@@ -1,8 +1,8 @@
 /**
  * @module render/post/TAA
  *
- * Temporal anti-aliasing, plus the two spatial fallbacks (FXAA, SMAA) that the
- * lower quality tiers use instead.
+ * Temporal anti-aliasing, plus the spatial fallback (FXAA) that the lower
+ * quality tiers use instead.
  *
  * ---
  *
@@ -69,15 +69,23 @@
  * accumulated detail. This is the mechanism that makes ghosting on a moving
  * character a *tuning* question rather than a structural one.
  *
- * ## Fallbacks
+ * ## Spatial fallback
  *
- * FXAA 3.11 (Lottes, NVIDIA 2011) and SMAA 1x (Jimenez et al., 2012) are wired
- * to three.js's own TSL implementations. Both are spatial, so neither needs
- * velocity or jitter, which is what makes them the right choice for the `low`
- * and `medium` tiers where the velocity attachment is not even allocated. Both
- * operate on gamma-encoded luma, so the composite hands them sRGB-encoded
- * values and they convert back to linear on the way out — see the colour
- * management note in {@link module:render/post/PostStack}.
+ * FXAA 3.11 (Lottes, NVIDIA 2011), via three.js's own TSL implementation. It is
+ * spatial, so it needs neither velocity nor jitter, which is what makes it the
+ * right choice for the `low` and `medium` tiers where the velocity attachment
+ * is not even allocated.
+ *
+ * SMAA 1x was evaluated and is deliberately **not** shipped. three's
+ * `SMAANode` performs an output transform inside its own blend pass, so
+ * whatever encoding it is handed, its result comes back with an extra transfer
+ * function applied: measured against an otherwise identical frame, mean
+ * luminance came out at 169/255 against FXAA's 87 with encoded input, and
+ * 106/255 with linear input, where the correct answer either way is 87. A
+ * double-encoded frame still looks like a picture — just a washed-out one —
+ * which is exactly the class of bug that survives review, so the pass is out
+ * rather than in-and-suspect. Reinstating it needs either a fix upstream or a
+ * from-scratch SMAA, not a fudge factor.
  */
 
 import * as THREE from 'three/webgpu';
@@ -87,7 +95,6 @@ import {
   max as maxNode,
   min as minNode,
   mix,
-  sRGBTransferEOTF,
   texture as textureNode,
   uniform,
   uv,
@@ -97,7 +104,6 @@ import {
 } from 'three/tsl';
 
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
-import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 
 import type { MotionVectors } from './Motion';
 import type { PostCapabilities, PostFrame, PostPass, QualityTier } from './PostStack';
@@ -612,14 +618,28 @@ export class TAAPass implements PostPass {
 /**
  * Shared plumbing for the two spatial AA passes.
  *
- * Both receive sRGB-encoded values (see `CompositePass.setEncodeOutput`) and
- * must hand back linear light, because the renderer applies the output transfer
- * function on the final write.
+ * Both receive — and emit — sRGB-encoded values. The composite is told to
+ * encode when one of these is last in the chain, and `PostStack` switches
+ * `renderer.outputColorSpace` to linear for that frame so the renderer writes
+ * the encoded bytes through untouched. That keeps the AA operating on the
+ * gamma-encoded luma it was designed for, costs no transfer-function round
+ * trip, and — unlike wrapping the addon's output in an EOTF — does not depend
+ * on what shape of node the addon happens to return from `setup()`.
  */
 abstract class SpatialAAPass implements PostPass {
   abstract readonly id: string;
   readonly kind = 'chain' as const;
   readonly outputDomain = 'ldr' as const;
+
+  /**
+   * Whether the composite should hand this pass display-*encoded* values.
+   * True for a pure image-space filter; a pass that performs its own output
+   * transform would set false.
+   */
+  abstract readonly prefersEncodedInput: boolean;
+
+  /** Whether this pass's result is already display-encoded. Always true. */
+  readonly outputsEncoded = true;
 
   enabled = false;
 
@@ -675,43 +695,17 @@ abstract class SpatialAAPass implements PostPass {
 /** FXAA 3.11 (Lottes, NVIDIA 2011) via three.js's TSL implementation. */
 export class FxaaPass extends SpatialAAPass {
   override readonly id = 'post.fxaa';
+  override readonly prefersEncodedInput = true;
 
   protected override build(): THREE.Node<'vec4'> {
-    return toLinear(fxaa(this.source) as unknown as THREE.Node<'vec4'>);
+    return fxaa(this.source) as unknown as THREE.Node<'vec4'>;
   }
 }
 
-/**
- * SMAA 1x (Jimenez et al., 2012) via three.js's TSL implementation.
- *
- * Higher quality than FXAA on near-horizontal and near-vertical edges, at the
- * cost of two extra render targets and two extra passes that three manages
- * internally. Its area/search lookup textures are base64 data URIs inside the
- * addon, so it works with no network access — which in this project's build
- * environment is a hard requirement, not a convenience.
- */
-export class SmaaPass extends SpatialAAPass {
-  override readonly id = 'post.smaa';
-
-  protected override build(): THREE.Node<'vec4'> {
-    return toLinear(smaa(this.source) as unknown as THREE.Node<'vec4'>);
-  }
-}
 
 /* ------------------------------------------------------------------------- *
  * Helpers
  * ------------------------------------------------------------------------- */
-
-/**
- * Undo the sRGB encode the composite applied for the AA pass's benefit, so the
- * renderer's own output transfer function is the only encode in the frame.
- */
-function toLinear(color: THREE.Node<'vec4'>): THREE.Node<'vec4'> {
-  const linear = sRGBTransferEOTF(
-    color.rgb as unknown as THREE.Node<'vec3'>,
-  ) as unknown as THREE.Node<'vec3'>;
-  return vec4(linear, 1) as unknown as THREE.Node<'vec4'>;
-}
 
 function makeSourceNode(name: string): THREE.TextureNode {
   const placeholder = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);

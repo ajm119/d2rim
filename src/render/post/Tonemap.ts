@@ -500,10 +500,15 @@ export class CompositePass implements PostPass {
     this.#uploadUniforms();
   }
 
+  /** Whether the pass currently emits sRGB-encoded values. */
+  get encodeOutput(): boolean {
+    return this.#encodeOutput;
+  }
+
   /**
    * Emit sRGB-encoded rather than linear values.
    *
-   * Set by `PostStack` when an FXAA/SMAA pass follows, because those operate on
+   * Set by `PostStack` when a spatial AA pass follows, because those operate on
    * gamma-encoded luma. See the colour-management note in `PostStack`.
    */
   setEncodeOutput(encode: boolean): void {
@@ -853,8 +858,10 @@ export class CompositePass implements PostPass {
     }
     encoded = encoded.clamp(0, 1) as unknown as THREE.Node<'vec3'>;
 
-    // The renderer applies the sRGB OETF on the final write, so unless an AA
-    // pass follows — which wants the encoded values — decode back to linear.
+    // The renderer applies the sRGB OETF on the final write, so decode back to
+    // linear — unless an AA pass follows, in which case it wants the encoded
+    // values and `PostStack` has switched the renderer's output colour space to
+    // linear so the bytes pass straight through.
     const result = this.#encodeOutput
       ? encoded
       : (sRGBTransferEOTF(encoded) as unknown as THREE.Node<'vec3'>);

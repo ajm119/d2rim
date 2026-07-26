@@ -276,6 +276,15 @@ export interface GTAOOptions {
    */
   thinOccluderCompensation?: number;
   /**
+   * Angular bias subtracted from every measured horizon cosine, in `[0, 0.2]`.
+   *
+   * Compensates for the sub-texel camera-ward bias that nearest-depth
+   * downsampling introduces; without it, flat ground at a grazing angle
+   * occludes itself. Larger values erase more genuine contact darkening.
+   * Default 0.04.
+   */
+  horizonBias?: number;
+  /**
    * Multi-bounce strength in `[0, 1]`. 1 is the full Jimenez fit, 0 is raw
    * visibility. Default 1.
    */
@@ -331,6 +340,102 @@ export function gtaoSliceVisibility(
   projectedNormalLength: number,
 ): number {
   return projectedNormalLength * (gtaoArcIntegral(h1, n) + gtaoArcIntegral(h2, n));
+}
+
+/** A plain 3-vector, so this math is testable without constructing a `THREE.Vector3`. */
+export type Vec3Tuple = readonly [number, number, number];
+
+/** The per-slice quantities the arc integral is parameterised by. */
+export interface GTAOSliceFrame {
+  /** `n`: signed angle of the slice-projected normal from the view vector. */
+  readonly angle: number;
+  /** `|projected normal|`: the slice's weight in the average over slices. */
+  readonly projectedNormalLength: number;
+}
+
+/**
+ * Build the frame for one GTAO slice: project the shading normal into the slice
+ * plane and measure its signed angle from the view vector.
+ *
+ * This is a line-for-line JavaScript twin of the slice setup inside
+ * {@link gtaoTraceFragment}. It exists so the geometry can be unit tested — in
+ * particular the assertion that the slice-weighted average of an *unoccluded*
+ * hemisphere is exactly 1 for any surface orientation, which is the property
+ * that catches a wrong `sign`, a swapped cross product, or a missing
+ * normalisation. Each of those produces AO that still looks vaguely correct and
+ * is otherwise almost impossible to spot.
+ *
+ * Note that a single slice is *not* normalised to 1 — `cos n + n·sin n` exceeds
+ * 1 for a tilted normal. Only the `|projN|`-weighted average over uniformly
+ * distributed slices is. Reviewers reach for the per-slice check first and
+ * conclude the formula is broken; it is not.
+ *
+ * @param normal unit shading normal, view space
+ * @param view   unit vector from the shading point *towards* the camera
+ * @param phi    slice angle in `[0, π)`
+ */
+export function gtaoSliceFrame(
+  normal: Vec3Tuple,
+  view: Vec3Tuple,
+  phi: number,
+): GTAOSliceFrame {
+  const direction: Vec3Tuple = [Math.cos(phi), Math.sin(phi), 0];
+
+  // The slice plane's normal. Everything is measured after projecting onto it.
+  const axis = normalize3(cross3(direction, view));
+  const normalDotAxis = dot3(normal, axis);
+  const projected: Vec3Tuple = [
+    normal[0] - axis[0] * normalDotAxis,
+    normal[1] - axis[1] * normalDotAxis,
+    normal[2] - axis[2] * normalDotAxis,
+  ];
+  const projectedNormalLength = Math.max(1e-5, Math.hypot(...projected));
+
+  const directionDotView = dot3(direction, view);
+  const ortho: Vec3Tuple = [
+    direction[0] - view[0] * directionDotView,
+    direction[1] - view[1] * directionDotView,
+    direction[2] - view[2] * directionDotView,
+  ];
+
+  const cosN = Math.min(1, Math.max(-1, dot3(projected, view) / projectedNormalLength));
+  const sign = Math.sign(dot3(ortho, projected)) || 1;
+  return { angle: sign * Math.acos(cosN), projectedNormalLength };
+}
+
+function cross3(a: Vec3Tuple, b: Vec3Tuple): Vec3Tuple {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function dot3(a: Vec3Tuple, b: Vec3Tuple): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function normalize3(v: Vec3Tuple): Vec3Tuple {
+  const length_ = Math.hypot(...v) || 1;
+  return [v[0] / length_, v[1] / length_, v[2] / length_];
+}
+
+/**
+ * The two horizon angles of a completely unoccluded slice, after the same
+ * clamping the shader applies: `h = n + clamp(±acos(cos(n ± π/2)) − n, −π/2, π/2)`.
+ *
+ * Exported so the test suite can assert the unoccluded case without duplicating
+ * the clamp, which is where sign errors hide.
+ */
+export function gtaoOpenHorizons(angleN: number): [number, number] {
+  const clampToHemisphere = (value: number): number =>
+    Math.min(Math.PI / 2, Math.max(-Math.PI / 2, value));
+  const cosLow = Math.cos(angleN - Math.PI / 2);
+  const cosHigh = Math.cos(angleN + Math.PI / 2);
+  return [
+    angleN + clampToHemisphere(-Math.acos(Math.min(1, Math.max(-1, cosLow))) - angleN),
+    angleN + clampToHemisphere(Math.acos(Math.min(1, Math.max(-1, cosHigh))) - angleN),
+  ];
 }
 
 /**
@@ -441,6 +546,7 @@ interface TraceUniforms {
   readonly falloff: THREE.Node<'float'>;
   readonly intensity: THREE.Node<'float'>;
   readonly thinOccluder: THREE.Node<'float'>;
+  readonly horizonBias: THREE.Node<'float'>;
   readonly sliceRotation: THREE.Node<'float'>;
   readonly stepOffset: THREE.Node<'float'>;
   readonly frameIndex: THREE.Node<'float'>;
@@ -511,6 +617,14 @@ function gtaoTraceFragment(config: TierConfig, u: TraceUniforms): THREE.Node {
           .mul(Math.PI / config.slices)
           .toVar('phi');
         const omega = vec2(cos(phi), sin(phi)).toVar('omega');
+        // The same direction expressed in *texture* space, which is Y-down
+        // while view space is Y-up. Without the flip the slice frame is built
+        // around one direction and the depth buffer is marched along its
+        // mirror, so every slice with a vertical component measures the horizon
+        // of the wrong half-plane. The visible result is a distance-dependent
+        // grey wash over flat ground — plausible enough to ship by accident,
+        // and completely wrong.
+        const marchDirection = vec2(omega.x, omega.y.negate()).toVar('marchDirection');
 
         // Slice frame. `axis` is the slice plane's normal; projecting the
         // shading normal onto the plane and measuring its angle from the view
@@ -550,7 +664,7 @@ function gtaoTraceFragment(config: TierConfig, u: TraceUniforms): THREE.Node {
             const stepPixels = max(t.mul(t).mul(screenRadius), float(1)).toVar('stepPixels');
 
             const sampleUv = base.add(
-              omega.mul(side).mul(stepPixels).div(u.resolution),
+              marchDirection.mul(side).mul(stepPixels).div(u.resolution),
             );
             const sampleGuide = decodeGuide(guideNode.sample(sampleUv), u.cameraFar);
             const samplePosition = viewPositionFromDepth(
@@ -561,7 +675,16 @@ function gtaoTraceFragment(config: TierConfig, u: TraceUniforms): THREE.Node {
 
             const delta = samplePosition.sub(position).toVar('delta');
             const distance = max(length(delta), float(1e-5)).toVar('dist');
-            const sampleCos = dot(delta, view).div(distance);
+            // Angular bias. The half-resolution guide is built by *nearest*
+            // depth selection, which is what keeps silhouettes sharp but also
+            // biases every sampled position a fraction of a texel towards the
+            // camera. On a flat surface seen at a grazing angle that lifts the
+            // measured horizon above the true tangent plane and the ground
+            // occludes itself — a uniform grey wash over open terrain, which is
+            // exactly the artefact GTAO is supposed to be free of. Subtracting a
+            // small constant from the horizon cosine costs a little genuine
+            // contact darkening and removes the wash entirely.
+            const sampleCos = dot(delta, view).div(distance).sub(u.horizonBias);
 
             // Distance attenuation: past `falloffStart` the sample is blended
             // back towards the horizon we already have, so it contributes
@@ -643,6 +766,7 @@ export class GTAOModule implements GameModule, GTAOService {
   readonly #falloff = uniform(0.4);
   readonly #intensity = uniform(1.15);
   readonly #thinOccluder = uniform(0.6);
+  readonly #horizonBias = uniform(0.04);
   readonly #sliceRotation = uniform(0);
   readonly #stepOffset = uniform(0);
   readonly #frameIndex = uniform(0);
@@ -681,6 +805,7 @@ export class GTAOModule implements GameModule, GTAOService {
       intensity: options.intensity ?? 1.15,
       falloff: options.falloff ?? 0.4,
       thinOccluderCompensation: options.thinOccluderCompensation ?? 0.6,
+      horizonBias: options.horizonBias ?? 0.04,
       multiBounce: options.multiBounce ?? 1,
       resolutionScale: options.resolutionScale ?? 0.5,
       temporalMinAlpha: options.temporalMinAlpha ?? 0.1,
@@ -696,6 +821,7 @@ export class GTAOModule implements GameModule, GTAOService {
     this.#intensity.value = this.#options.intensity;
     this.#falloff.value = this.#options.falloff;
     this.#thinOccluder.value = this.#options.thinOccluderCompensation;
+    this.#horizonBias.value = this.#options.horizonBias;
     this.#multiBounce.value = this.#options.multiBounce;
 
     const guide = acquireGuideBuffer(ctx, { resolutionScale: this.#options.resolutionScale });
@@ -727,7 +853,7 @@ export class GTAOModule implements GameModule, GTAOService {
     }
   }
 
-  lateUpdate(ctx: GameContext): void {
+  lateUpdate(ctx: GameContext, _dt: number): void {
     if (this.#quality === 'off') return;
 
     const renderer = asNodeRenderer(ctx.renderer);
@@ -771,7 +897,7 @@ export class GTAOModule implements GameModule, GTAOService {
 
     this.#scope.begin(renderer, ctx.scene);
     try {
-      this.#ownedGuide?.render(renderer, ctx.scene, camera);
+      this.#ownedGuide?.render(renderer, ctx.scene, camera, ctx.time.frame);
 
       const trace = this.#tracePass;
       const denoiser = this.#denoiser;
@@ -932,6 +1058,7 @@ export class GTAOModule implements GameModule, GTAOService {
         falloff: this.#falloff,
         intensity: this.#intensity,
         thinOccluder: this.#thinOccluder,
+        horizonBias: this.#horizonBias,
         sliceRotation: this.#sliceRotation,
         stepOffset: this.#stepOffset,
         frameIndex: this.#frameIndex,
@@ -963,6 +1090,29 @@ export class GTAOModule implements GameModule, GTAOService {
     );
 
     this.#buildNodes(guide, halfGuide);
+    this.#applySizes();
+  }
+
+  /**
+   * Push the current resolution into everything the last {@link GTAOModule.#build}
+   * allocated. Called from both `#build` and `#resize`, because a tier change
+   * replaces the render targets and they would otherwise stay at their 1×1
+   * construction size until the next window resize.
+   */
+  #applySizes(): void {
+    if (this.#width === 0 || this.#height === 0) return;
+    const guide = this.#guide;
+    const lowWidth =
+      guide?.halfWidth ?? Math.max(1, Math.round(this.#width * this.#options.resolutionScale));
+    const lowHeight =
+      guide?.halfHeight ?? Math.max(1, Math.round(this.#height * this.#options.resolutionScale));
+    this.#lowResolution.value.set(lowWidth, lowHeight);
+    this.#denoiser?.setSize(lowWidth, lowHeight);
+    this.#temporal?.setSize(lowWidth, lowHeight);
+    // A radius clamp proportional to the trace resolution keeps the worst-case
+    // march length — and therefore the pass's cost — bounded as resolution
+    // changes, instead of exploding on a 4K display.
+    this.#maxScreenRadius.value = Math.max(24, Math.round(lowHeight * 0.18));
   }
 
   /**
@@ -1015,21 +1165,9 @@ export class GTAOModule implements GameModule, GTAOService {
     this.#resolution.value.set(w, h);
 
     this.#ownedGuide?.setSize(w, h);
-    const guide = this.#guide;
-    const lowWidth = guide?.halfWidth ?? Math.max(1, Math.round(w * this.#options.resolutionScale));
-    const lowHeight =
-      guide?.halfHeight ?? Math.max(1, Math.round(h * this.#options.resolutionScale));
-    this.#lowResolution.value.set(lowWidth, lowHeight);
-
-    this.#denoiser?.setSize(lowWidth, lowHeight);
-    this.#temporal?.setSize(lowWidth, lowHeight);
+    this.#applySizes();
     this.#temporal?.reset();
     this.#hasPreviousFrame = false;
-
-    // A radius clamp proportional to the trace resolution keeps the worst-case
-    // march length — and therefore the pass's cost — bounded as resolution
-    // changes, instead of exploding on a 4K display.
-    this.#maxScreenRadius.value = Math.max(24, Math.round(lowHeight * 0.18));
   }
 
   #teardown(): void {

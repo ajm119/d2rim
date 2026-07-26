@@ -45,3 +45,6 @@ src/render/__*.ts
 postcheck.html
 postcheck.ts
 postshot.mjs
+probe.html
+__*.mjs
+src/render/**/__*.ts

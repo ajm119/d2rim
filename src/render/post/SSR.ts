@@ -491,7 +491,7 @@ export function envBRDFApprox(roughness: number, nDotV: number): [number, number
  * the quantity the march can actually resolve.
  */
 export function thicknessAt(viewZ: number, baseThickness: number): number {
-  return baseThickness * Math.max(1, viewZ);
+  return baseThickness * (1 + 0.05 * Math.max(0, viewZ));
 }
 
 /**
@@ -719,7 +719,12 @@ function ssrTraceFragment(
           .toVar('sStart');
         const s = sStart.toVar('s');
         const sBefore = sStart.toVar('sBefore');
-        const level = float(Math.min(1, tier.maxHiZLevel)).toVar('level');
+        // Start one level up so a ray over open ground coarsens immediately,
+        // but never above what the pyramid actually has (the `low` tier caps
+        // this at 0, which turns the traversal into a per-texel linear DDA).
+        const level = min(float(Math.min(1, tier.maxHiZLevel)), u.hiZLevels.sub(1))
+          .max(0)
+          .toVar('level');
         const hit = float(0).toVar('hit');
         const hitUv = base.toVar('hitUv');
         const hitZ = float(0).toVar('hitZ');
@@ -759,7 +764,10 @@ function ssrTraceFragment(
               // Level 0 and behind the surface: accept only inside the
               // thickness window, otherwise the ray passed through empty space
               // behind a thin object and the march must continue.
-              If(rayZ.lessThan(cellZ.add(u.thickness.mul(max(cellZ, float(1))))), () => {
+              // `thicknessAt`: a constant world thickness is too tight in the
+              // distance and too loose up close, so it grows gently with depth.
+              const window_ = u.thickness.mul(cellZ.mul(0.05).add(1)).toVar('window');
+              If(rayZ.lessThan(cellZ.add(window_)), () => {
                 hit.assign(1);
                 hitUv.assign(sampleUv);
                 hitZ.assign(rayZ);
@@ -1003,7 +1011,7 @@ export class SSRModule implements GameModule, SSRService {
     ctx.services.register(SSRKey, this);
   }
 
-  lateUpdate(ctx: GameContext): void {
+  lateUpdate(ctx: GameContext, _dt: number): void {
     if (this.#quality === 'off') return;
 
     const renderer = asNodeRenderer(ctx.renderer);
@@ -1055,7 +1063,7 @@ export class SSRModule implements GameModule, SSRService {
 
     this.#scope.begin(renderer, ctx.scene);
     try {
-      this.#ownedGuide?.render(renderer, ctx.scene, camera);
+      this.#ownedGuide?.render(renderer, ctx.scene, camera, ctx.time.frame);
       this.#hiZ?.build(renderer);
       this.#colorPyramid?.build(renderer);
 
