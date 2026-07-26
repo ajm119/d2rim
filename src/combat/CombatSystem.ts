@@ -121,7 +121,17 @@ export interface MeleeMove {
   readonly chain: readonly [number, number];
   /** Normalised time at which the move releases control. */
   readonly recovery: number;
-  /** Stamina cost. Refused, not clipped, when the pool is short. */
+  /**
+   * Stamina cost. Refused, not clipped, when the pool is short.
+   *
+   * **Zero for the light chain, on purpose.** Gating the basic attack on
+   * stamina and buffering the input are individually reasonable and together
+   * catastrophic: a player mashing through a chain drains the pool, every
+   * subsequent press is silently swallowed, and the character just stands there
+   * being hit with no indication why. Stamina buys the *committed* moves — the
+   * heavy and the spin — and sprinting. The tool you fight with is always
+   * available, which is also how Diablo II works.
+   */
   readonly stamina: number;
   readonly modifiers: MoveModifiers;
   /** Where each input kind goes from here. Null restarts that kind's chain. */
@@ -156,7 +166,7 @@ export const PLAYER_MOVES: MoveTable = new Map(
       window: [0.3, 0.52],
       chain: [0.34, 0.98],
       recovery: 0.78,
-      stamina: 8,
+      stamina: 0,
       modifiers: { damageScale: 1, knockback: 2.6, staggerScale: 1 },
       next: { light: 'slice', heavy: 'heavy' },
       hitStop: 1,
@@ -170,7 +180,7 @@ export const PLAYER_MOVES: MoveTable = new Map(
       window: [0.26, 0.5],
       chain: [0.32, 0.98],
       recovery: 0.76,
-      stamina: 9,
+      stamina: 0,
       modifiers: { damageScale: 1.1, attackRatingBonus: 12, knockback: 2.8 },
       next: { light: 'stab', heavy: 'heavy' },
       hitStop: 1,
@@ -184,7 +194,7 @@ export const PLAYER_MOVES: MoveTable = new Map(
       window: [0.32, 0.54],
       chain: [0.4, 0.98],
       recovery: 0.8,
-      stamina: 10,
+      stamina: 0,
       modifiers: { damageScale: 1.15, criticalBonus: 0.08, knockback: 2.2 },
       next: { light: 'spin', heavy: 'heavy' },
       hitStop: 1.1,
