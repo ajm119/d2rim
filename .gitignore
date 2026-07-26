@@ -42,3 +42,6 @@ sky-check.html
 sky-shot.mjs
 dev-server.sh
 src/render/__*.ts
+postcheck.html
+postcheck.ts
+postshot.mjs

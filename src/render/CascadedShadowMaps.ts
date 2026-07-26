@@ -817,9 +817,9 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
      * Sample one cascade with PCSS.
      *
      * Returns 1 where the fragment is lit and 0 where it is fully occluded.
-     * Every texture read uses an explicit LOD so the function stays legal
-     * inside non-uniform control flow (WGSL forbids implicit derivatives there,
-     * and the cascade-blend branch is exactly that).
+     * Every texture read is an explicit texel fetch, so the function stays
+     * legal inside non-uniform control flow — WGSL forbids implicit
+     * derivatives there, and the cascade-blend branch is exactly that.
      */
     const sampleCascade = Fn(
       ([layer, worldPosition, worldNormal, rotSin, rotCos]: [

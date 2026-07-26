@@ -56,17 +56,21 @@
  * from the erosion channels. What it cannot do is let the camera fly *into* a
  * cloud — which this game never does.
  *
- * Cloud radiative transfer uses the two-flux solution for a conservatively
- * scattering slab with the similarity relation `tau' = (1-g)*tau`
- * (van de Hulst, *Multiple Light Scattering*, 1980):
+ * Two details make the difference between that model working and it looking
+ * like corrugated iron near the horizon, and both are commented at their call
+ * sites: the inter-layer shear is clamped (a single 2D field has no vertical
+ * correlation, so far-apart layers sample unrelated weather), and the shaped
+ * density converges to its analytic mean once the screen-space filter footprint
+ * exceeds the cloud feature size (mip filtering prefilters the *sample*, but the
+ * coverage threshold re-sharpens the average straight back into blocks).
  *
- * ```
- * T_diffuse = 1 / (1 + 0.75*tau')
- * ```
- *
- * That single expression is why an overcast sky in this renderer gets *brighter
- * as the deck thins* and *darker at its base as it thickens*, instead of being
- * a flat grey the artist has to keep re-tuning.
+ * Cloud radiative transfer uses the two-stream solution for a scattering slab
+ * (see {@link CLOUD_TWO_STREAM}), evaluated per RGB channel against the
+ * single-scattering albedo of liquid water. That is what makes an overcast sky
+ * here get *brighter as the deck thins*, *darker at its base as it thickens*,
+ * and — because water absorbs red about forty times more strongly than blue —
+ * *colder the thicker it gets*, instead of being a flat grey the artist has to
+ * keep re-tuning.
  *
  * ## Sun disc
  *
@@ -92,14 +96,19 @@
  * ## Update budget
  *
  * The expensive part is the CPU ray march that fills the sky-view grid: 12 800
- * marches of 24 steps for the default 160x80. Measured at ~53 ms on one core of
- * this container's CPU. It runs **synchronously once at `init`** (so a
- * zero-warmup capture is still correct) and thereafter only when the sun has
- * moved past {@link SkyOptions.sunMoveThresholdDeg} or the weather changed —
- * and then it is sliced across frames against a wall-clock budget
+ * marches of 24 steps for the default 160x80, doubled at night when the moon is
+ * up and gets a second pass. Measured at ~53 ms on one core of this container's
+ * CPU. It runs **synchronously once at `init`** (so a zero-warmup capture is
+ * still correct) and thereafter only when the sun has moved past
+ * {@link SkyOptions.sunMoveThresholdDeg} or the weather changed — and then it is
+ * sliced across frames against a wall-clock budget
  * ({@link SkyOptions.rebuildBudgetMs}, default 1.2 ms) into a *back buffer*, so
  * a half-finished rebuild is never visible. PMREM re-filtering of the
  * environment map happens once per completed rebuild, not per frame.
+ *
+ * Everything that can track the clock at full frame rate without a rebuild
+ * does: the sun and moon discs, the cloud drift and the whole aerial-perspective
+ * uniform block are plain uniform writes.
  *
  * ---
  *
@@ -123,8 +132,24 @@
  *
  * - `'render.atmosphere'` -> {@link AtmosphereService} — the fog/aerial
  *   perspective model. **Any pass that needs fog must use this one.**
- * - `'render.sky'` -> {@link Sky}
+ * - `'render.sky'` -> {@link Sky}. Also satisfies the `SkyEnvironmentProvider`
+ *   shape `render/IBL.ts` looks for under the same id — `environmentTexture`
+ *   plus `environmentVersion` — so no adapter is needed there.
+ * - `'render.sky.sun'` -> {@link SkySunProvider}, the poll-side view of the sun
+ *   that `render/Lighting.ts` declares. Only registered if absent.
  * - `'render.timeOfDay'` -> {@link TimeOfDay} (only if absent)
+ *
+ * ## What the integrator has to do
+ *
+ * ```ts
+ * engine.add(new Sky());          // after AssetManager, before scene modules
+ * ```
+ *
+ * That is the whole wiring. `scene.backgroundNode`, `scene.environment` and
+ * `scene.fogNode` are installed by `init`, and the lighting rig is fed through
+ * whichever of the three routes above it registered for. Register `Sky` *after*
+ * any module that also assigns `scene.backgroundNode` (`scene/ReferenceScene`
+ * does) so this one wins.
  */
 
 import * as THREE from 'three/webgpu';
@@ -244,8 +269,36 @@ export interface CelestialLightSink {
 
 export const CelestialLightSinkKey = serviceKey<CelestialLightSink>('lighting.celestial');
 
-/** Service key for this module. */
+/**
+ * Service key for this module.
+ *
+ * Deliberately the same id `render/IBL.ts` looks for its `SkyEnvironmentProvider`
+ * under: the {@link Sky} class already satisfies that interface structurally
+ * ({@link Sky.environmentTexture} plus {@link Sky.environmentVersion}), so the
+ * IBL module needs no adapter and no import.
+ */
 export const SkyKey = serviceKey<Sky>('render.sky');
+
+/**
+ * Poll-side view of the sun, for consumers that would rather read than be
+ * pushed to.
+ *
+ * `render/Lighting.ts` declares this shape as its `SkySunProvider` and looks
+ * for it under `'render.sky.sun'`; a small adapter is registered there at init
+ * so that a lighting rig which prefers polling works without any wiring. The
+ * push route ({@link CelestialLightSink}) carries strictly more information —
+ * the moon, the ambient irradiances, the night factor — and should be preferred.
+ */
+export interface SkySunProvider {
+  /** Unit vector from the origin *toward* the sun; light travels along `-this`. */
+  readonly sunDirection: THREE.Vector3;
+  /** Linear-space hue of direct sunlight, peak-normalised. */
+  readonly sunColor: THREE.Color;
+  /** Relative intensity in `[0, 1]`; 0 at or below the horizon. */
+  readonly sunIntensity: number;
+}
+
+export const SkySunKey = serviceKey<SkySunProvider>('render.sky.sun');
 
 /* -------------------------------------------------------------------------- */
 /* Options                                                                     */
@@ -353,9 +406,10 @@ const CLOUD_SINGLE_SCATTER_ALBEDO: readonly [number, number, number] = [
  * T_diffuse(tau) = 4a / ( (1+a)^2 e^{gamma tau} - (1-a)^2 e^{-gamma tau} )
  * ```
  *
- * As `w0 -> 1` this reduces exactly to the conservative `1 / (1 + 0.75(1-g)tau)`,
- * so nothing is lost relative to the simpler model — the absorption is a
- * strictly additive correction.
+ * As `w0 -> 1` this reduces to the conservative slab result
+ * `1 / (1 + (sqrt(3)/2)(1-g) tau)` (expand both exponentials to first order in
+ * `a`), so nothing is lost relative to the simpler non-absorbing model — the
+ * droplet absorption is a strictly additive correction on top of it.
  */
 const CLOUD_TWO_STREAM = (() => {
   const g = CLOUD_SLAB_G;
@@ -488,6 +542,12 @@ export class Sky implements GameModule {
 
   /* -- change tracking ---------------------------------------------------- */
 
+  /** True when this module created and registered the clock itself. */
+  #ownsClock = false;
+  #environmentVersion = 0;
+
+  /** Poll-side adapter registered under {@link SkySunKey}. Built in the ctor. */
+  readonly #sunProvider: SkySunProvider;
   #lastClockRevision = -1;
   readonly #lastBuiltSun = new THREE.Vector3(0, -1, 0);
   #lastMoodHash = '';
@@ -593,6 +653,22 @@ export class Sky implements GameModule {
     this.#skyGrid = new Float32Array(this.#skyW * this.#skyH * 3);
     this.#skyGridBack = new Float32Array(this.#skyGrid.length);
     this.#rebuildRow = this.#skyH;
+
+    // Live view rather than a snapshot: the underlying objects are mutated in
+    // place every rebuild, so a consumer that grabbed this once still sees the
+    // current sun.
+    const self = this;
+    this.#sunProvider = {
+      get sunDirection(): THREE.Vector3 {
+        return self.#celestial.sun.direction;
+      },
+      get sunColor(): THREE.Color {
+        return self.#celestial.sun.color;
+      },
+      get sunIntensity(): number {
+        return self.keyLightFraction;
+      },
+    };
   }
 
   /* ---------------------------------------------------------------------- */
@@ -605,6 +681,7 @@ export class Sky implements GameModule {
     this.#atmosphere = new Atmosphere(this.#atmosphereOptions);
     ctx.services.register(AtmosphereKey, this.#atmosphere);
     ctx.services.register(SkyKey, this);
+    if (!ctx.services.has(SkySunKey)) ctx.services.register(SkySunKey, this.#sunProvider);
 
     // Use the integrator's clock if there is one; otherwise own one, so that
     // `engine.add(new Sky())` on its own is a complete system.
@@ -613,7 +690,10 @@ export class Sky implements GameModule {
       ctx.services.tryGet(TimeOfDayKey) ??
       new TimeOfDay({ preset: this.#options.preset });
     this.#timeOfDay = clock;
-    if (!ctx.services.has(TimeOfDayKey)) ctx.services.register(TimeOfDayKey, clock);
+    if (!ctx.services.has(TimeOfDayKey)) {
+      ctx.services.register(TimeOfDayKey, clock);
+      this.#ownsClock = true;
+    }
     // The clock needs a context to emit events even when the integrator never
     // registered it as a module in its own right. `init` is idempotent.
     clock.init(ctx);
@@ -685,6 +765,10 @@ export class Sky implements GameModule {
       if (scene.fogNode !== null) scene.fogNode = null;
       ctx.services.unregister(AtmosphereKey);
       ctx.services.unregister(SkyKey);
+      if (ctx.services.tryGet(SkySunKey) === this.#sunProvider) ctx.services.unregister(SkySunKey);
+      // Only tear down the clock registration if this module was the one that
+      // put it there; the integrator's own clock outlives the sky.
+      if (this.#ownsClock) ctx.services.unregister(TimeOfDayKey);
     }
     this.#skyTexture?.dispose();
     this.#envTexture?.dispose();
@@ -714,6 +798,32 @@ export class Sky implements GameModule {
   /** The equirectangular HDR environment map assigned to `scene.environment`. */
   get environmentTexture(): THREE.DataTexture | null {
     return this.#envTexture;
+  }
+
+  /**
+   * Bumped every time the environment map's pixels change.
+   *
+   * The texture object identity is stable across a time-of-day step — the bake
+   * writes into the same buffer — so a consumer that caches anything derived
+   * from it (a prefiltered chain, spherical harmonics) needs this to know it
+   * has gone stale.
+   */
+  get environmentVersion(): number {
+    return this.#environmentVersion;
+  }
+
+  /**
+   * The most intense of the two celestial lights, as an intensity ratio in
+   * `[0, 1]` against a clear-sky sun. Convenience for exposure and for LOD
+   * decisions that only care "how much light is there".
+   */
+  get keyLightFraction(): number {
+    const reference = Math.max(1e-6, this.#atmosphere?.solarIlluminance.y ?? 1);
+    return THREE.MathUtils.clamp(
+      Math.max(this.#celestial.sun.illuminance, this.#celestial.moon.illuminance) / reference,
+      0,
+      1,
+    );
   }
 
   /** Whether an incremental rebuild is in flight. */
@@ -1061,6 +1171,11 @@ export class Sky implements GameModule {
     let groundIrrG = 0;
     let groundIrrB = 0;
 
+    // Radiance of the ground hemisphere, filled in as soon as the loop crosses
+    // the horizon. See the note where it is computed.
+    const groundRadiance = new THREE.Vector3();
+    let groundResolved = false;
+
     for (let y = 0; y < height; y++) {
       // Row 0 is the zenith: phi runs from 0 (up) to pi (down).
       const phi = ((y + 0.5) / height) * Math.PI;
@@ -1069,12 +1184,33 @@ export class Sky implements GameModule {
       // Solid angle of one texel in this row.
       const texelSolidAngle = ((2 * Math.PI) / width) * (Math.PI / height) * sinPhi;
 
+      // The sky-view grid's own lower hemisphere is the atmosphere model's
+      // ground bounce, and that ground is lit by an *unobstructed* sun — which
+      // is exactly wrong under a deck. Rows above the horizon are already
+      // accumulated by the time the loop gets here, so the honest answer is
+      // available: a Lambertian ground under the downwelling irradiance this
+      // very texture describes. Without this the IBL lights the underside of
+      // everything with sunshine the sky says is not there.
+      if (!groundResolved && dirY <= 0) {
+        groundResolved = true;
+        const albedo = atmosphere.params.groundAlbedo;
+        groundRadiance.set(
+          (skyIrrR * albedo[0]) / Math.PI,
+          (skyIrrG * albedo[1]) / Math.PI,
+          (skyIrrB * albedo[2]) / Math.PI,
+        );
+      }
+
       for (let x = 0; x < width; x++) {
         const theta = ((x + 0.5) / width) * Math.PI * 2;
         dir.set(sinPhi * Math.sin(theta), dirY, sinPhi * Math.cos(theta));
 
-        this.#sampleSkyGrid(dir, rgb);
-        rgb.multiplyScalar(intensity);
+        if (groundResolved) {
+          rgb.copy(groundRadiance);
+        } else {
+          this.#sampleSkyGrid(dir, rgb);
+          rgb.multiplyScalar(intensity);
+        }
 
         if (dirY > 0.0) {
           // Uniform slab at the *measured* mean of the shader's density field,
@@ -1132,6 +1268,7 @@ export class Sky implements GameModule {
     this.#celestial.skyIrradiance.setRGB(skyIrrR, skyIrrG, skyIrrB);
     this.#celestial.groundIrradiance.setRGB(groundIrrR, groundIrrG, groundIrrB);
 
+    this.#environmentVersion++;
     tex.needsUpdate = true;
     // Invalidate three's cached PMREM chain; without this the pre-filtered
     // radiance keeps the sky from whenever the texture was first uploaded and

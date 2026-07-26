@@ -157,7 +157,7 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
       cloudBaseAltitude: 900,
       cloudThickness: 700,
       hazeDensity: 2.6,
-      mistDensity: 0.05,
+      mistDensity: 0.34,
       skyIntensity: 1,
     },
   },
@@ -169,7 +169,7 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
       cloudBaseAltitude: 1500,
       cloudThickness: 900,
       hazeDensity: 2.2,
-      mistDensity: 0.12,
+      mistDensity: 0.5,
       skyIntensity: 1,
     },
   },
@@ -195,7 +195,7 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
       cloudBaseAltitude: 1700,
       cloudThickness: 1000,
       hazeDensity: 2.1,
-      mistDensity: 0.06,
+      mistDensity: 0.22,
       skyIntensity: 1,
     },
   },
@@ -208,7 +208,7 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
       cloudBaseAltitude: 1400,
       cloudThickness: 800,
       hazeDensity: 1.6,
-      mistDensity: 0.09,
+      mistDensity: 0.26,
       skyIntensity: 1,
     },
   },
@@ -220,7 +220,7 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
       cloudBaseAltitude: 620,
       cloudThickness: 1600,
       hazeDensity: 3.4,
-      mistDensity: 0.14,
+      mistDensity: 0.62,
       skyIntensity: 1,
     },
   },
@@ -566,11 +566,11 @@ export class TimeOfDay implements GameModule {
       this.#manualSun ?? horizonFromEquatorial(declination, sunHourAngle, this.latitudeDeg);
     applyBody(this.#sun, sunAngles, this.northOffsetDeg, SUN_ANGULAR_RADIUS_DEG);
 
-    // Moon: coincident with the sun at new, opposite it at full. The hour angle
-    // therefore leads the sun's by a full turn per synodic cycle, which is what
-    // makes a full moon transit at local midnight and a first-quarter moon at
-    // 18:00.
-    const moonHourAngle = sunHourAngle + this.moonPhase * 360;
+    // Moon: coincident with the sun at new, opposite it at full. It *lags* the
+    // sun by one full turn per synodic cycle — which is exactly the statement
+    // that a full moon transits at local midnight, a first-quarter moon at
+    // 18:00, and a new moon at noon.
+    const moonHourAngle = sunHourAngle - this.moonPhase * 360;
     const moonDeclination = -declination * Math.cos(2 * Math.PI * (this.moonPhase - 0.5));
     const moonAngles = horizonFromEquatorial(moonDeclination, moonHourAngle, this.latitudeDeg);
     applyBody(this.#moon, moonAngles, this.northOffsetDeg, MOON_ANGULAR_RADIUS_DEG);
