@@ -200,8 +200,17 @@ async function downloadToFile(url, destPath, { retries = 3 } = {}) {
 
       // Cross-check against Content-Length when the server sent an unranged
       // response; a truncated stream that ended cleanly is otherwise invisible.
+      //
+      // This is only meaningful for an identity-coded response. When the server
+      // applies a transfer compression (raw.githubusercontent.com gzips text
+      // assets such as .gltf, but not binaries like .glb/.bin), Content-Length
+      // describes the COMPRESSED body while fetch hands us the DECOMPRESSED
+      // stream, so the two legitimately disagree -- we would otherwise reject a
+      // perfectly good file for being larger than advertised.
+      const encoding = (response.headers.get('content-encoding') ?? '').trim().toLowerCase();
+      const identityCoded = encoding === '' || encoding === 'identity';
       const declared = Number(response.headers.get('content-length'));
-      if (!resuming && Number.isFinite(declared) && declared > 0) {
+      if (!resuming && identityCoded && Number.isFinite(declared) && declared > 0) {
         const actual = await fileSize(partPath);
         if (actual !== declared) {
           throw new Error(`truncated download: got ${actual} of ${declared} bytes`);

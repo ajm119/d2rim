@@ -8,7 +8,7 @@ Every third-party asset used by d2rim is listed here with its exact source and l
 
 | Licence | Assets | Attribution required |
 | --- | --- | --- |
-| CC0-1.0 | 7 | no |
+| CC0-1.0 | 143 | no |
 | CC-BY-4.0 | 1 | yes |
 
 ## Creative Commons Zero v1.0 Universal (public domain dedication)
@@ -100,6 +100,1724 @@ SPDX identifier: `CC0-1.0` — <https://creativecommons.org/publicdomain/zero/1.
 - **Support the creator:** https://www.patreon.com/quaternius
 - **Used for:** The clean-licence rigged humanoid. Placeholder Barbarian body and the reference target for the procedural combat-clip system.
 
+### KayKit Adventurers — Barbarian
+
+- **Semantic key:** `character.barbarian`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/addons/kaykit_character_pack_adventures/Characters/gltf/Barbarian.glb`
+- **Local path:** `assets/models/characters/Barbarian.glb`
+- **Size:** 3.45 MB (3613268 bytes)
+- **SHA-256:** `cefc311a0e10c7858b6141f5ada7e33268727564fb8ac1347aab97d000669cc6`
+- **Licence evidence:** `licenses/kaykit-adventurers__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** THE PLAYER. Act I protagonist body and the animation source of truth for the locomotion and combat state machines.
+
+### KayKit Adventurers — Rogue (hooded)
+
+- **Semantic key:** `character.rogue`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/addons/kaykit_character_pack_adventures/Characters/gltf/Rogue_Hooded.glb`
+- **Local path:** `assets/models/characters/RogueHooded.glb`
+- **Size:** 3.43 MB (3597652 bytes)
+- **SHA-256:** `93e6e25213009952276d9cf34f5d96a243767334c66f280db0433ddfabb91545`
+- **Licence evidence:** `licenses/kaykit-adventurers__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Rogue Encampment NPCs — Kashya and the rogue guard line. The hood reads correctly for Act I sisterhood silhouettes.
+
+### KayKit Adventurers — Knight
+
+- **Semantic key:** `character.knight`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb`
+- **Local path:** `assets/models/characters/Knight.glb`
+- **Size:** 3.49 MB (3659532 bytes)
+- **SHA-256:** `60428e3abc09ba83e595d256e3af8c5c976b46cdae599f0802fc82b4a3445168`
+- **Licence evidence:** `licenses/kaykit-adventurers__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Armoured NPCs: encampment guards, and the body donor for Act I unique/champion humanoids.
+
+### KayKit Adventurers — Mage
+
+- **Semantic key:** `character.mage`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/addons/kaykit_character_pack_adventures/Characters/gltf/Mage.glb`
+- **Local path:** `assets/models/characters/Mage.glb`
+- **Size:** 3.42 MB (3589240 bytes)
+- **SHA-256:** `cf898585da33fab50c724d31605fb931eb2912e6d2280092141e98ca81ad507d`
+- **Licence evidence:** `licenses/kaykit-adventurers__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Robed NPCs: Akara, Deckard Cain. Also the caster body for any spellcasting enemy.
+
+### KayKit Skeletons — Warrior
+
+- **Semantic key:** `enemy.skeleton.warrior`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Warrior.glb`
+- **Local path:** `assets/models/enemies/SkeletonWarrior.glb`
+- **Size:** 4.64 MB (4863620 bytes)
+- **SHA-256:** `178b6fda810b814c250d8a2010c24dfd9b458b9006dd323353e620b7ff118bbe`
+- **Licence evidence:** `licenses/kaykit-skeletons__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Primary Act I undead melee enemy.
+
+### KayKit Skeletons — Minion
+
+- **Semantic key:** `enemy.skeleton.minion`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Minion.glb`
+- **Local path:** `assets/models/enemies/SkeletonMinion.glb`
+- **Size:** 4.59 MB (4814296 bytes)
+- **SHA-256:** `6ffc003f895bed0b074791e0e490846210a2e2f8fc7da300aba53cc185f95968`
+- **Licence evidence:** `licenses/kaykit-skeletons__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Weak swarm enemy; the Fallen/trash-mob slot that fills out packs.
+
+### KayKit Skeletons — Rogue
+
+- **Semantic key:** `enemy.skeleton.rogue`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Rogue.glb`
+- **Local path:** `assets/models/enemies/SkeletonRogue.glb`
+- **Size:** 4.60 MB (4827024 bytes)
+- **SHA-256:** `4003f2b77891bb56f7e0de7d555abcb497aebbcaee35b614211f16275f9ccae3`
+- **Licence evidence:** `licenses/kaykit-skeletons__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Ranged undead — the corrupted rogue archers of Act I.
+
+### KayKit Skeletons — Mage
+
+- **Semantic key:** `enemy.skeleton.mage`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Mage.glb`
+- **Local path:** `assets/models/enemies/SkeletonMage.glb`
+- **Size:** 4.54 MB (4761048 bytes)
+- **SHA-256:** `e05b0f5cfa395271c9f75fd07c0a0613c56f401ece4ab644e080001a79971075`
+- **Licence evidence:** `licenses/kaykit-skeletons__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Caster undead; shaman/summoner archetype.
+
+### KayKit Dungeon Remastered — BarrelLarge
+
+- **Semantic key:** `prop.barrel.large`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/barrel_large.gltf.glb`
+- **Local path:** `assets/models/props/BarrelLarge.glb`
+- **Size:** 43.3 KB (44292 bytes)
+- **SHA-256:** `9fae6a79056241baf253fe9272dc7a7ddb174e1caf153eb5013c58a596722148`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment and cave set dressing; destructible container.
+
+### KayKit Dungeon Remastered — BarrelSmall
+
+- **Semantic key:** `prop.barrel.small`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/barrel_small.gltf.glb`
+- **Local path:** `assets/models/props/BarrelSmall.glb`
+- **Size:** 31.3 KB (32060 bytes)
+- **SHA-256:** `f46d0c421e46080aff079286ce9459a22da25e1b4f3489a04243f17617175212`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Clutter pass around tents and cave walls.
+
+### KayKit Dungeon Remastered — BarrelStack
+
+- **Semantic key:** `prop.barrel.stack`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/barrel_small_stack.gltf.glb`
+- **Local path:** `assets/models/props/BarrelStack.glb`
+- **Size:** 95.8 KB (98092 bytes)
+- **SHA-256:** `c23dc73a11c5a57ed33cb8a9df99f2b2793517341c5d62c6e50b0150652e8e99`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Pre-stacked cluster; cheap way to fill a supply corner.
+
+### KayKit Dungeon Remastered — CrateLarge
+
+- **Semantic key:** `prop.crate.large`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/box_large.gltf.glb`
+- **Local path:** `assets/models/props/CrateLarge.glb`
+- **Size:** 28.1 KB (28740 bytes)
+- **SHA-256:** `6dacda267f04769f8ebbb7e991885785054923ea3d5eb19e833768a911d5b661`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Destructible crate; the classic Diablo loot container.
+
+### KayKit Dungeon Remastered — CrateSmall
+
+- **Semantic key:** `prop.crate.small`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/box_small.gltf.glb`
+- **Local path:** `assets/models/props/CrateSmall.glb`
+- **Size:** 28.0 KB (28692 bytes)
+- **SHA-256:** `3052015d7cd670c170742317fd9c728e5643221450857abbae9eefe6dbc66092`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Small destructible crate.
+
+### KayKit Dungeon Remastered — CrateStack
+
+- **Semantic key:** `prop.crate.stack`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/box_stacked.gltf.glb`
+- **Local path:** `assets/models/props/CrateStack.glb`
+- **Size:** 143.5 KB (146968 bytes)
+- **SHA-256:** `c9035de1145d1cee058941abc4bc9ea7b039c98e94c56712cb5e9626a3d18017`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Pre-stacked crates for encampment supply dumps.
+
+### KayKit Dungeon Remastered — Keg
+
+- **Semantic key:** `prop.keg`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/keg.gltf.glb`
+- **Local path:** `assets/models/props/Keg.glb`
+- **Size:** 58.5 KB (59912 bytes)
+- **SHA-256:** `cc620e27439ab8dbbf93b1c4bd94d1d634798757c0314b2c9f12bb445afd0f51`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment tavern/supply dressing.
+
+### KayKit Dungeon Remastered — Chest
+
+- **Semantic key:** `prop.chest`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/chest.glb`
+- **Local path:** `assets/models/props/Chest.glb`
+- **Size:** 79.5 KB (81412 bytes)
+- **SHA-256:** `f72fd2201cd42ad399928a0b7bcc34d5b0e6d0624aeaf824fef81852109955f8`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Lootable container.
+
+### KayKit Dungeon Remastered — ChestGold
+
+- **Semantic key:** `prop.chest.gold`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/chest_gold.glb`
+- **Local path:** `assets/models/props/ChestGold.glb`
+- **Size:** 136.9 KB (140140 bytes)
+- **SHA-256:** `04708d5f88ed59d361c8a6cec1efe8b7028dbc641dfae0a1467f272e14a94b6e`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Rare/unique loot container.
+
+### KayKit Dungeon Remastered — Torch
+
+- **Semantic key:** `prop.torch`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/torch.gltf.glb`
+- **Local path:** `assets/models/props/Torch.glb`
+- **Size:** 28.7 KB (29380 bytes)
+- **SHA-256:** `608089ae00c5d5b51adbe702a689677b3fef0b29641030a44401188ce108a316`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Unlit torch; wall and ground placement.
+
+### KayKit Dungeon Remastered — TorchLit
+
+- **Semantic key:** `prop.torch.lit`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/torch_lit.gltf.glb`
+- **Local path:** `assets/models/props/TorchLit.glb`
+- **Size:** 30.5 KB (31244 bytes)
+- **SHA-256:** `45fcfeb3b129722019d42aef0acae8f6c5f8f6dbdf5d3346ceea1f084b69b396`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Lit torch — the primary practical light source for cave interiors, paired with a point light and fire particle.
+
+### KayKit Dungeon Remastered — TorchMounted
+
+- **Semantic key:** `prop.torch.mounted`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/torch_mounted.gltf.glb`
+- **Local path:** `assets/models/props/TorchMounted.glb`
+- **Size:** 32.4 KB (33220 bytes)
+- **SHA-256:** `a617c159e02932db48ca81ec46f1f100acc8904fb6ece43e919d2f93c13950e9`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Wall-mounted torch for corridors and the Den of Evil.
+
+### KayKit Dungeon Remastered — CandleLit
+
+- **Semantic key:** `prop.candle.lit`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/candle_lit.gltf.glb`
+- **Local path:** `assets/models/props/CandleLit.glb`
+- **Size:** 22.1 KB (22648 bytes)
+- **SHA-256:** `a884f27540b8b91e3d47914453cbf2c4d48f4ca8504ace9960a8d9b4e79a6c48`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Small warm light source for interiors and shrines.
+
+### KayKit Dungeon Remastered — RubbleLarge
+
+- **Semantic key:** `prop.rubble.large`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/rubble_large.gltf.glb`
+- **Local path:** `assets/models/props/RubbleLarge.glb`
+- **Size:** 58.8 KB (60196 bytes)
+- **SHA-256:** `0292da1b5788a5a52b616d5d27d3270c676a5fbf9e921b6dd3dc30364d355b54`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Cave floor and ruined-wall debris.
+
+### KayKit Dungeon Remastered — RubbleHalf
+
+- **Semantic key:** `prop.rubble.half`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/rubble_half.gltf.glb`
+- **Local path:** `assets/models/props/RubbleHalf.glb`
+- **Size:** 37.9 KB (38836 bytes)
+- **SHA-256:** `7514ccbda643c13d5a782579e4f01ee6402eec5519590d3f048d396cdaedec24`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Smaller debris for scatter passes.
+
+### KayKit Dungeon Remastered — Pillar
+
+- **Semantic key:** `prop.pillar`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/pillar.gltf.glb`
+- **Local path:** `assets/models/props/Pillar.glb`
+- **Size:** 25.0 KB (25552 bytes)
+- **SHA-256:** `e31da496461921475384c62ce761cd23924892bd6f32aeea68bd913545caee33`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Cathedral and crypt structure.
+
+### KayKit Dungeon Remastered — BannerRed
+
+- **Semantic key:** `prop.banner`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/banner_red.gltf.glb`
+- **Local path:** `assets/models/props/BannerRed.glb`
+- **Size:** 23.6 KB (24216 bytes)
+- **SHA-256:** `c69c6eaffc834d6dcc7d19f8fd87145af4323265755588bf5bde85d71e0e3ff3`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment banners; vertical colour accent.
+
+### KayKit Dungeon Remastered — TableLong
+
+- **Semantic key:** `prop.table`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/table_long.gltf.glb`
+- **Local path:** `assets/models/props/TableLong.glb`
+- **Size:** 34.3 KB (35128 bytes)
+- **SHA-256:** `83996a7a544a257630510b61eadebb8842e4313ca3c774b35774cad9b6f949c8`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment interior dressing.
+
+### KayKit Dungeon Remastered — Stool
+
+- **Semantic key:** `prop.stool`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/stool.gltf.glb`
+- **Local path:** `assets/models/props/Stool.glb`
+- **Size:** 27.9 KB (28528 bytes)
+- **SHA-256:** `f9170499ea599e6283d35be600150d2171d9a7af1ae0e8a1ccbe98ef29b71d8e`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment interior dressing.
+
+### KayKit Dungeon Remastered — SwordShield
+
+- **Semantic key:** `prop.swordshield`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/sword_shield.gltf.glb`
+- **Local path:** `assets/models/props/SwordShield.glb`
+- **Size:** 46.6 KB (47764 bytes)
+- **SHA-256:** `4dc33b156a166b2c47cf3ac0344f9462946e952ee8c12945bbe6aedddf63af72`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Weapon rack dressing and a stand-in pickup mesh.
+
+### KayKit Dungeon Remastered — Barrier
+
+- **Semantic key:** `prop.barrier`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/barrier.gltf.glb`
+- **Local path:** `assets/models/props/Barrier.glb`
+- **Size:** 22.7 KB (23292 bytes)
+- **SHA-256:** `2c6a1b89de1c87778c7ae9afc17fa9eabc4aa4148f3b8748f062b5c8ec7f6c00`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment palisade / fence segment.
+
+### KayKit Dungeon Remastered — BarrierCorner
+
+- **Semantic key:** `prop.barrier.corner`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/barrier_corner.gltf.glb`
+- **Local path:** `assets/models/props/BarrierCorner.glb`
+- **Size:** 25.5 KB (26116 bytes)
+- **SHA-256:** `b78a21661f4acd0d76176cf0dc11fcfc3f5bd8a2de72d251f1551497aa78598c`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Palisade corner piece.
+
+### KayKit Dungeon Remastered — Wall
+
+- **Semantic key:** `kit.wall`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/wall.gltf.glb`
+- **Local path:** `assets/models/kit/Wall.glb`
+- **Size:** 51.9 KB (53132 bytes)
+- **SHA-256:** `f2f343a7bdf2d45947e3f354494e16095a923485e05637e3804e3b81ce11d921`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Straight dungeon wall span.
+
+### KayKit Dungeon Remastered — WallCorner
+
+- **Semantic key:** `kit.wall.corner`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/wall_corner.gltf.glb`
+- **Local path:** `assets/models/kit/WallCorner.glb`
+- **Size:** 48.1 KB (49212 bytes)
+- **SHA-256:** `3c8cbcbf3abf78c9dc49f440b152340ef681fee9cccf9ca6ed27b6670a34eb81`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Wall corner.
+
+### KayKit Dungeon Remastered — WallDoorway
+
+- **Semantic key:** `kit.wall.doorway`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/wall_doorway.glb`
+- **Local path:** `assets/models/kit/WallDoorway.glb`
+- **Size:** 98.2 KB (100596 bytes)
+- **SHA-256:** `2be5369a2d1d1d8795150b2156d8343b3e37620d78de256cb03276c54ea70c97`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Doorway / room transition.
+
+### KayKit Dungeon Remastered — WallBroken
+
+- **Semantic key:** `kit.wall.broken`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/wall_broken.gltf.glb`
+- **Local path:** `assets/models/kit/WallBroken.glb`
+- **Size:** 67.7 KB (69276 bytes)
+- **SHA-256:** `ee7598ef2b88aaeb7b61e46d5f1da1a059de3860b080b38b7a507ca2f461302c`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Ruined wall — Den of Evil and the Cathedral ruins.
+
+### KayKit Dungeon Remastered — WallCracked
+
+- **Semantic key:** `kit.wall.cracked`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/wall_cracked.gltf.glb`
+- **Local path:** `assets/models/kit/WallCracked.glb`
+- **Size:** 135.2 KB (138396 bytes)
+- **SHA-256:** `344fb9a709a51b7f04131fded75a5ad38e829d74fcf1784d848f3df0703f804c`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Damaged wall variant for visual break-up.
+
+### KayKit Dungeon Remastered — FloorDirt
+
+- **Semantic key:** `kit.floor.dirt`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/floor_dirt_large.gltf.glb`
+- **Local path:** `assets/models/kit/FloorDirt.glb`
+- **Size:** 24.0 KB (24620 bytes)
+- **SHA-256:** `48cc8018237fbdca3f7fccef95c93ef32e877d8fc59f481b9369fed71fec895b`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Cave and Den of Evil floor tile.
+
+### KayKit Dungeon Remastered — FloorDirtRocky
+
+- **Semantic key:** `kit.floor.dirt.rocky`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/floor_dirt_large_rocky.gltf.glb`
+- **Local path:** `assets/models/kit/FloorDirtRocky.glb`
+- **Size:** 29.5 KB (30216 bytes)
+- **SHA-256:** `f83d503c0ab16aaaa48b4e1680a2aaf7f975a63e376b6dc8e48032c702521d8f`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Rocky cave floor variant.
+
+### KayKit Dungeon Remastered — FloorTile
+
+- **Semantic key:** `kit.floor.tile`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/floor_tile_large.gltf.glb`
+- **Local path:** `assets/models/kit/FloorTile.glb`
+- **Size:** 27.4 KB (28100 bytes)
+- **SHA-256:** `5b6bbbc683f6729d094732056f157a928435de97ec3cf94c341c7465907fe17b`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Cathedral / crypt masonry floor.
+
+### KayKit Dungeon Remastered — FloorWood
+
+- **Semantic key:** `kit.floor.wood`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/floor_wood_large.gltf.glb`
+- **Local path:** `assets/models/kit/FloorWood.glb`
+- **Size:** 34.8 KB (35612 bytes)
+- **SHA-256:** `d22eb1c1fb6ab434e8c9599ecb2cd00c2e34a713783603ba7a3e2cbb1611709d`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment interior floor.
+
+### KayKit Dungeon Remastered — Stairs
+
+- **Semantic key:** `kit.stairs`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/addons/kaykit_dungeon_remastered/Assets/gltf/stairs.gltf.glb`
+- **Local path:** `assets/models/kit/Stairs.glb`
+- **Size:** 42.4 KB (43368 bytes)
+- **SHA-256:** `5ba16e5d919aaa8958435c4b73c1f8a94c98febeacf716faa1359f24e6b27d70`
+- **Licence evidence:** `licenses/kaykit-dungeon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Level transitions between cave depths.
+
+### Forest ground 03 (albedo)
+
+- **Semantic key:** `terrain.mud.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/forrest_ground_03_2k_jpg/forrest_ground_03_diff_2k.jpg`
+- **Local path:** `assets/textures/terrain-mud-albedo.jpg`
+- **Size:** 1.48 MB (1551971 bytes)
+- **SHA-256:** `1631a31a3e28defcd7e1127f0e0c59e5082a77b2940656be3e41c7c28c6eafb0`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** The Blood Moor and every wet-earth exterior; the default ground material.
+
+### Forest ground 03 (normal)
+
+- **Semantic key:** `terrain.mud.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/forrest_ground_03_2k_jpg/forrest_ground_03_nor_2k.jpg`
+- **Local path:** `assets/textures/terrain-mud-normal.jpg`
+- **Size:** 1.41 MB (1481375 bytes)
+- **SHA-256:** `192e274c679ecf554ca8130ab142139e68853b4e92d6b47fdcfc825b8be0ab34`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** The Blood Moor and every wet-earth exterior; the default ground material.
+
+### Forest ground 03 (roughness)
+
+- **Semantic key:** `terrain.mud.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/forrest_ground_03_2k_jpg/forrest_ground_03_rough_2k.jpg`
+- **Local path:** `assets/textures/terrain-mud-roughness.jpg`
+- **Size:** 788.8 KB (807717 bytes)
+- **SHA-256:** `9f46950e52b4cdda36e7dc04a6f23a001708e625bbf7afc4ab7408d9499e3002`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** The Blood Moor and every wet-earth exterior; the default ground material.
+
+### Forest ground 03 (ao)
+
+- **Semantic key:** `terrain.mud.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/forrest_ground_03_2k_jpg/forrest_ground_03_AO_2k.jpg`
+- **Local path:** `assets/textures/terrain-mud-ao.jpg`
+- **Size:** 715.5 KB (732689 bytes)
+- **SHA-256:** `c09cb79ea6f39d0234a5c23d4d6f92e3082b67175e0f0ba6261d999f8709ae03`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** The Blood Moor and every wet-earth exterior; the default ground material.
+
+### Aerial grass rock (albedo)
+
+- **Semantic key:** `terrain.grass.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_diff_2k.jpg`
+- **Local path:** `assets/textures/terrain-grass-albedo.jpg`
+- **Size:** 2.50 MB (2624635 bytes)
+- **SHA-256:** `1a2ddfa4652adbe00447b940c40019d46f4b88245bc1b341cdf622c2110b7bc5`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Dead/patchy grass over rock — the transition band between the moor and the cliffs.
+
+### Aerial grass rock (normal)
+
+- **Semantic key:** `terrain.grass.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_nor_2k.jpg`
+- **Local path:** `assets/textures/terrain-grass-normal.jpg`
+- **Size:** 1.45 MB (1518350 bytes)
+- **SHA-256:** `7765be3e6871179f3603258bd2418d7d5119c87446f603bd900c3c93a67f60eb`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Dead/patchy grass over rock — the transition band between the moor and the cliffs.
+
+### Aerial grass rock (roughness)
+
+- **Semantic key:** `terrain.grass.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_rough_2k.jpg`
+- **Local path:** `assets/textures/terrain-grass-roughness.jpg`
+- **Size:** 736.4 KB (754111 bytes)
+- **SHA-256:** `271f1ff216a5eea3ead76dfa2eabc750f4935009bf0d79240b59d59215d92d91`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Dead/patchy grass over rock — the transition band between the moor and the cliffs.
+
+### Aerial grass rock (ao)
+
+- **Semantic key:** `terrain.grass.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_ao_2k.jpg`
+- **Local path:** `assets/textures/terrain-grass-ao.jpg`
+- **Size:** 593.6 KB (607825 bytes)
+- **SHA-256:** `b53b67c36abbd5515788799e05d839572b8aa59605162401b000ac885160b397`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Dead/patchy grass over rock — the transition band between the moor and the cliffs.
+
+### Rock 05 (albedo)
+
+- **Semantic key:** `rock.cliff.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/rock_05_2k_jpg/rock_05_diff_2k.jpg`
+- **Local path:** `assets/textures/rock-cliff-albedo.jpg`
+- **Size:** 1.44 MB (1512963 bytes)
+- **SHA-256:** `510c8ff3847f32ec398cdb8e228ed9a56809e484a6ab743a4bd4e35b7f619139`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cliff faces, cave walls, boulders.
+
+### Rock 05 (normal)
+
+- **Semantic key:** `rock.cliff.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/rock_05_2k_jpg/rock_05_nor_2k.jpg`
+- **Local path:** `assets/textures/rock-cliff-normal.jpg`
+- **Size:** 874.6 KB (895598 bytes)
+- **SHA-256:** `1cbe7060e10cd26e8bcded850b8e55d13144ee2af132b402aa6e0ca1db279c10`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cliff faces, cave walls, boulders.
+
+### Rock 05 (roughness)
+
+- **Semantic key:** `rock.cliff.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/rock_05_2k_jpg/rock_05_rough_2k.jpg`
+- **Local path:** `assets/textures/rock-cliff-roughness.jpg`
+- **Size:** 407.8 KB (417576 bytes)
+- **SHA-256:** `0fae9ed1509b425f6ca725083dc13fe88550bda26f2d4a22743d619b488fa44f`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cliff faces, cave walls, boulders.
+
+### Rock 05 (ao)
+
+- **Semantic key:** `rock.cliff.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/rock_05_2k_jpg/rock_05_ao_2k.jpg`
+- **Local path:** `assets/textures/rock-cliff-ao.jpg`
+- **Size:** 419.2 KB (429266 bytes)
+- **SHA-256:** `52501a792b6effca21a2fc62840b1c36c678e42fe0f158f3a984d227399e9982`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cliff faces, cave walls, boulders.
+
+### Mossy rock (albedo)
+
+- **Semantic key:** `rock.mossy.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/mossy_rock_2k_jpg/mossy_rock_diff_2k.jpg`
+- **Local path:** `assets/textures/rock-mossy-albedo.jpg`
+- **Size:** 2.44 MB (2557818 bytes)
+- **SHA-256:** `321af86e92008064d0a554049c2dd2f5bb3e26fc02c9cdb032298295cb65d26a`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.
+
+### Mossy rock (normal)
+
+- **Semantic key:** `rock.mossy.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/mossy_rock_2k_jpg/mossy_rock_nor_2k.jpg`
+- **Local path:** `assets/textures/rock-mossy-normal.jpg`
+- **Size:** 1.25 MB (1314968 bytes)
+- **SHA-256:** `c24a49f5a88526adb2c8b266fd1735668e9ba5864abca163745ae916fec7cc10`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.
+
+### Mossy rock (roughness)
+
+- **Semantic key:** `rock.mossy.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/mossy_rock_2k_jpg/mossy_rock_rough_2k.jpg`
+- **Local path:** `assets/textures/rock-mossy-roughness.jpg`
+- **Size:** 753.1 KB (771168 bytes)
+- **SHA-256:** `dcb9c676e998214d5d50b35ede0b353d5cbe4b4c8f1ae73db571662c44b7d1e2`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.
+
+### Mossy rock (ao)
+
+- **Semantic key:** `rock.mossy.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/mossy_rock_2k_jpg/mossy_rock_ao_2k.jpg`
+- **Local path:** `assets/textures/rock-mossy-ao.jpg`
+- **Size:** 367.2 KB (375998 bytes)
+- **SHA-256:** `1370a79c3e6b07b37172dea65ac842f9f841d355238ada935a73f5778c90e2aa`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.
+
+### Sandstone cracks (albedo)
+
+- **Semantic key:** `stone.masonry.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/sandstone_cracks_2k_jpg/sandstone_cracks_diff_2k.jpg`
+- **Local path:** `assets/textures/stone-masonry-albedo.jpg`
+- **Size:** 1.10 MB (1151490 bytes)
+- **SHA-256:** `5dc22fa6a14ef6fce6dd9dbcd71c23c024031ab1c8321939839e5b35f42599e4`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cathedral, crypt and tower masonry.
+
+### Sandstone cracks (normal)
+
+- **Semantic key:** `stone.masonry.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/sandstone_cracks_2k_jpg/sandstone_cracks_nor_2k.jpg`
+- **Local path:** `assets/textures/stone-masonry-normal.jpg`
+- **Size:** 1.63 MB (1708699 bytes)
+- **SHA-256:** `fcb0920a298184e09f5c25f6f166f9d8acba51aa3d03ce48c355fd7b928e4f1e`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cathedral, crypt and tower masonry.
+
+### Sandstone cracks (roughness)
+
+- **Semantic key:** `stone.masonry.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/sandstone_cracks_2k_jpg/sandstone_cracks_rough_2k.jpg`
+- **Local path:** `assets/textures/stone-masonry-roughness.jpg`
+- **Size:** 601.3 KB (615738 bytes)
+- **SHA-256:** `94965505982140d20945c18e00247a45cce6e30df9d56f0b2b5aafc08df9f6bd`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cathedral, crypt and tower masonry.
+
+### Sandstone cracks (ao)
+
+- **Semantic key:** `stone.masonry.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/sandstone_cracks_2k_jpg/sandstone_cracks_AO_2k.jpg`
+- **Local path:** `assets/textures/stone-masonry-ao.jpg`
+- **Size:** 462.4 KB (473465 bytes)
+- **SHA-256:** `f42e7cbebdd392516e6cf664e7c1ae72cac6ff9d161d495cbfd5d3f96d2148ab`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Cathedral, crypt and tower masonry.
+
+### Brown planks 04 (albedo)
+
+- **Semantic key:** `wood.plank.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/brown_planks_04_2k_jpg/brown_planks_04_diff_2k.jpg`
+- **Local path:** `assets/textures/wood-plank-albedo.jpg`
+- **Size:** 637.4 KB (652718 bytes)
+- **SHA-256:** `1b4777a53e6bab45ddcd26bf3680ab67e8e60c13e088ca5e58ebb17b27fdccde`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Palisades, cart and wagon boards, shack walls, crate faces.
+
+### Brown planks 04 (normal)
+
+- **Semantic key:** `wood.plank.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/brown_planks_04_2k_jpg/brown_planks_04_nor_2k.jpg`
+- **Local path:** `assets/textures/wood-plank-normal.jpg`
+- **Size:** 1.16 MB (1218541 bytes)
+- **SHA-256:** `bc78fbab42ab7aeffa2980cbe60000de7fa4e317af733cf430ecb8b4099892af`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Palisades, cart and wagon boards, shack walls, crate faces.
+
+### Brown planks 04 (roughness)
+
+- **Semantic key:** `wood.plank.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/brown_planks_04_2k_jpg/brown_planks_04_rough_2k.jpg`
+- **Local path:** `assets/textures/wood-plank-roughness.jpg`
+- **Size:** 606.7 KB (621283 bytes)
+- **SHA-256:** `cf69c3e9d40ae73dba57d3eb753522756f2c977626614d9f1d230dc579f96eef`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Palisades, cart and wagon boards, shack walls, crate faces.
+
+### Brown planks 04 (ao)
+
+- **Semantic key:** `wood.plank.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/brown_planks_04_2k_jpg/brown_planks_04_ao_2k.jpg`
+- **Local path:** `assets/textures/wood-plank-ao.jpg`
+- **Size:** 745.8 KB (763730 bytes)
+- **SHA-256:** `ce7f0d34d99c0e62094f2431c97b52d747419d4697741fc70f0271e216177b77`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Palisades, cart and wagon boards, shack walls, crate faces.
+
+### WoodFloor041 (albedo)
+
+- **Semantic key:** `wood.floor.albedo`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Color.jpg`
+- **Local path:** `assets/textures/wood-floor-albedo.jpg`
+- **Size:** 729.6 KB (747081 bytes)
+- **SHA-256:** `018ddf3ee70aeaa616ac4bab739803db639bdd259fd1b7d13fe454ec3f937467`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Encampment interior flooring and decking.
+
+### WoodFloor041 (normal)
+
+- **Semantic key:** `wood.floor.normal`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Normal.jpg`
+- **Local path:** `assets/textures/wood-floor-normal.jpg`
+- **Size:** 466.3 KB (477542 bytes)
+- **SHA-256:** `1104caa061a8a3662f1641d47237d230c1abe7391321db607e7d1300ac56a38a`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Encampment interior flooring and decking.
+
+### WoodFloor041 (roughness)
+
+- **Semantic key:** `wood.floor.roughness`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Roughness.jpg`
+- **Local path:** `assets/textures/wood-floor-roughness.jpg`
+- **Size:** 315.0 KB (322533 bytes)
+- **SHA-256:** `d98f65df9690513bd2f0565bce6d62e8595eb86343782075569c1fa0fc24aab9`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Encampment interior flooring and decking.
+
+### WoodFloor041 (ao)
+
+- **Semantic key:** `wood.floor.ao`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/WoodFloor041_2K-JPG/WoodFloor041_2K_AmbientOcclusion.jpg`
+- **Local path:** `assets/textures/wood-floor-ao.jpg`
+- **Size:** 368.0 KB (376801 bytes)
+- **SHA-256:** `2c0ae5626cfe2fc7952105f16ab56ab863bda6cc7c2a5cd24588f84f5991da58`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Encampment interior flooring and decking.
+
+### Bark brown 02 (albedo)
+
+- **Semantic key:** `wood.bark.albedo`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/bark_brown_02_2k_jpg/bark_brown_02_diff_2k.jpg`
+- **Local path:** `assets/textures/wood-bark-albedo.jpg`
+- **Size:** 977.4 KB (1000895 bytes)
+- **SHA-256:** `9e563aa4e2017170809f740138a5b912396abbc462e4778d5a265352d3620c83`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tree trunks across the Blood Moor and Dark Wood.
+
+### Bark brown 02 (normal)
+
+- **Semantic key:** `wood.bark.normal`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/bark_brown_02_2k_jpg/bark_brown_02_nor_2k.jpg`
+- **Local path:** `assets/textures/wood-bark-normal.jpg`
+- **Size:** 1.33 MB (1399622 bytes)
+- **SHA-256:** `86a969810ff2bc97094287c045e58c0d9c1ab28e21782f1f8be9f32cdb5afc86`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tree trunks across the Blood Moor and Dark Wood.
+
+### Bark brown 02 (roughness)
+
+- **Semantic key:** `wood.bark.roughness`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/bark_brown_02_2k_jpg/bark_brown_02_rough_2k.jpg`
+- **Local path:** `assets/textures/wood-bark-roughness.jpg`
+- **Size:** 509.6 KB (521788 bytes)
+- **SHA-256:** `d07c30fcf35cf83d3c289d859b14d7469518eca9ef72ef6abd1b229217b27307`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tree trunks across the Blood Moor and Dark Wood.
+
+### Bark brown 02 (ao)
+
+- **Semantic key:** `wood.bark.ao`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/bark_brown_02_2k_jpg/bark_brown_02_ao_2k.jpg`
+- **Local path:** `assets/textures/wood-bark-ao.jpg`
+- **Size:** 499.4 KB (511434 bytes)
+- **SHA-256:** `3b939ac1dbf28a8355cdc88b3c24b604c28977b621668275f2b3eb49f0e71f1c`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tree trunks across the Blood Moor and Dark Wood.
+
+### Metal009 (albedo)
+
+- **Semantic key:** `metal.iron.albedo`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Metal009_2K-JPG/Metal009_2K_Color.jpg`
+- **Local path:** `assets/textures/metal-iron-albedo.jpg`
+- **Size:** 828.9 KB (848803 bytes)
+- **SHA-256:** `a72b6eb6a76f04d609344a6dd58e0d45a6318cdf959ddd4c3aee76ce3e451f3e`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Weapons, armour, cage bars, gates, banded barrels.
+
+### Metal009 (normal)
+
+- **Semantic key:** `metal.iron.normal`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Metal009_2K-JPG/Metal009_2K_Normal.jpg`
+- **Local path:** `assets/textures/metal-iron-normal.jpg`
+- **Size:** 141.7 KB (145128 bytes)
+- **SHA-256:** `62024650b397ce3088c421251ca9643ad60fe286c838774a0417d2338af1e1d6`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Weapons, armour, cage bars, gates, banded barrels.
+
+### Metal009 (roughness)
+
+- **Semantic key:** `metal.iron.roughness`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Metal009_2K-JPG/Metal009_2K_Roughness.jpg`
+- **Local path:** `assets/textures/metal-iron-roughness.jpg`
+- **Size:** 483.1 KB (494715 bytes)
+- **SHA-256:** `b769bd775f80e58900d624732ec43b2306ae17c1a0d5065a05eb8195066a96b9`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Weapons, armour, cage bars, gates, banded barrels.
+
+### Metal009 (metalness)
+
+- **Semantic key:** `metal.iron.metalness`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Metal009_2K-JPG/Metal009_2K_Metalness.jpg`
+- **Local path:** `assets/textures/metal-iron-metalness.jpg`
+- **Size:** 16.2 KB (16545 bytes)
+- **SHA-256:** `b65d6b9091747bd81ee58adedcb6209d8ee21b2bde9298d7216989ada85ef622`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Weapons, armour, cage bars, gates, banded barrels.
+
+### Fabric026 (albedo)
+
+- **Semantic key:** `cloth.albedo`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Fabric026_2K-JPG/Fabric026_2K_Color.jpg`
+- **Local path:** `assets/textures/cloth-albedo.jpg`
+- **Size:** 858.6 KB (879188 bytes)
+- **SHA-256:** `bb5f43c6b52c9857ed62d9a028aec6f2f43aac144fe7310cc515f2b3cae6434c`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tents, banners, bedrolls, NPC clothing.
+
+### Fabric026 (normal)
+
+- **Semantic key:** `cloth.normal`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Fabric026_2K-JPG/Fabric026_2K_Normal.jpg`
+- **Local path:** `assets/textures/cloth-normal.jpg`
+- **Size:** 814.2 KB (833708 bytes)
+- **SHA-256:** `3f03d0aa7060f0e28abb7f94d0cd06052fa7f6382a70bda41e19b70acd82b97f`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tents, banners, bedrolls, NPC clothing.
+
+### Fabric026 (roughness)
+
+- **Semantic key:** `cloth.roughness`
+- **Author:** ambientCG (formerly CC0 Textures)
+- **Source:** https://ambientcg.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/Fabric026_2K-JPG/Fabric026_2K_Roughness.jpg`
+- **Local path:** `assets/textures/cloth-roughness.jpg`
+- **Size:** 2.14 MB (2240702 bytes)
+- **SHA-256:** `7bda90d97896ddacb92f39e83a71386f772f1002a3cdfc1d348a2ea24d02d4eb`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Tents, banners, bedrolls, NPC clothing.
+
+### Winter Lake 01
+
+- **Semantic key:** `env.overcast.grey`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/hdris/winter_lake_01_2k.hdr`
+- **Local path:** `assets/hdri/overcast-grey.hdr`
+- **Size:** 5.72 MB (5994516 bytes)
+- **SHA-256:** `f6f43bfea8102c7ad02be724155b3daf704c8014a176d95484cb400f2b687a20`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** The cold grey-sky key for the Blood Moor and Cold Plains — the overcast mood Act I actually wants.
+
+### Large Corridor
+
+- **Semantic key:** `env.cave.corridor`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/hdris/large_corridor_1k.hdr`
+- **Local path:** `assets/hdri/cave-corridor.hdr`
+- **Size:** 1.53 MB (1604744 bytes)
+- **SHA-256:** `5de5e2bf0e20505e83c072cd2861f4b4d83ad84790a9e17d5001416449115f4f`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Enclosed stone interiors: the Cathedral, the Catacombs, the Jail levels.
+
+### Moonless Golf
+
+- **Semantic key:** `env.night.moonless`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/hdris/moonless_golf_1k.hdr`
+- **Local path:** `assets/hdri/night-moonless.hdr`
+- **Size:** 1.60 MB (1672754 bytes)
+- **SHA-256:** `4f597078024bd81429431e872d466d8808653ad62a8bc8c61d8052af7466c3aa`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** The darkest exterior key — deep cave mouths and night surface areas where torches must dominate.
+
+### Dikhololo Night (edit)
+
+- **Semantic key:** `env.night.stars`
+- **Author:** Poly Haven (formerly Texture Haven / HDRI Haven)
+- **Source:** https://polyhaven.com
+- **Retrieved from:** `npm:aframe-enviropacks@0.10.0/asset/hdris/dikhololo_night_edit_1k.hdr`
+- **Local path:** `assets/hdri/night-stars.hdr`
+- **Size:** 434.1 KB (444506 bytes)
+- **SHA-256:** `ed058fede67756c4068fc6ec0fbfb8d0e65b3db5993f7fc5fc301aebc08f38f2`
+- **Licence evidence:** `licenses/aframe-enviropacks__Readme.md`
+- **Used for:** Clear starfield night exterior for the encampment after dark.
+
+### Kenney RPG Audio — footstep00
+
+- **Semantic key:** `audio.footstep.00`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep00.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-00.ogg`
+- **Size:** 9.3 KB (9475 bytes)
+- **SHA-256:** `6fe61ef1fc3bcf0e253bf2eb64759db6cb69e2fe452f4d88cc597ecf78a3d601`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep01
+
+- **Semantic key:** `audio.footstep.01`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep01.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-01.ogg`
+- **Size:** 9.7 KB (9900 bytes)
+- **SHA-256:** `313472dba31fd0c855376069fa368bb5a198c27251cc8398ef464578b7047a4c`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep02
+
+- **Semantic key:** `audio.footstep.02`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep02.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-02.ogg`
+- **Size:** 9.3 KB (9528 bytes)
+- **SHA-256:** `2d9575b7dead6e1217ca113991fc5229e9b6d998ea0726ebbb277e7398ab888f`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep03
+
+- **Semantic key:** `audio.footstep.03`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep03.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-03.ogg`
+- **Size:** 10.3 KB (10559 bytes)
+- **SHA-256:** `a86756b9af9f370455ab47844239bb07fd1bee7a113068c91f0fcd9b72703fae`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep04
+
+- **Semantic key:** `audio.footstep.04`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep04.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-04.ogg`
+- **Size:** 11.0 KB (11303 bytes)
+- **SHA-256:** `fd264d72a7cd622b82abde202f4ed09fa7de95d34c36473ee938ce66cdf39830`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep05
+
+- **Semantic key:** `audio.footstep.05`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep05.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-05.ogg`
+- **Size:** 10.0 KB (10288 bytes)
+- **SHA-256:** `817957e1f95d97fd36870064c41673895575cde17bccb245f50364c86ed10198`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep06
+
+- **Semantic key:** `audio.footstep.06`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep06.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-06.ogg`
+- **Size:** 9.7 KB (9885 bytes)
+- **SHA-256:** `6cabfe7ae95d227a84066c6e17014ac31cc7c89b14ef51d7877e98352d4a64fb`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — footstep07
+
+- **Semantic key:** `audio.footstep.07`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/footstep07.ogg`
+- **Local path:** `assets/audio/footsteps/footstep-07.ogg`
+- **Size:** 10.0 KB (10264 bytes)
+- **SHA-256:** `42924cdbf998d5b3db180a339fd74afc94c570d594a536687e337ef1bdfdb346`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Player and NPC footfalls; pick round-robin per step event.
+
+### Kenney RPG Audio — knifeSlice
+
+- **Semantic key:** `audio.combat.slice`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/knifeSlice.ogg`
+- **Local path:** `assets/audio/combat/slice-a.ogg`
+- **Size:** 15.2 KB (15532 bytes)
+- **SHA-256:** `4cd96dc630bed9840c15f1dd2306da2cc56a4da26a5d3f1a03c5a7265ac5e54f`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Sword and dagger swing connecting on flesh.
+
+### Kenney RPG Audio — knifeSlice2
+
+- **Semantic key:** `audio.combat.slice.b`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/knifeSlice2.ogg`
+- **Local path:** `assets/audio/combat/slice-b.ogg`
+- **Size:** 14.7 KB (15099 bytes)
+- **SHA-256:** `6c2064d0ef988d1ec3d56868e823ea8823a5cac00f2742560052633529407def`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Second slice variant so repeated attacks do not machine-gun one sample.
+
+### Kenney RPG Audio — chop
+
+- **Semantic key:** `audio.combat.chop`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/chop.ogg`
+- **Local path:** `assets/audio/combat/chop.ogg`
+- **Size:** 9.2 KB (9370 bytes)
+- **SHA-256:** `d00c2b3c9fff07e376145c8c8c45c90e5084ec192f6ce0387db233f7b86f1486`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Axe and two-handed heavy impact.
+
+### Kenney RPG Audio — metalClick
+
+- **Semantic key:** `audio.combat.metal.light`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/metalClick.ogg`
+- **Local path:** `assets/audio/combat/metal-light.ogg`
+- **Size:** 13.3 KB (13615 bytes)
+- **SHA-256:** `9851a69d0c613e13bceef08060ecc4148f098ef487927cbebe270d642398a3b3`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Blade-on-armour and parry tick.
+
+### Kenney RPG Audio — metalPot1
+
+- **Semantic key:** `audio.combat.metal.heavy`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/metalPot1.ogg`
+- **Local path:** `assets/audio/combat/metal-heavy.ogg`
+- **Size:** 30.9 KB (31619 bytes)
+- **SHA-256:** `159def979e8e386c2c539f5e99cc30a080eb2dcb6c911fa2e4ccc0785b2522fd`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Heavy metal impact; shield bash and armoured enemy hits.
+
+### Kenney RPG Audio — drawKnife1
+
+- **Semantic key:** `audio.combat.draw`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/drawKnife1.ogg`
+- **Local path:** `assets/audio/combat/weapon-draw.ogg`
+- **Size:** 10.9 KB (11134 bytes)
+- **SHA-256:** `276403e72c3b71c47bc24db3083970c23f8e5551ffa78f436f83483c56f3f0bb`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Unsheathing a weapon on entering combat stance.
+
+### Kenney RPG Audio — cloth1
+
+- **Semantic key:** `audio.foley.cloth`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/cloth1.ogg`
+- **Local path:** `assets/audio/foley/cloth.ogg`
+- **Size:** 16.1 KB (16508 bytes)
+- **SHA-256:** `ddb93a3671233f95da0e0b10367f082f7eb42fa6caaddcf776410aa8833c747d`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Movement foley for cloaked NPCs, dodge rolls, garment rustle.
+
+### Kenney RPG Audio — dropLeather
+
+- **Semantic key:** `audio.foley.leather`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/dropLeather.ogg`
+- **Local path:** `assets/audio/foley/leather.ogg`
+- **Size:** 11.4 KB (11695 bytes)
+- **SHA-256:** `097e1d3b74949b0145fda0519d40b7e0773ab82ec4858727f95be830927e1a45`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Armour and pack foley; item drop.
+
+### Kenney RPG Audio — creak1
+
+- **Semantic key:** `audio.world.creak`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/creak1.ogg`
+- **Local path:** `assets/audio/world/creak.ogg`
+- **Size:** 15.4 KB (15761 bytes)
+- **SHA-256:** `8a346186fd297254248cab8e8117060a52a5cf2a84f603153a762108550ea95e`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Wooden ambience: cart, gate, floorboard, gibbet.
+
+### Kenney RPG Audio — doorOpen_1
+
+- **Semantic key:** `audio.world.door.open`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/doorOpen_1.ogg`
+- **Local path:** `assets/audio/world/door-open.ogg`
+- **Size:** 22.3 KB (22848 bytes)
+- **SHA-256:** `4ab93bab96522d8eb109ff96dc57cb6765deb02448fe14c10472084be5bb2a0b`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Doors, gates, level transitions.
+
+### Kenney RPG Audio — doorClose_1
+
+- **Semantic key:** `audio.world.door.close`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/doorClose_1.ogg`
+- **Local path:** `assets/audio/world/door-close.ogg`
+- **Size:** 18.1 KB (18564 bytes)
+- **SHA-256:** `834d29c60a8a8bfb50b158cdb6b7dfa8f02812a408a1ee9703d038dfab0b1aeb`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Doors, gates, level transitions.
+
+### Kenney RPG Audio — handleCoins
+
+- **Semantic key:** `audio.loot.coins`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/handleCoins.ogg`
+- **Local path:** `assets/audio/loot/coins.ogg`
+- **Size:** 24.8 KB (25394 bytes)
+- **SHA-256:** `8a91f969e932df709df80ee124d86a51389eed9b67f22e5e716bc2bbf60d8dab`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Gold pickup — a Diablo signature sound.
+
+### Kenney RPG Audio — handleSmallLeather
+
+- **Semantic key:** `audio.loot.item`
+- **Author:** Kenney Vleugels (Kenney.nl)
+- **Source:** https://kenney.nl/assets/rpg-audio
+- **Retrieved from:** `https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/handleSmallLeather.ogg`
+- **Local path:** `assets/audio/loot/item.ogg`
+- **Size:** 10.2 KB (10492 bytes)
+- **SHA-256:** `ae3cbf695aa0a8b98b5a80a835be5a3ccbd5446a24db2235cd4c3cd6fc92ed96`
+- **Licence evidence:** `licenses/excalibur__playground_public_rpg-audio_License.txt`
+- **Support the creator:** https://support.kenney.nl
+- **Used for:** Generic item pickup into inventory.
+
+### uisfx organic — press
+
+- **Semantic key:** `audio.ui.press`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/press.ogg`
+- **Local path:** `assets/audio/ui/press.ogg`
+- **Size:** 1.6 KB (1657 bytes)
+- **SHA-256:** `589a0f909282e262ebd85dc34575aea2f7be349f3c4c8606407a3893bc7a2ffd`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### uisfx organic — hover
+
+- **Semantic key:** `audio.ui.hover`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/hover.ogg`
+- **Local path:** `assets/audio/ui/hover.ogg`
+- **Size:** 1.3 KB (1357 bytes)
+- **SHA-256:** `b7778faa4a234c202593aa96b21dc3b4be30a69323d2c3e40c9cfc5a07d6e4a4`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### uisfx organic — select
+
+- **Semantic key:** `audio.ui.select`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/select.ogg`
+- **Local path:** `assets/audio/ui/select.ogg`
+- **Size:** 3.3 KB (3340 bytes)
+- **SHA-256:** `7d3c4e69cd97c5ab19baf3ae0e3a4a40c457c7157c57f1695aee28d3a2856514`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### uisfx organic — error
+
+- **Semantic key:** `audio.ui.error`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/error.ogg`
+- **Local path:** `assets/audio/ui/error.ogg`
+- **Size:** 4.4 KB (4501 bytes)
+- **SHA-256:** `779cacdea8d1c6dfcf79a0a072ab9c3f2cd9553f5d1b4e1774bc9fbe72b76516`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### uisfx organic — success
+
+- **Semantic key:** `audio.ui.success`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/success.ogg`
+- **Local path:** `assets/audio/ui/success.ogg`
+- **Size:** 6.0 KB (6102 bytes)
+- **SHA-256:** `1da1e12d939e9b716899ba31f98e0a5286cf91a43a6f5985e962b9311598b7c0`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### uisfx organic — open
+
+- **Semantic key:** `audio.ui.open`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/open.ogg`
+- **Local path:** `assets/audio/ui/open.ogg`
+- **Size:** 2.9 KB (2980 bytes)
+- **SHA-256:** `ef262a4e1a3f03001aef2fe8e91f963b75f16d04d3b92c2093f44e1e04b1194b`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### uisfx organic — close
+
+- **Semantic key:** `audio.ui.close`
+- **Author:** Yuki Capital
+- **Source:** https://www.npmjs.com/package/uisfx
+- **Retrieved from:** `npm:uisfx@0.4.0/sounds/organic/close.ogg`
+- **Local path:** `assets/audio/ui/close.ogg`
+- **Size:** 2.8 KB (2855 bytes)
+- **SHA-256:** `60b19b89aef6352c6c119d095d6506c950b4eaaaed75beba8083ac1a61e2f2fc`
+- **Licence evidence:** `licenses/uisfx__LICENSE-AUDIO`
+- **Used for:** Inventory, menu and HUD interaction feedback.
+
+### KayKit Medieval Hexagon Pack — tent
+
+- **Semantic key:** `prop.tent`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/tent.gltf`
+- **Local path:** `assets/models/hexkit/tent.gltf`
+- **Size:** 2.9 KB (3008 bytes)
+- **SHA-256:** `d8920394ddec09d8afa0cfaa2dad1c75b55fd21819fbd7c31392b3b8dce5dca0`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** THE Rogue Encampment building block — the canvas tents the camp is made of.
+
+### KayKit Medieval Hexagon Pack — tent
+
+- **Semantic key:** `prop.tent.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/tent.bin`
+- **Local path:** `assets/models/hexkit/tent.bin`
+- **Size:** 6.0 KB (6148 bytes)
+- **SHA-256:** `fce10cd8e153d14b53a4f0fd902124c214ea29fac370707bb3a604ce2a718fc2`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for tent.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — fence_wood_straight
+
+- **Semantic key:** `prop.fence.wood`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight.gltf`
+- **Local path:** `assets/models/hexkit/fence_wood_straight.gltf`
+- **Size:** 3.0 KB (3061 bytes)
+- **SHA-256:** `5a2af87c5a6b90875e3bc11f289a321a5d4b2459975dba52351edbc58b2132e3`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment perimeter palisade.
+
+### KayKit Medieval Hexagon Pack — fence_wood_straight
+
+- **Semantic key:** `prop.fence.wood.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight.bin`
+- **Local path:** `assets/models/hexkit/fence_wood_straight.bin`
+- **Size:** 14.7 KB (15032 bytes)
+- **SHA-256:** `fa71b68019e2fe287621f3a5b06b7e18d1dcdd74a6f1c38af7888a8fb0c0078b`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for fence_wood_straight.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — fence_wood_straight_gate
+
+- **Semantic key:** `prop.fence.wood.gate`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight_gate.gltf`
+- **Local path:** `assets/models/hexkit/fence_wood_straight_gate.gltf`
+- **Size:** 5.1 KB (5220 bytes)
+- **SHA-256:** `ca9cc002a5896f387754e562f2109d5544ab5cf0e6f9555f2fa6a051664258eb`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Encampment gate — the exit to the Blood Moor.
+
+### KayKit Medieval Hexagon Pack — fence_wood_straight_gate
+
+- **Semantic key:** `prop.fence.wood.gate.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight_gate.bin`
+- **Local path:** `assets/models/hexkit/fence_wood_straight_gate.bin`
+- **Size:** 18.9 KB (19384 bytes)
+- **SHA-256:** `baeccfc22cfaea7ebc8b676278b2faf8d09ce4c638420d10a995fdebcd1d1c4d`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for fence_wood_straight_gate.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — weaponrack
+
+- **Semantic key:** `prop.weaponrack`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/weaponrack.gltf`
+- **Local path:** `assets/models/hexkit/weaponrack.gltf`
+- **Size:** 3.0 KB (3027 bytes)
+- **SHA-256:** `e6985e05285ae219a0a6317522debb9d48c8b39334820e0c9694f195f1519be5`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Charsi's forge and the training area dressing.
+
+### KayKit Medieval Hexagon Pack — weaponrack
+
+- **Semantic key:** `prop.weaponrack.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/weaponrack.bin`
+- **Local path:** `assets/models/hexkit/weaponrack.bin`
+- **Size:** 2.9 KB (2940 bytes)
+- **SHA-256:** `3773a0eab3da0c7526a13880b3dc7f2c8c42f97e5b8970d5bf5a522f0ea7f0ea`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for weaponrack.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — sack
+
+- **Semantic key:** `prop.sack`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/sack.gltf`
+- **Local path:** `assets/models/hexkit/sack.gltf`
+- **Size:** 3.0 KB (3031 bytes)
+- **SHA-256:** `b61929d6161907aff4f1fd211cd0a8300d002d1a686ba43d07c4aff171fbd9f0`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Supply clutter around tents and the stash.
+
+### KayKit Medieval Hexagon Pack — sack
+
+- **Semantic key:** `prop.sack.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/sack.bin`
+- **Local path:** `assets/models/hexkit/sack.bin`
+- **Size:** 3.2 KB (3240 bytes)
+- **SHA-256:** `5c3e6f5c63f8c4420ed3dfb2027beffc981740b5af9c89be148b56c19b993e02`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for sack.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — crate_open
+
+- **Semantic key:** `prop.crate.open`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/crate_open.gltf`
+- **Local path:** `assets/models/hexkit/crate_open.gltf`
+- **Size:** 3.0 KB (3054 bytes)
+- **SHA-256:** `e82806d7cd3d905c4915e81cad1973415aecec83a8d3ad968e0298d8920265ed`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Open supply crate; lootable or dressing.
+
+### KayKit Medieval Hexagon Pack — crate_open
+
+- **Semantic key:** `prop.crate.open.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/crate_open.bin`
+- **Local path:** `assets/models/hexkit/crate_open.bin`
+- **Size:** 11.8 KB (12056 bytes)
+- **SHA-256:** `e7f3ace70545116f56844b14ab2191efac4d3ed96a454439a6a58b66ad5319c8`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for crate_open.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — bucket_water
+
+- **Semantic key:** `prop.bucket`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/bucket_water.gltf`
+- **Local path:** `assets/models/hexkit/bucket_water.gltf`
+- **Size:** 3.0 KB (3058 bytes)
+- **SHA-256:** `5e7ba97fe666f4a05d1933ea6d2d8555f5846ca4fc0f19e673e922d8441c8c4b`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Well and camp dressing.
+
+### KayKit Medieval Hexagon Pack — bucket_water
+
+- **Semantic key:** `prop.bucket.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/bucket_water.bin`
+- **Local path:** `assets/models/hexkit/bucket_water.bin`
+- **Size:** 6.8 KB (6976 bytes)
+- **SHA-256:** `715a23aa28232449c1b99d62a5f9d432f080dda0e766cbe09ef2fee38b4be958`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for bucket_water.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — resource_lumber
+
+- **Semantic key:** `prop.lumber`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/resource_lumber.gltf`
+- **Local path:** `assets/models/hexkit/resource_lumber.gltf`
+- **Size:** 3.0 KB (3060 bytes)
+- **SHA-256:** `601a69f44f0c4a9b5070a80bd4a20887960e01f1523a6125c1edc8ba19168f1f`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Stacked timber for the camp and palisade construction.
+
+### KayKit Medieval Hexagon Pack — resource_lumber
+
+- **Semantic key:** `prop.lumber.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/resource_lumber.bin`
+- **Local path:** `assets/models/hexkit/resource_lumber.bin`
+- **Size:** 11.6 KB (11880 bytes)
+- **SHA-256:** `90bb1e1f23dbc3de372059b45ae289ec414b1fb50b49852ce0a3b30dc370db8b`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for resource_lumber.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — tree_single_A
+
+- **Semantic key:** `nature.tree.a`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_A.gltf`
+- **Local path:** `assets/models/hexkit/tree_single_A.gltf`
+- **Size:** 3.0 KB (3053 bytes)
+- **SHA-256:** `ac913af6eaed6f15d26a2b75a877aa8dd10de90f26298f3f953abad86a4b4606`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Blood Moor and Dark Wood tree scatter.
+
+### KayKit Medieval Hexagon Pack — tree_single_A
+
+- **Semantic key:** `nature.tree.a.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_A.bin`
+- **Local path:** `assets/models/hexkit/tree_single_A.bin`
+- **Size:** 3.3 KB (3340 bytes)
+- **SHA-256:** `437deac68f35338bb309b01e4d346dd4be37557d7a2f033d04765f63e1b88825`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for tree_single_A.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — tree_single_B
+
+- **Semantic key:** `nature.tree.b`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_B.gltf`
+- **Local path:** `assets/models/hexkit/tree_single_B.gltf`
+- **Size:** 3.0 KB (3056 bytes)
+- **SHA-256:** `1c038591301947c485937e9fdbab182c813ef32df48c02fad3daeb2f1f0421e0`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Second tree species for scatter variety.
+
+### KayKit Medieval Hexagon Pack — tree_single_B
+
+- **Semantic key:** `nature.tree.b.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_B.bin`
+- **Local path:** `assets/models/hexkit/tree_single_B.bin`
+- **Size:** 7.2 KB (7368 bytes)
+- **SHA-256:** `c6a7423ce62f61216f7d8c77e1bd1d8665cbbee59718e59e0e42485f9acfca36`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for tree_single_B.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — rock_single_A
+
+- **Semantic key:** `nature.rock.a`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_A.gltf`
+- **Local path:** `assets/models/hexkit/rock_single_A.gltf`
+- **Size:** 3.0 KB (3031 bytes)
+- **SHA-256:** `ddf307987fb18aa8e7594bb399de3943e497b50bc01aae0e7292a38418944915`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Boulder scatter and cave-mouth dressing.
+
+### KayKit Medieval Hexagon Pack — rock_single_A
+
+- **Semantic key:** `nature.rock.a.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_A.bin`
+- **Local path:** `assets/models/hexkit/rock_single_A.bin`
+- **Size:** 1.2 KB (1228 bytes)
+- **SHA-256:** `0f038d45b8df2c9efa034e5d3c3635a475a2683e2e741aa9a0cd197c5689e2ce`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for rock_single_A.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — rock_single_C
+
+- **Semantic key:** `nature.rock.c`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_C.gltf`
+- **Local path:** `assets/models/hexkit/rock_single_C.gltf`
+- **Size:** 3.0 KB (3052 bytes)
+- **SHA-256:** `4cbf4a67fa176d2374b4863348fddf7879b892e612dd455ad14173f17172d45b`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Larger boulder variant.
+
+### KayKit Medieval Hexagon Pack — rock_single_C
+
+- **Semantic key:** `nature.rock.c.bin`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_C.bin`
+- **Local path:** `assets/models/hexkit/rock_single_C.bin`
+- **Size:** 2.1 KB (2192 bytes)
+- **SHA-256:** `7d63c76a9f576bda17a63c77d8f7c9f617e11ed57e3459d9c8d5da7ebdf0b8f1`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** Binary buffer for rock_single_C.gltf. Not loaded directly — the .gltf references it as a sibling URI.
+
+### KayKit Medieval Hexagon Pack — hexagons_medieval atlas
+
+- **Semantic key:** `texture.hexkit.atlas`
+- **Author:** Kay Lousberg
+- **Source:** https://www.kaylousberg.com
+- **Retrieved from:** `https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/addons/kaykit_medieval_hexagon_pack/Textures/hexagons_medieval.png`
+- **Local path:** `assets/models/hexkit/hexagons_medieval.png`
+- **Size:** 15.4 KB (15783 bytes)
+- **SHA-256:** `5301a06866ba3be68dcc14cc429bd6d0f69004b72884283715d7e233f2e9782e`
+- **Licence evidence:** `licenses/kaykit-hexagon__LICENSE.txt`
+- **Support the creator:** https://patreon.com/kaylousberg
+- **Used for:** The single shared gradient atlas for EVERY model in models/hexkit/.
+
 ## Creative Commons Attribution 4.0 International
 
 SPDX identifier: `CC-BY-4.0` — <https://creativecommons.org/licenses/by/4.0/legalcode>
@@ -144,4 +1862,4 @@ These assets are reachable and technically useful but their redistribution right
 
 ---
 
-Generated 2026-07-25T22:02:59.048Z by `tools/assets/fetch-assets.mjs`.
+Generated 2026-07-26T02:03:11.959Z by `tools/assets/fetch-assets.mjs`.
