@@ -507,6 +507,41 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
     return { setups: this.#setupCount, shadowPasses: this.#shadowPasses, debug: this.options.debug };
   }
 
+  /**
+   * The depth array texture itself, for consumers that sample the cascades
+   * outside the material graph.
+   *
+   * `src/render/Volumetrics.ts` is the reason this is public: the froxel
+   * integrator needs sun visibility at arbitrary world positions inside the
+   * fog volume, which is not a surface shading query and therefore never
+   * reaches `ShadowBaseNode.setup`. It declares the shape it needs as
+   * `VolumetricShadowProvider`; this getter plus {@link cascadeMatrices},
+   * {@link shadowMapSize} and {@link shadowDistance} satisfy it structurally.
+   */
+  get shadowDepthTexture(): THREE.Texture | null {
+    return this.#shadowMap?.depthTexture ?? null;
+  }
+
+  /**
+   * World → cascade light-clip matrices, one per cascade, in split order.
+   *
+   * Live objects, rewritten in place every frame by `updateBefore`. Consumers
+   * must read them per frame rather than copying once.
+   */
+  get cascadeMatrices(): readonly THREE.Matrix4[] {
+    return this.#matrixValues;
+  }
+
+  /** Edge length in texels of one cascade in the atlas. */
+  get shadowMapSize(): number {
+    return this.options.mapSize;
+  }
+
+  /** Furthest shadowed view distance, in world units. */
+  get shadowDistance(): number {
+    return this.options.shadowDistance;
+  }
+
   /** View-space far distance of each cascade, for debug overlays. */
   get splitDistances(): number[] {
     return this.#cascades.map((cascade) => cascade.splitFar);

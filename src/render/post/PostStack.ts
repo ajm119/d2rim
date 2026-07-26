@@ -507,6 +507,13 @@ export class PostStack implements GameModule {
   #renderScaleOverride: number | null;
 
   #passes: PostPass[] = [];
+  /**
+   * Passes inserted through {@link PostStack.addPass}. They are owned by
+   * whoever added them, so `dispose()` unlinks them instead of destroying
+   * them — double-disposing a pass whose owning module also disposes it
+   * leaves a freed material bound to a live node graph.
+   */
+  readonly #externalPasses = new Set<PostPass>();
   #pool: RenderTargetPool | null = null;
   #sceneTarget: THREE.RenderTarget | null = null;
 
@@ -623,7 +630,11 @@ export class PostStack implements GameModule {
 
   dispose(): void {
     this.#uninstall();
-    for (const pass of this.#passes) pass.dispose();
+    for (const pass of this.#passes) {
+      if (!this.#externalPasses.has(pass)) pass.dispose();
+    }
+    this.#externalPasses.clear();
+    this.#passes = [];
     this.motion.dispose();
     this.grade.dispose();
     this.#pool?.dispose();
@@ -679,6 +690,65 @@ export class PostStack implements GameModule {
 
   get passes(): readonly PostPass[] {
     return this.#passes;
+  }
+
+  /**
+   * Splice an externally-owned pass into the chain.
+   *
+   * The built-in chain is fixed (`taa → bloom → composite → fxaa`) because
+   * those four have a hard ordering relationship with the one place HDR
+   * becomes LDR. Everything else that wants to run inside the chain — light
+   * shafts compositing the volumetric buffer, a screen-space reflection
+   * resolve — is authored in its own module and inserted here, which is what
+   * keeps `PostStack` from importing half the renderer.
+   *
+   * Insertion is by id rather than by index so that a caller does not have to
+   * know how many passes the current tier happens to have enabled.
+   *
+   * @param before id of the pass to insert in front of. Appends when omitted
+   *   or unknown. HDR-domain passes must go before `'post.composite'`.
+   */
+  addPass(pass: PostPass, options: { readonly before?: string } = {}): void {
+    if (this.#passes.some((candidate) => candidate.id === pass.id)) {
+      throw new Error(`[PostStack] a pass with id "${pass.id}" is already in the chain`);
+    }
+    const at =
+      options.before === undefined
+        ? -1
+        : this.#passes.findIndex((candidate) => candidate.id === options.before);
+    this.#passes.splice(at < 0 ? this.#passes.length : at, 0, pass);
+    this.#externalPasses.add(pass);
+
+    // Bring the newcomer up to the state every other pass is already in. A
+    // pass added after `init` would otherwise run its first frame at 1x1 with
+    // an unconfigured graph.
+    if (this.#capabilities !== null) pass.configure(this.#quality, this.#capabilities);
+    pass.setSize(this.#width, this.#height);
+  }
+
+  /** Remove a pass added by {@link PostStack.addPass}. Does not dispose it. */
+  removePass(id: string): boolean {
+    const index = this.#passes.findIndex((candidate) => candidate.id === id);
+    if (index < 0) return false;
+    const removed = this.#passes.splice(index, 1);
+    const pass = removed[0];
+    if (pass !== undefined) this.#externalPasses.delete(pass);
+    return true;
+  }
+
+  /**
+   * The HDR scene colour attachment, before any chain pass has run.
+   *
+   * Exposed for screen-space effects that trace against last frame's radiance:
+   * they run in `lateUpdate`, i.e. *before* this frame's scene draw, so what
+   * they read here is the previous frame's fully-lit colour. That is exactly
+   * the contract `SSR`'s `SceneColorProvider` describes with
+   * `isPreviousFrame: true`. `null` until the first frame has been drawn.
+   */
+  get sceneColorTexture(): THREE.Texture | null {
+    // `textures[0]`, not `.texture`: the target is MRT whenever the tier keeps
+    // a velocity attachment, and `.texture` on an MRT target is the array.
+    return this.#sceneTarget?.textures[0] ?? null;
   }
 
   get stats(): PostStackStats {

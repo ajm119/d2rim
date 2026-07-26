@@ -19,9 +19,27 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    // Array form so the `three` entry can be an exact-match regex. The object
+    // form does prefix matching, which would rewrite `three/webgpu` itself into
+    // `three/webgpu/webgpu`.
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // ONE copy of three, and therefore one set of class identities.
+      //
+      // `three/webgpu` is a complete build: it contains the whole classic core
+      // *plus* the node/TSL renderer. `three/examples/jsm/*` — GLTFLoader,
+      // RGBELoader, KTX2Loader — import bare `'three'`, which resolves to the
+      // classic build. Without this alias the bundle ships both, and every
+      // object the loaders produce is an instance of the *other* copy's
+      // classes. `mesh instanceof THREE.Mesh` is then false for every mesh in
+      // every loaded model, silently, and so is every `instanceof` on their
+      // materials — which is exactly the kind of failure that shows up as
+      // "the props are the wrong colour" three layers away from its cause.
+      //
+      // Aliasing the bare specifier onto the webgpu build collapses the two
+      // into one module, and drops the duplicated core from the bundle.
+      { find: /^three$/, replacement: 'three/webgpu' },
+    ],
   },
   build: {
     target: 'esnext',

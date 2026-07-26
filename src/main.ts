@@ -10,7 +10,8 @@ import * as THREE from 'three/webgpu';
 import { AssetManager } from './assets/AssetManager';
 import { Engine } from './core/Engine';
 import type { GameContext } from './core/types';
-import { ReferenceScene } from './scene/ReferenceScene';
+import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
+import { BloodMoor } from './scene/BloodMoor';
 import { DebugOverlay } from './ui/DebugOverlay';
 
 /**
@@ -39,6 +40,15 @@ export interface D2RimGlobal {
    * never read it back off `window`.
    */
   readonly three: typeof THREE;
+  /**
+   * The assembled renderer.
+   *
+   * Capture scripts and the debug console reach subsystems through this rather
+   * than through the `ServiceLocator`, because it is typed: `d2rim.render.post`
+   * is a `PostStack`, where `services.get('render.post')` needs a cast.
+   */
+  readonly render: FrameGraph;
+  readonly scene: BloodMoor;
 }
 
 declare global {
@@ -91,11 +101,20 @@ const autoStart = new URLSearchParams(window.location.search).get('autostart') !
 
 const engine = new Engine({ canvas, autoStart });
 
-// Registration order is initialisation order. The AssetManager must come first
-// so that it has registered itself as a service before any scene module's
-// `init` runs and asks for it.
+// Registration order *is* frame order — see `render/FrameGraph.ts`, which owns
+// the ordering constraints and the reasoning behind every one of them.
+//
+// Three fixed points bracket it:
+//   - AssetManager first: everything downstream resolves textures and models
+//     through it, and it must have registered before any `init` asks for it.
+//   - the frame graph next: twelve render modules in dependency order.
+//   - content last, so the scene resolves a fully-built renderer.
+const render = buildFrameGraph();
+const scene = new BloodMoor({ settings: render.settings });
+
 engine.add(new AssetManager());
-engine.add(new ReferenceScene());
+for (const module of render.modules) engine.add(module);
+engine.add(scene);
 engine.add(new DebugOverlay());
 
 const ready = engine.ready
@@ -117,6 +136,8 @@ window.__d2rim = {
   },
   ready,
   three: THREE,
+  render,
+  scene,
 };
 
 // Vite HMR: without an explicit teardown the old engine keeps its rAF loop and

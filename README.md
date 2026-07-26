@@ -28,6 +28,14 @@ npm run capture    # headless screenshot of the reference scene
 | `?backend=webgl2` | Force the WebGL2 backend (WebGPU is the default when available) |
 | `?backend=webgpu` | Force WebGPU; fails over to WebGL2 if it cannot initialise      |
 | `?autostart=0`    | Boot without starting the rAF loop; the caller steps frames     |
+| `?quality=low`    | Cheapest tier: FXAA at 0.75 scale, no GTAO, no SSR, 2 cascades   |
+| `?quality=medium` | FXAA, half-res GTAO, no SSR, 3 cascades                          |
+| `?quality=high`   | Default. TAA(8), half-res GTAO and SSR, 4 x 2048 cascades        |
+| `?quality=ultra`  | TAA(16) + sharpen, full-res GTAO, high SSR, 4 x 3072 cascades     |
+
+One `?quality=` value drives every subsystem at once — see
+`src/render/RenderSettings.ts`, which owns the ladder and is the reason there is
+one knob rather than six.
 
 ---
 
@@ -103,10 +111,21 @@ src/
   render/
     RendererFactory.ts  WebGPU-first renderer with WebGL2 fallback
     webgpuCompat.ts     Browser compatibility shims (see below)
+    FrameGraph.ts       THE INTEGRATION POINT. Assembles every render module in
+                        dependency order, closes the seams between them, and
+                        audits every ServiceLocator contract at boot
+    RenderSettings.ts   The one quality ladder and the one weather state
+    Sky.ts / Atmosphere.ts / TimeOfDay.ts    scattering sky, aerial perspective
+    Lighting.ts / CascadedShadowMaps.ts / IBL.ts
+    MaterialLibrary.ts + materials/          triplanar, blending, parallax, wetness
+    Volumetrics.ts      froxel fog, shadowed in-scatter, local fog volumes
+    post/               PostStack, TAA, GTAO, SSR, Bloom, Tonemap, ColorGrade,
+                        LightShafts, Denoise, Motion
     ProceduralSky.ts    HDR equirectangular sky: background + IBL
     ProceduralTextures.ts  Seamless albedo/roughness/normal synthesis
   scene/
-    ReferenceScene.ts   The visual baseline
+    BloodMoor.ts        The showcase scene: the Act I vertical slice
+    ReferenceScene.ts   The phase-1 material chart, kept for regression isolation
   ui/
     DebugOverlay.ts     Backend / FPS / frame count readout
   main.ts               Boot, module registration, window.__d2rim
@@ -172,30 +191,52 @@ are no version checks to maintain.
 
 ---
 
-## Reference scene
+## Showcase scene
 
-`src/scene/ReferenceScene.ts` is the visual baseline the rest of the project is
-calibrated against, not a debug scene. A procedural HDR sky drives both the
-background and the image-based lighting, one warm directional key casts soft
-shadows, and there is no flat ambient term anywhere — all fill comes from the
-sky, which is what gives shadowed faces a cool bounce and lit faces a warm one.
+`src/scene/BloodMoor.ts` is the visual baseline the rest of the project is
+calibrated against: a composed view of Diablo II Act I's Blood Moor, built from
+the project's real photoscanned material sets and real prop models.
 
-The subject is a material response chart: a conductor roughness sweep and a
-dielectric roughness sweep flanking a polished hero object on weathered,
-procedurally textured ground. It exercises the full PBR path — metal and
-dielectric, mirror to matte, normal-mapped and not, shadow caster and receiver —
-while still reading as a composed image. Renderer regressions show up here first.
+It is composed rather than assembled. Three depth planes — foreground rubble
+shelf, midground campfire and ruined wall, background treed ridge — with one
+focal point (the fire, the only warm light in the frame) and one leading line
+(the broken fence running from the lower-left corner back toward it). The
+Barbarian stands between the wall and the fire, idling, which proves the
+41-joint rig loads and animates and gives the moor a scale reference.
 
-Both the sky and the ground maps are generated in code from seeded integer
-hashes, so they cost no download and reproduce exactly.
+The ground is one mesh with a height-blended two-archetype material: wet mud
+underneath, dead grass on top, coverage driven by world height and slope so mud
+collects in the hollows the way water would sort it. Exposed cliff rock is
+deliberately *not* a third splat layer — splatting can only produce rock lying
+flat against the heightfield, so the escarpment is real displaced geometry
+carrying the triplanar `rock` archetype. The ruined wall is boxed courses of the
+parallax-mapped `wetStone` archetype, tiled per block from the block's own world
+size so the coursing stays life-sized.
 
-One subtlety worth knowing before touching the sky: the background is installed
-via `scene.backgroundNode` (sampling the equirect directly in TSL), while IBL
-goes through `scene.environment` (PMREM). Assigning `scene.background` instead
-routes the texture through `CubeMapNode`, which re-projects it into a cube render
-target and loses both resolution and highlight range. The two paths also disagree
-on V orientation, which `ProceduralSky.applyToScene` corrects for the background
-sampler only.
+`TerrainField` is the single authority for ground height: the mesh builder and
+every prop placement sample the same function, which is the only reason props sit
+*on* the ground rather than hovering. Everything derives from one seed and every
+animation reads `TimeState.elapsed`, so `stepFrames(n)` reproduces any frame.
+
+`src/scene/ReferenceScene.ts` — the phase-1 material response chart — is kept
+because it isolates BRDF regressions from art-direction changes, which the
+showcase scene deliberately cannot.
+
+---
+
+## Frame graph
+
+`src/render/FrameGraph.ts` is where six independently-authored subsystems become
+one renderer. Read its module comment before touching render order: it documents
+every seam it closes, including the two fog models (aerial perspective owns
+beyond 96 m, the froxel volume owns nearer, and the near-ground mist term is
+zeroed out of the atmosphere so it is not modelled twice), the single exposure
+authority (`PostStack.composite` — the renderer's own tone mapping is forced
+off and the frame graph asserts it), and the four `ServiceLocator` ids that more
+than one module declares.
+
+`auditServices` prints a connected/degraded table at boot. Nothing in this
+renderer is allowed to silently no-op because a service was never registered.
 
 ---
 
