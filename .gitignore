@@ -30,3 +30,6 @@ playwright-report/
 .DS_Store
 *.log
 npm-debug.log*
+
+# Agent scratch test output
+tests/tmp/
