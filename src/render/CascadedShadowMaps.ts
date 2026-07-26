@@ -76,6 +76,7 @@ import {
   float,
   int,
   interleavedGradientNoise,
+  ivec2,
   min,
   mix,
   normalWorldGeometry,
@@ -85,10 +86,11 @@ import {
   sin,
   smoothstep,
   step,
-  texture,
+  textureLoad,
   uniform,
   uniformArray,
   vec2,
+  vec3,
   vec4,
   getShadowMaterial,
   getShadowRenderObjectFunction,
@@ -152,6 +154,22 @@ export interface CascadedShadowMapOptions {
   normalBiasTexels?: number;
   /** Shadow darkness in `[0, 1]`. 1 = fully occluded is black. Default 1. */
   intensity?: number;
+  /**
+   * Diagnostic visualisation. The node returns a colour instead of a shadow
+   * factor, which three multiplies into the sun's colour, so the whole frame
+   * becomes the debug view without any extra pass.
+   *
+   * - `off` — normal shading.
+   * - `cascades` — tints each cascade, so split placement, blend bands and the
+   *   shadow-distance fade are all directly visible.
+   * - `receiverDepth` — the fragment's depth in its cascade's ortho volume. A
+   *   smooth 0..1 ramp means the cascade fit and matrices are correct.
+   * - `occluderDepth` — the depth actually stored in the shadow map under the
+   *   fragment. Flat white here means the shadow pass rendered nothing.
+   *
+   * Default `off`.
+   */
+  debug?: 'off' | 'cascades' | 'receiverDepth' | 'occluderDepth' | 'shadowMask';
 }
 
 interface ResolvedOptions extends Required<CascadedShadowMapOptions> {}
@@ -172,6 +190,7 @@ const DEFAULTS: ResolvedOptions = {
   depthBiasTexels: 1.2,
   normalBiasTexels: 1.6,
   intensity: 1,
+  debug: 'off',
 };
 
 function resolveOptions(options: CascadedShadowMapOptions): ResolvedOptions {
@@ -446,7 +465,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
   #built = false;
   #reversedDepth = false;
   #node: THREE.Node | null = null;
-  readonly #cameraFrameId = new WeakMap<THREE.Camera, number>();
+  #rendering = false;
 
   constructor(light: THREE.Light, options: CascadedShadowMapOptions = {}) {
     super(light);
@@ -474,6 +493,19 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
     return this.#shadowMap;
   }
 
+  #shadowPasses = 0;
+  #setupCount = 0;
+
+  /**
+   * Diagnostic counters. `setups` counts shader builds, `shadowPasses` counts
+   * cascade render passes issued. Both being zero means the node was never
+   * reached — usually because the light does not have `castShadow` set, or the
+   * material does not have `receiveShadow`.
+   */
+  get diagnostics(): { setups: number; shadowPasses: number; debug: string } {
+    return { setups: this.#setupCount, shadowPasses: this.#shadowPasses, debug: this.options.debug };
+  }
+
   /** View-space far distance of each cascade, for debug overlays. */
   get splitDistances(): number[] {
     return this.#cascades.map((cascade) => cascade.splitFar);
@@ -493,6 +525,13 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
   setShadowDistance(distance: number): void {
     this.options.shadowDistance = Math.max(1, distance);
     this.#uDistance.value = this.options.shadowDistance;
+  }
+
+  /** Switch the diagnostic visualisation. Forces a shader rebuild. */
+  setDebug(mode: NonNullable<CascadedShadowMapOptions['debug']>): void {
+    if (this.options.debug === mode) return;
+    this.options.debug = mode;
+    this.#node = null;
   }
 
   /** Shadow darkness in `[0, 1]`. */
@@ -727,11 +766,23 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
     this.#coordinateSystem = renderer.coordinateSystem;
     this.#build(renderer);
 
-    // Assigns `shadowPositionWorld`, honouring any per-material override.
-    this.setupShadowPosition(builder);
+    // The body must run *inside* an `Fn`: `setupShadowPosition` emits an
+    // assignment to the `shadowPositionWorld` property, and an assignment
+    // written outside a shader function has no scope to land in — the property
+    // then reads as an uninitialised vec3 and every fragment projects to the
+    // same shadow-map texel, which looks exactly like "the shadow map is
+    // empty". three's own `ShadowNode.setup` has the same structure for the
+    // same reason.
+    return Fn(() => {
+      this.setupShadowPosition(builder);
 
-    if (this.#node === null) this.#node = this.#buildShadowNode();
-    return this.#node;
+      if (this.#node === null) {
+        this.#node = this.#buildShadowNode();
+        this.#setupCount++;
+      }
+
+      return this.#node;
+    })();
   }
 
   #buildShadowNode(): THREE.Node {
@@ -798,10 +849,10 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
         const ndc = projected.xyz.div(projected.w);
         // three's node renderer stores shadow maps with the WebGPU texture
         // convention, so v is flipped relative to the [0,1] clip mapping.
-        const uv = vec2(ndc.x, ndc.y.oneMinus()).toVar('csmUV');
-        const receiver = ndc.z.toVar('csmReceiver');
+        const uv = vec2(ndc.x, ndc.y.oneMinus()).toVar();
+        const receiver = ndc.z.toVar();
 
-        const lit = float(1).toVar('csmLit');
+        const lit = float(1).toVar();
 
         // Outside this cascade's volume there is nothing to test.
         const inside = uv.x
@@ -813,8 +864,26 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
           .and(receiver.lessThanEqual(1));
 
         If(inside, () => {
-          const readDepth = (offset: THREE.Node<'vec2'>) =>
-            texture(depthTexture, uv.add(offset), 0).depth(layerIndex).r;
+          // `textureLoad` rather than a filtered sample, for three reasons:
+          // the map is `NearestFilter` so a sampler would buy nothing; an
+          // explicit texel fetch needs no implicit derivative, which WGSL
+          // forbids inside the non-uniform control flow this function runs in;
+          // and three's GLSL backend only appends the depth-texture `.x`
+          // swizzle on the load path, so this is also the only form that
+          // compiles identically on both backends.
+          const readDepth = (offset: THREE.Node<'vec2'>) => {
+            const coord = clamp(
+              uv.add(offset).mul(mapSize),
+              vec2(0, 0),
+              vec2(mapSize - 1, mapSize - 1),
+            );
+            // `TextureNode` is declared `vec4` upstream, but three's own
+            // `TextureNode.getNodeType()` returns `float` for a depth texture
+            // and both backends emit a scalar fetch. The cast states that.
+            return textureLoad(depthTexture, ivec2(coord)).depth(
+              layerIndex,
+            ) as unknown as THREE.Node<'float'>;
+          };
 
           // -- blocker search ------------------------------------------
           //
@@ -822,8 +891,8 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
           // fixed search radius. Done branchlessly with `step` so the loop is
           // straight-line code.
           const searchRadius = float(blockerSearchTexels * invMapSize);
-          const blockerSum = float(0).toVar('csmBlockerSum');
-          const blockerCount = float(0).toVar('csmBlockerCount');
+          const blockerSum = float(0).toVar();
+          const blockerCount = float(0).toVar();
 
           for (const [dx, dy] of blockerDisc) {
             const rx = rotCos.mul(dx).sub(rotSin.mul(dy));
@@ -856,7 +925,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
             ).mul(invMapSize);
 
             // -- PCF ---------------------------------------------------
-            const visible = float(0).toVar('csmVisible');
+            const visible = float(0).toVar();
             for (const [dx, dy] of filterDisc) {
               const rx = rotCos.mul(dx).sub(rotSin.mul(dy));
               const ry = rotSin.mul(dx).add(rotCos.mul(dy));
@@ -930,30 +999,99 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
       const fade = smoothstep(this.#uFade, this.#uDistance, viewDepth);
       const faded = mix(result, float(1), fade);
 
+      const debug = this.options.debug;
+      if (debug !== 'off') {
+        const layerIndex = int(index);
+        const cascadeParams = params.element(layerIndex);
+        const offsetPosition = worldPosition.add(worldNormal.mul(cascadeParams.w));
+        const projected = matrices.element(layerIndex).mul(vec4(offsetPosition, 1.0));
+        const ndc = projected.xyz.div(projected.w);
+        const shadowUV = vec2(ndc.x, ndc.y.oneMinus());
+
+        if (debug === 'receiverDepth') {
+          // Banded so that the small depth range a cascade actually occupies is
+          // still legible; a flat colour here means the fit is degenerate.
+          const banded = ndc.z.mul(16).fract();
+          return vec3(banded, banded, banded);
+        }
+        if (debug === 'shadowMask' || debug === 'occluderDepth') {
+          const coord = clamp(
+            shadowUV.mul(mapSize),
+            vec2(0, 0),
+            vec2(mapSize - 1, mapSize - 1),
+          );
+          const occluder = textureLoad(depthTexture, ivec2(coord)).depth(
+            layerIndex,
+          ) as unknown as THREE.Node<'float'>;
+          if (debug === 'shadowMask') {
+            // Single unfiltered, unbiased comparison. If this shows shadows and
+            // the normal path does not, the fault is in the filter, not the fit.
+            const mask = step(ndc.z.sub(cascadeParams.z), occluder);
+            return vec3(mask, mask, mask);
+          }
+          const banded = occluder.mul(16).fract();
+          return vec3(banded, banded, banded);
+        }
+        // 'cascades': a distinct hue per cascade, modulated by the shadow term
+        // so that the shadows themselves stay legible inside the tint.
+        const palette: Array<[number, number, number]> = [
+          [1.0, 0.35, 0.35],
+          [0.35, 1.0, 0.45],
+          [0.4, 0.55, 1.0],
+          [1.0, 0.9, 0.35],
+        ];
+        let tint: THREE.Node<'vec3'> = vec3(...(palette[0] as [number, number, number]));
+        for (let i = 1; i < cascades; i++) {
+          const rgb = palette[i % palette.length] as [number, number, number];
+          tint = mix(tint, vec3(...rgb), step(float(i - 0.5), index));
+        }
+        return tint.mul(faded.mul(0.75).add(0.25));
+      }
+
       return mix(float(1), faded, this.#uIntensity);
     })();
   }
 
   // -- rendering ----------------------------------------------------------
 
+  /**
+   * Refit and redraw the cascades.
+   *
+   * Deliberately **not** gated on `NodeFrame.frameId`, which three only
+   * increments from its own `setAnimationLoop`; an engine that drives
+   * `renderer.render()` itself (as this one does, so that `stepFrames` can be
+   * deterministic) leaves it pinned at 0 forever, and a frame-id guard would
+   * silently freeze the shadow map after the first frame.
+   *
+   * Callers that want manual control set `light.shadow.autoUpdate = false` and
+   * raise `light.shadow.needsUpdate` when something moved — worth doing for a
+   * static scene, since a cascade redraw is a full scene traversal.
+   */
   override updateBefore(frame: THREE.NodeFrame): boolean | undefined {
     const shadowFrame = frame as unknown as ShadowFrame;
     const { renderer, scene, camera } = shadowFrame;
     if (renderer === null || scene === null || camera === null) return undefined;
     if (!this.#built || this.#arrayCamera === null || this.#shadowMap === null) return undefined;
 
-    const shadow = (this.light as unknown as LightWithShadow).shadow;
-    let needsUpdate = shadow === undefined || shadow.needsUpdate || shadow.autoUpdate;
-    if (needsUpdate) {
-      // Guard against the same camera being rendered twice in a frame (the
-      // capture path renders once to a target and once to the canvas).
-      if (this.#cameraFrameId.get(camera) === shadowFrame.frameId) needsUpdate = false;
-      this.#cameraFrameId.set(camera, shadowFrame.frameId);
-    }
-    if (!needsUpdate) return undefined;
+    // The cascade pass renders the scene again. It swaps in a depth-only
+    // override material that does not contain this node, so recursion should be
+    // impossible — but a guard costs nothing and turns a hypothetical infinite
+    // recursion into a dropped frame.
+    if (this.#rendering) return undefined;
 
-    this.#fitCascades(camera);
-    this.#renderShadowMaps(renderer, scene, camera);
+    const shadow = (this.light as unknown as LightWithShadow).shadow;
+    if (shadow !== undefined && shadow.autoUpdate === false && shadow.needsUpdate === false) {
+      return undefined;
+    }
+
+    this.#rendering = true;
+    try {
+      this.#fitCascades(camera);
+      this.#renderShadowMaps(renderer, scene, camera);
+      this.#shadowPasses++;
+    } finally {
+      this.#rendering = false;
+    }
 
     if (shadow !== undefined) shadow.needsUpdate = false;
     return undefined;

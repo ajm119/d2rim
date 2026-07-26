@@ -319,7 +319,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
       "credit": {
-        "title": "KayKit Adventurers — Barbarian",
+        "title": "KayKit Adventurers \u2014 Barbarian",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -337,12 +337,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
       "credit": {
-        "title": "KayKit Adventurers — Rogue (hooded)",
+        "title": "KayKit Adventurers \u2014 Rogue (hooded)",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Rogue Encampment NPCs — Kashya and the rogue guard line. The hood reads correctly for Act I sisterhood silhouettes.",
+      "usage": "Rogue Encampment NPCs \u2014 Kashya and the rogue guard line. The hood reads correctly for Act I sisterhood silhouettes.",
       "selectionRationale": "Hooded variant chosen over the bare Rogue specifically because the silhouette matches the Act I rogues. Same 41-joint rig and same clip set as the Barbarian, so NPC idle/gesture logic is shared code."
     },
     {
@@ -355,7 +355,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
       "credit": {
-        "title": "KayKit Adventurers — Knight",
+        "title": "KayKit Adventurers \u2014 Knight",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -373,7 +373,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
       "credit": {
-        "title": "KayKit Adventurers — Mage",
+        "title": "KayKit Adventurers \u2014 Mage",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -391,7 +391,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
       "credit": {
-        "title": "KayKit Skeletons — Warrior",
+        "title": "KayKit Skeletons \u2014 Warrior",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -409,7 +409,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
       "credit": {
-        "title": "KayKit Skeletons — Minion",
+        "title": "KayKit Skeletons \u2014 Minion",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -427,12 +427,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
       "credit": {
-        "title": "KayKit Skeletons — Rogue",
+        "title": "KayKit Skeletons \u2014 Rogue",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Ranged undead — the corrupted rogue archers of Act I.",
+      "usage": "Ranged undead \u2014 the corrupted rogue archers of Act I.",
       "selectionRationale": "Carries the 1H_Ranged_* and 2H_Ranged_* clips, giving a genuine ranged attack cycle rather than a reskinned melee swing."
     },
     {
@@ -445,7 +445,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
       "credit": {
-        "title": "KayKit Skeletons — Mage",
+        "title": "KayKit Skeletons \u2014 Mage",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -463,7 +463,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — BarrelLarge",
+        "title": "KayKit Dungeon Remastered \u2014 BarrelLarge",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -481,7 +481,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — BarrelSmall",
+        "title": "KayKit Dungeon Remastered \u2014 BarrelSmall",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -499,7 +499,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — BarrelStack",
+        "title": "KayKit Dungeon Remastered \u2014 BarrelStack",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -517,7 +517,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — CrateLarge",
+        "title": "KayKit Dungeon Remastered \u2014 CrateLarge",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -535,7 +535,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — CrateSmall",
+        "title": "KayKit Dungeon Remastered \u2014 CrateSmall",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -553,7 +553,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — CrateStack",
+        "title": "KayKit Dungeon Remastered \u2014 CrateStack",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -571,7 +571,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Keg",
+        "title": "KayKit Dungeon Remastered \u2014 Keg",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -589,7 +589,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Chest",
+        "title": "KayKit Dungeon Remastered \u2014 Chest",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -607,7 +607,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — ChestGold",
+        "title": "KayKit Dungeon Remastered \u2014 ChestGold",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -625,7 +625,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Torch",
+        "title": "KayKit Dungeon Remastered \u2014 Torch",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -643,12 +643,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — TorchLit",
+        "title": "KayKit Dungeon Remastered \u2014 TorchLit",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Lit torch — the primary practical light source for cave interiors, paired with a point light and fire particle.",
+      "usage": "Lit torch \u2014 the primary practical light source for cave interiors, paired with a point light and fire particle.",
       "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
     },
     {
@@ -661,7 +661,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — TorchMounted",
+        "title": "KayKit Dungeon Remastered \u2014 TorchMounted",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -679,7 +679,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — CandleLit",
+        "title": "KayKit Dungeon Remastered \u2014 CandleLit",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -697,7 +697,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — RubbleLarge",
+        "title": "KayKit Dungeon Remastered \u2014 RubbleLarge",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -715,7 +715,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — RubbleHalf",
+        "title": "KayKit Dungeon Remastered \u2014 RubbleHalf",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -733,7 +733,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Pillar",
+        "title": "KayKit Dungeon Remastered \u2014 Pillar",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -751,7 +751,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — BannerRed",
+        "title": "KayKit Dungeon Remastered \u2014 BannerRed",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -769,7 +769,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — TableLong",
+        "title": "KayKit Dungeon Remastered \u2014 TableLong",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -787,7 +787,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Stool",
+        "title": "KayKit Dungeon Remastered \u2014 Stool",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -805,7 +805,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — SwordShield",
+        "title": "KayKit Dungeon Remastered \u2014 SwordShield",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -823,7 +823,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Barrier",
+        "title": "KayKit Dungeon Remastered \u2014 Barrier",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -841,7 +841,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — BarrierCorner",
+        "title": "KayKit Dungeon Remastered \u2014 BarrierCorner",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -859,7 +859,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Wall",
+        "title": "KayKit Dungeon Remastered \u2014 Wall",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -877,7 +877,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — WallCorner",
+        "title": "KayKit Dungeon Remastered \u2014 WallCorner",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -895,7 +895,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — WallDoorway",
+        "title": "KayKit Dungeon Remastered \u2014 WallDoorway",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -913,12 +913,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — WallBroken",
+        "title": "KayKit Dungeon Remastered \u2014 WallBroken",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Ruined wall — Den of Evil and the Cathedral ruins.",
+      "usage": "Ruined wall \u2014 Den of Evil and the Cathedral ruins.",
       "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
     },
     {
@@ -931,7 +931,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — WallCracked",
+        "title": "KayKit Dungeon Remastered \u2014 WallCracked",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -949,7 +949,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — FloorDirt",
+        "title": "KayKit Dungeon Remastered \u2014 FloorDirt",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -967,7 +967,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — FloorDirtRocky",
+        "title": "KayKit Dungeon Remastered \u2014 FloorDirtRocky",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -985,7 +985,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — FloorTile",
+        "title": "KayKit Dungeon Remastered \u2014 FloorTile",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -1003,7 +1003,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — FloorWood",
+        "title": "KayKit Dungeon Remastered \u2014 FloorWood",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -1021,7 +1021,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Dungeon Remastered — Stairs",
+        "title": "KayKit Dungeon Remastered \u2014 Stairs",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -1032,7 +1032,7 @@
     {
       "key": "terrain.mud.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_diff_2k.jpg",
       "out": "textures/terrain-mud-albedo.jpg",
@@ -1049,7 +1049,7 @@
     {
       "key": "terrain.mud.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_nor_2k.jpg",
       "out": "textures/terrain-mud-normal.jpg",
@@ -1066,7 +1066,7 @@
     {
       "key": "terrain.mud.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_rough_2k.jpg",
       "out": "textures/terrain-mud-roughness.jpg",
@@ -1083,7 +1083,7 @@
     {
       "key": "terrain.mud.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_AO_2k.jpg",
       "out": "textures/terrain-mud-ao.jpg",
@@ -1100,7 +1100,7 @@
     {
       "key": "terrain.grass.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_diff_2k.jpg",
       "out": "textures/terrain-grass-albedo.jpg",
@@ -1111,13 +1111,13 @@
         "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
         "sourceUrl": "https://polyhaven.com"
       },
-      "usage": "Dead/patchy grass over rock — the transition band between the moor and the cliffs.",
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
       "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
     },
     {
       "key": "terrain.grass.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_nor_2k.jpg",
       "out": "textures/terrain-grass-normal.jpg",
@@ -1128,13 +1128,13 @@
         "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
         "sourceUrl": "https://polyhaven.com"
       },
-      "usage": "Dead/patchy grass over rock — the transition band between the moor and the cliffs.",
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
       "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
     },
     {
       "key": "terrain.grass.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_rough_2k.jpg",
       "out": "textures/terrain-grass-roughness.jpg",
@@ -1145,13 +1145,13 @@
         "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
         "sourceUrl": "https://polyhaven.com"
       },
-      "usage": "Dead/patchy grass over rock — the transition band between the moor and the cliffs.",
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
       "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
     },
     {
       "key": "terrain.grass.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_ao_2k.jpg",
       "out": "textures/terrain-grass-ao.jpg",
@@ -1162,13 +1162,13 @@
         "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
         "sourceUrl": "https://polyhaven.com"
       },
-      "usage": "Dead/patchy grass over rock — the transition band between the moor and the cliffs.",
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
       "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
     },
     {
       "key": "rock.cliff.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/rock_05_2k_jpg/rock_05_diff_2k.jpg",
       "out": "textures/rock-cliff-albedo.jpg",
@@ -1180,12 +1180,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cliff faces, cave walls, boulders.",
-      "selectionRationale": "Hard angular stone with deep crevices — the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
     },
     {
       "key": "rock.cliff.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/rock_05_2k_jpg/rock_05_nor_2k.jpg",
       "out": "textures/rock-cliff-normal.jpg",
@@ -1197,12 +1197,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cliff faces, cave walls, boulders.",
-      "selectionRationale": "Hard angular stone with deep crevices — the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
     },
     {
       "key": "rock.cliff.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/rock_05_2k_jpg/rock_05_rough_2k.jpg",
       "out": "textures/rock-cliff-roughness.jpg",
@@ -1214,12 +1214,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cliff faces, cave walls, boulders.",
-      "selectionRationale": "Hard angular stone with deep crevices — the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
     },
     {
       "key": "rock.cliff.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/rock_05_2k_jpg/rock_05_ao_2k.jpg",
       "out": "textures/rock-cliff-ao.jpg",
@@ -1231,12 +1231,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cliff faces, cave walls, boulders.",
-      "selectionRationale": "Hard angular stone with deep crevices — the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
     },
     {
       "key": "rock.mossy.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/mossy_rock_2k_jpg/mossy_rock_diff_2k.jpg",
       "out": "textures/rock-mossy-albedo.jpg",
@@ -1253,7 +1253,7 @@
     {
       "key": "rock.mossy.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/mossy_rock_2k_jpg/mossy_rock_nor_2k.jpg",
       "out": "textures/rock-mossy-normal.jpg",
@@ -1270,7 +1270,7 @@
     {
       "key": "rock.mossy.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/mossy_rock_2k_jpg/mossy_rock_rough_2k.jpg",
       "out": "textures/rock-mossy-roughness.jpg",
@@ -1287,7 +1287,7 @@
     {
       "key": "rock.mossy.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/mossy_rock_2k_jpg/mossy_rock_ao_2k.jpg",
       "out": "textures/rock-mossy-ao.jpg",
@@ -1304,7 +1304,7 @@
     {
       "key": "stone.masonry.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_diff_2k.jpg",
       "out": "textures/stone-masonry-albedo.jpg",
@@ -1316,12 +1316,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cathedral, crypt and tower masonry.",
-      "selectionRationale": "Cracked dressed sandstone — the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
     },
     {
       "key": "stone.masonry.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_nor_2k.jpg",
       "out": "textures/stone-masonry-normal.jpg",
@@ -1333,12 +1333,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cathedral, crypt and tower masonry.",
-      "selectionRationale": "Cracked dressed sandstone — the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
     },
     {
       "key": "stone.masonry.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_rough_2k.jpg",
       "out": "textures/stone-masonry-roughness.jpg",
@@ -1350,12 +1350,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cathedral, crypt and tower masonry.",
-      "selectionRationale": "Cracked dressed sandstone — the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
     },
     {
       "key": "stone.masonry.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_AO_2k.jpg",
       "out": "textures/stone-masonry-ao.jpg",
@@ -1367,12 +1367,12 @@
         "sourceUrl": "https://polyhaven.com"
       },
       "usage": "Cathedral, crypt and tower masonry.",
-      "selectionRationale": "Cracked dressed sandstone — the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
     },
     {
       "key": "wood.plank.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_diff_2k.jpg",
       "out": "textures/wood-plank-albedo.jpg",
@@ -1389,7 +1389,7 @@
     {
       "key": "wood.plank.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_nor_2k.jpg",
       "out": "textures/wood-plank-normal.jpg",
@@ -1406,7 +1406,7 @@
     {
       "key": "wood.plank.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_rough_2k.jpg",
       "out": "textures/wood-plank-roughness.jpg",
@@ -1423,7 +1423,7 @@
     {
       "key": "wood.plank.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_ao_2k.jpg",
       "out": "textures/wood-plank-ao.jpg",
@@ -1440,7 +1440,7 @@
     {
       "key": "wood.floor.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Color.jpg",
       "out": "textures/wood-floor-albedo.jpg",
@@ -1457,7 +1457,7 @@
     {
       "key": "wood.floor.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Normal.jpg",
       "out": "textures/wood-floor-normal.jpg",
@@ -1474,7 +1474,7 @@
     {
       "key": "wood.floor.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Roughness.jpg",
       "out": "textures/wood-floor-roughness.jpg",
@@ -1491,7 +1491,7 @@
     {
       "key": "wood.floor.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_AmbientOcclusion.jpg",
       "out": "textures/wood-floor-ao.jpg",
@@ -1508,7 +1508,7 @@
     {
       "key": "wood.bark.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_diff_2k.jpg",
       "out": "textures/wood-bark-albedo.jpg",
@@ -1525,7 +1525,7 @@
     {
       "key": "wood.bark.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_nor_2k.jpg",
       "out": "textures/wood-bark-normal.jpg",
@@ -1542,7 +1542,7 @@
     {
       "key": "wood.bark.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_rough_2k.jpg",
       "out": "textures/wood-bark-roughness.jpg",
@@ -1559,7 +1559,7 @@
     {
       "key": "wood.bark.ao",
       "tier": "core",
-      "role": "texture",
+      "role": "ao",
       "source": "aframe-enviropacks",
       "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_ao_2k.jpg",
       "out": "textures/wood-bark-ao.jpg",
@@ -1576,7 +1576,7 @@
     {
       "key": "metal.iron.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/Metal009_2K-JPG/Metal009_2K_Color.jpg",
       "out": "textures/metal-iron-albedo.jpg",
@@ -1593,7 +1593,7 @@
     {
       "key": "metal.iron.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/Metal009_2K-JPG/Metal009_2K_Normal.jpg",
       "out": "textures/metal-iron-normal.jpg",
@@ -1610,7 +1610,7 @@
     {
       "key": "metal.iron.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/Metal009_2K-JPG/Metal009_2K_Roughness.jpg",
       "out": "textures/metal-iron-roughness.jpg",
@@ -1627,7 +1627,7 @@
     {
       "key": "metal.iron.metalness",
       "tier": "core",
-      "role": "texture",
+      "role": "metalness",
       "source": "aframe-enviropacks",
       "member": "asset/Metal009_2K-JPG/Metal009_2K_Metalness.jpg",
       "out": "textures/metal-iron-metalness.jpg",
@@ -1644,7 +1644,7 @@
     {
       "key": "cloth.albedo",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "aframe-enviropacks",
       "member": "asset/Fabric026_2K-JPG/Fabric026_2K_Color.jpg",
       "out": "textures/cloth-albedo.jpg",
@@ -1661,7 +1661,7 @@
     {
       "key": "cloth.normal",
       "tier": "core",
-      "role": "texture",
+      "role": "normal",
       "source": "aframe-enviropacks",
       "member": "asset/Fabric026_2K-JPG/Fabric026_2K_Normal.jpg",
       "out": "textures/cloth-normal.jpg",
@@ -1678,7 +1678,7 @@
     {
       "key": "cloth.roughness",
       "tier": "core",
-      "role": "texture",
+      "role": "roughness",
       "source": "aframe-enviropacks",
       "member": "asset/Fabric026_2K-JPG/Fabric026_2K_Roughness.jpg",
       "out": "textures/cloth-roughness.jpg",
@@ -1706,7 +1706,7 @@
         "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
         "sourceUrl": "https://polyhaven.com"
       },
-      "usage": "The cold grey-sky key for the Blood Moor and Cold Plains — the overcast mood Act I actually wants.",
+      "usage": "The cold grey-sky key for the Blood Moor and Cold Plains \u2014 the overcast mood Act I actually wants.",
       "selectionRationale": "The brief explicitly asked for an overcast/grey sky and the existing env.overcast (pmndrs \"forest\") is a green-tinted woodland plate, not a grey one. This is a genuine flat winter overcast: no sun disc, fully diffuse, desaturated. Taken at 2K because that is the only resolution shipped for this plate; it is the single largest asset added and is worth the 5.7 MB as the default exterior key."
     },
     {
@@ -1740,7 +1740,7 @@
         "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
         "sourceUrl": "https://polyhaven.com"
       },
-      "usage": "The darkest exterior key — deep cave mouths and night surface areas where torches must dominate.",
+      "usage": "The darkest exterior key \u2014 deep cave mouths and night surface areas where torches must dominate.",
       "selectionRationale": "Near-zero ambient with no moon disc, so practical lights (torches, spells) carry the entire frame. Complements env.cave, which still has a faint sky term."
     },
     {
@@ -1770,7 +1770,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep00",
+        "title": "Kenney RPG Audio \u2014 footstep00",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1788,7 +1788,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep01",
+        "title": "Kenney RPG Audio \u2014 footstep01",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1806,7 +1806,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep02",
+        "title": "Kenney RPG Audio \u2014 footstep02",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1824,7 +1824,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep03",
+        "title": "Kenney RPG Audio \u2014 footstep03",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1842,7 +1842,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep04",
+        "title": "Kenney RPG Audio \u2014 footstep04",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1860,7 +1860,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep05",
+        "title": "Kenney RPG Audio \u2014 footstep05",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1878,7 +1878,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep06",
+        "title": "Kenney RPG Audio \u2014 footstep06",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1896,7 +1896,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — footstep07",
+        "title": "Kenney RPG Audio \u2014 footstep07",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1914,7 +1914,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — knifeSlice",
+        "title": "Kenney RPG Audio \u2014 knifeSlice",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1932,7 +1932,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — knifeSlice2",
+        "title": "Kenney RPG Audio \u2014 knifeSlice2",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1950,7 +1950,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — chop",
+        "title": "Kenney RPG Audio \u2014 chop",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -1968,13 +1968,13 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — metalClick",
+        "title": "Kenney RPG Audio \u2014 metalClick",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
       },
       "usage": "Blade-on-armour and parry tick.",
-      "selectionRationale": "Short bright metallic transient — the standard cue for a blocked or glancing hit."
+      "selectionRationale": "Short bright metallic transient \u2014 the standard cue for a blocked or glancing hit."
     },
     {
       "key": "audio.combat.metal.heavy",
@@ -1986,7 +1986,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — metalPot1",
+        "title": "Kenney RPG Audio \u2014 metalPot1",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2004,7 +2004,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — drawKnife1",
+        "title": "Kenney RPG Audio \u2014 drawKnife1",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2022,7 +2022,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — cloth1",
+        "title": "Kenney RPG Audio \u2014 cloth1",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2040,7 +2040,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — dropLeather",
+        "title": "Kenney RPG Audio \u2014 dropLeather",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2058,7 +2058,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — creak1",
+        "title": "Kenney RPG Audio \u2014 creak1",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2076,7 +2076,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — doorOpen_1",
+        "title": "Kenney RPG Audio \u2014 doorOpen_1",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2094,7 +2094,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — doorClose_1",
+        "title": "Kenney RPG Audio \u2014 doorClose_1",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2112,12 +2112,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — handleCoins",
+        "title": "Kenney RPG Audio \u2014 handleCoins",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
       },
-      "usage": "Gold pickup — a Diablo signature sound.",
+      "usage": "Gold pickup \u2014 a Diablo signature sound.",
       "selectionRationale": "Unmistakably coins; the single most recognisable loot cue in the pack."
     },
     {
@@ -2130,7 +2130,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
       "credit": {
-        "title": "Kenney RPG Audio — handleSmallLeather",
+        "title": "Kenney RPG Audio \u2014 handleSmallLeather",
         "author": "Kenney Vleugels (Kenney.nl)",
         "sourceUrl": "https://kenney.nl/assets/rpg-audio",
         "supportUrl": "https://support.kenney.nl"
@@ -2148,7 +2148,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — press",
+        "title": "uisfx organic \u2014 press",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2165,7 +2165,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — hover",
+        "title": "uisfx organic \u2014 hover",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2182,7 +2182,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — select",
+        "title": "uisfx organic \u2014 select",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2199,7 +2199,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — error",
+        "title": "uisfx organic \u2014 error",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2216,7 +2216,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — success",
+        "title": "uisfx organic \u2014 success",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2233,7 +2233,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — open",
+        "title": "uisfx organic \u2014 open",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2250,7 +2250,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "uisfx:LICENSE-AUDIO",
       "credit": {
-        "title": "uisfx organic — close",
+        "title": "uisfx organic \u2014 close",
         "author": "Yuki Capital",
         "sourceUrl": "https://www.npmjs.com/package/uisfx"
       },
@@ -2267,12 +2267,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — tent",
+        "title": "KayKit Medieval Hexagon Pack \u2014 tent",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "THE Rogue Encampment building block — the canvas tents the camp is made of.",
+      "usage": "THE Rogue Encampment building block \u2014 the canvas tents the camp is made of.",
       "selectionRationale": "The encampment gap-filler. Nothing in the dungeon pack reads as a camp; this does, and it pairs with the cloth.* texture set for any larger hero tent built from custom geometry."
     },
     {
@@ -2285,12 +2285,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — tent",
+        "title": "KayKit Medieval Hexagon Pack \u2014 tent",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for tent.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for tent.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2303,7 +2303,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — fence_wood_straight",
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2321,12 +2321,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — fence_wood_straight",
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for fence_wood_straight.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for fence_wood_straight.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2339,12 +2339,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — fence_wood_straight_gate",
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight_gate",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Encampment gate — the exit to the Blood Moor.",
+      "usage": "Encampment gate \u2014 the exit to the Blood Moor.",
       "selectionRationale": "Matching gate piece for the same palisade run, so the camp has a readable entrance."
     },
     {
@@ -2357,12 +2357,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — fence_wood_straight_gate",
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight_gate",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for fence_wood_straight_gate.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for fence_wood_straight_gate.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2375,7 +2375,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — weaponrack",
+        "title": "KayKit Medieval Hexagon Pack \u2014 weaponrack",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2393,12 +2393,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — weaponrack",
+        "title": "KayKit Medieval Hexagon Pack \u2014 weaponrack",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for weaponrack.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for weaponrack.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2411,7 +2411,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — sack",
+        "title": "KayKit Medieval Hexagon Pack \u2014 sack",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2429,12 +2429,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — sack",
+        "title": "KayKit Medieval Hexagon Pack \u2014 sack",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for sack.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for sack.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2447,7 +2447,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — crate_open",
+        "title": "KayKit Medieval Hexagon Pack \u2014 crate_open",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2465,12 +2465,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — crate_open",
+        "title": "KayKit Medieval Hexagon Pack \u2014 crate_open",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for crate_open.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for crate_open.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2483,7 +2483,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — bucket_water",
+        "title": "KayKit Medieval Hexagon Pack \u2014 bucket_water",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2501,12 +2501,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — bucket_water",
+        "title": "KayKit Medieval Hexagon Pack \u2014 bucket_water",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for bucket_water.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for bucket_water.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2519,7 +2519,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — resource_lumber",
+        "title": "KayKit Medieval Hexagon Pack \u2014 resource_lumber",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2537,12 +2537,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — resource_lumber",
+        "title": "KayKit Medieval Hexagon Pack \u2014 resource_lumber",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for resource_lumber.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for resource_lumber.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2555,7 +2555,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — tree_single_A",
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_A",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2573,12 +2573,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — tree_single_A",
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_A",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for tree_single_A.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for tree_single_A.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2591,7 +2591,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — tree_single_B",
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_B",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2609,12 +2609,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — tree_single_B",
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_B",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for tree_single_B.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for tree_single_B.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2627,7 +2627,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — rock_single_A",
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_A",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2645,12 +2645,12 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — rock_single_A",
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_A",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for rock_single_A.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for rock_single_A.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
@@ -2663,7 +2663,7 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — rock_single_C",
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_C",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
@@ -2681,25 +2681,25 @@
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — rock_single_C",
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_C",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"
       },
-      "usage": "Binary buffer for rock_single_C.gltf. Not loaded directly — the .gltf references it as a sibling URI.",
+      "usage": "Binary buffer for rock_single_C.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
       "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
     },
     {
       "key": "texture.hexkit.atlas",
       "tier": "core",
-      "role": "texture",
+      "role": "albedo",
       "source": "kaykit-hexagon",
       "path": "addons/kaykit_medieval_hexagon_pack/Textures/hexagons_medieval.png",
       "out": "models/hexkit/hexagons_medieval.png",
       "license": "CC0-1.0",
       "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
       "credit": {
-        "title": "KayKit Medieval Hexagon Pack — hexagons_medieval atlas",
+        "title": "KayKit Medieval Hexagon Pack \u2014 hexagons_medieval atlas",
         "author": "Kay Lousberg",
         "sourceUrl": "https://www.kaylousberg.com",
         "supportUrl": "https://patreon.com/kaylousberg"

@@ -33,3 +33,12 @@ npm-debug.log*
 
 # Agent scratch test output
 tests/tmp/
+
+# Agent probe/debug scratch
+probe-*.html
+probe-*.ts
+probe-*.mjs
+sky-check.html
+sky-shot.mjs
+dev-server.sh
+src/render/__*.ts

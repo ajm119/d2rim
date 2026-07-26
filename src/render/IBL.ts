@@ -236,10 +236,13 @@ export const IBLKey = serviceKey<IBLService>('render.ibl');
  * ```
  *
  * The intuition: a smooth surface's specular lobe is narrow, so a diffuse
- * occlusion value computed over the whole hemisphere massively over-darkens it;
- * the roughness-driven exponent walks the term from "barely occluded" at
- * roughness 0 to "as occluded as the diffuse" at roughness 1. Grazing angles
- * (small `N·V`) see more of the occluding geometry, so they darken faster.
+ * occlusion value computed over the whole hemisphere over-darkens it. The
+ * roughness-driven exponent walks the term from "barely occluded" at roughness
+ * 0 — where, viewed head on, it can exceed the diffuse AO — to exactly the
+ * diffuse AO at roughness 1, where the specular lobe covers the same hemisphere
+ * the AO was integrated over. The `N·V` term is what makes it angle dependent:
+ * at grazing incidence the narrow lobe skims along the occluding geometry
+ * instead of escaping past it, so smooth surfaces darken there too.
  *
  * This is the same expression three.js's `PhysicalLightingModel` applies
  * internally; it is duplicated here in plain JS so the behaviour is pinned by a
@@ -285,7 +288,8 @@ export function horizonOcclusion(rDotNg: number, fade = 1): number {
  */
 export function roughnessToMip(roughness: number, mipCount: number): number {
   const levels = Math.max(1, mipCount);
-  return Math.min(levels - 1, Math.max(0, roughness)) * (levels - 1);
+  const clamped = Math.min(1, Math.max(0, roughness));
+  return clamped * (levels - 1);
 }
 
 /**
@@ -598,9 +602,6 @@ export function registerIBL(ctx: GameContext, options: IBLOptions = {}): IBLModu
   return module;
 }
 
-// `exp2` is imported for the documented TSL form of specular occlusion below;
-// three applies its own copy internally, so the node is exported rather than
-// installed, for materials that need the term outside the standard PBR path.
 /**
  * TSL form of {@link computeSpecularOcclusion}.
  *

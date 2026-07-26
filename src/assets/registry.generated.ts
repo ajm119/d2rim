@@ -433,7 +433,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.mud.albedo': {
     path: 'assets/textures/terrain-mud-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1551971,
@@ -441,7 +441,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.mud.normal': {
     path: 'assets/textures/terrain-mud-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1481375,
@@ -449,7 +449,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.mud.roughness': {
     path: 'assets/textures/terrain-mud-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 807717,
@@ -457,7 +457,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.mud.ao': {
     path: 'assets/textures/terrain-mud-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 732689,
@@ -465,7 +465,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.grass.albedo': {
     path: 'assets/textures/terrain-grass-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 2624635,
@@ -473,7 +473,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.grass.normal': {
     path: 'assets/textures/terrain-grass-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1518350,
@@ -481,7 +481,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.grass.roughness': {
     path: 'assets/textures/terrain-grass-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 754111,
@@ -489,7 +489,7 @@ export const GENERATED_ASSETS = {
   },
   'terrain.grass.ao': {
     path: 'assets/textures/terrain-grass-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 607825,
@@ -497,7 +497,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.cliff.albedo': {
     path: 'assets/textures/rock-cliff-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1512963,
@@ -505,7 +505,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.cliff.normal': {
     path: 'assets/textures/rock-cliff-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 895598,
@@ -513,7 +513,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.cliff.roughness': {
     path: 'assets/textures/rock-cliff-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 417576,
@@ -521,7 +521,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.cliff.ao': {
     path: 'assets/textures/rock-cliff-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 429266,
@@ -529,7 +529,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.mossy.albedo': {
     path: 'assets/textures/rock-mossy-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 2557818,
@@ -537,7 +537,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.mossy.normal': {
     path: 'assets/textures/rock-mossy-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1314968,
@@ -545,7 +545,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.mossy.roughness': {
     path: 'assets/textures/rock-mossy-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 771168,
@@ -553,7 +553,7 @@ export const GENERATED_ASSETS = {
   },
   'rock.mossy.ao': {
     path: 'assets/textures/rock-mossy-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 375998,
@@ -561,7 +561,7 @@ export const GENERATED_ASSETS = {
   },
   'stone.masonry.albedo': {
     path: 'assets/textures/stone-masonry-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1151490,
@@ -569,7 +569,7 @@ export const GENERATED_ASSETS = {
   },
   'stone.masonry.normal': {
     path: 'assets/textures/stone-masonry-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1708699,
@@ -577,7 +577,7 @@ export const GENERATED_ASSETS = {
   },
   'stone.masonry.roughness': {
     path: 'assets/textures/stone-masonry-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 615738,
@@ -585,7 +585,7 @@ export const GENERATED_ASSETS = {
   },
   'stone.masonry.ao': {
     path: 'assets/textures/stone-masonry-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 473465,
@@ -593,7 +593,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.plank.albedo': {
     path: 'assets/textures/wood-plank-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 652718,
@@ -601,7 +601,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.plank.normal': {
     path: 'assets/textures/wood-plank-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1218541,
@@ -609,7 +609,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.plank.roughness': {
     path: 'assets/textures/wood-plank-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 621283,
@@ -617,7 +617,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.plank.ao': {
     path: 'assets/textures/wood-plank-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 763730,
@@ -625,7 +625,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.floor.albedo': {
     path: 'assets/textures/wood-floor-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 747081,
@@ -633,7 +633,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.floor.normal': {
     path: 'assets/textures/wood-floor-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 477542,
@@ -641,7 +641,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.floor.roughness': {
     path: 'assets/textures/wood-floor-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 322533,
@@ -649,7 +649,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.floor.ao': {
     path: 'assets/textures/wood-floor-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 376801,
@@ -657,7 +657,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.bark.albedo': {
     path: 'assets/textures/wood-bark-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1000895,
@@ -665,7 +665,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.bark.normal': {
     path: 'assets/textures/wood-bark-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 1399622,
@@ -673,7 +673,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.bark.roughness': {
     path: 'assets/textures/wood-bark-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 521788,
@@ -681,7 +681,7 @@ export const GENERATED_ASSETS = {
   },
   'wood.bark.ao': {
     path: 'assets/textures/wood-bark-ao.jpg',
-    role: 'texture',
+    role: 'ao',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 511434,
@@ -689,7 +689,7 @@ export const GENERATED_ASSETS = {
   },
   'metal.iron.albedo': {
     path: 'assets/textures/metal-iron-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 848803,
@@ -697,7 +697,7 @@ export const GENERATED_ASSETS = {
   },
   'metal.iron.normal': {
     path: 'assets/textures/metal-iron-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 145128,
@@ -705,7 +705,7 @@ export const GENERATED_ASSETS = {
   },
   'metal.iron.roughness': {
     path: 'assets/textures/metal-iron-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 494715,
@@ -713,7 +713,7 @@ export const GENERATED_ASSETS = {
   },
   'metal.iron.metalness': {
     path: 'assets/textures/metal-iron-metalness.jpg',
-    role: 'texture',
+    role: 'metalness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 16545,
@@ -721,7 +721,7 @@ export const GENERATED_ASSETS = {
   },
   'cloth.albedo': {
     path: 'assets/textures/cloth-albedo.jpg',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 879188,
@@ -729,7 +729,7 @@ export const GENERATED_ASSETS = {
   },
   'cloth.normal': {
     path: 'assets/textures/cloth-normal.jpg',
-    role: 'texture',
+    role: 'normal',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 833708,
@@ -737,7 +737,7 @@ export const GENERATED_ASSETS = {
   },
   'cloth.roughness': {
     path: 'assets/textures/cloth-roughness.jpg',
-    role: 'texture',
+    role: 'roughness',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 2240702,
@@ -1193,7 +1193,7 @@ export const GENERATED_ASSETS = {
   },
   'texture.hexkit.atlas': {
     path: 'assets/models/hexkit/hexagons_medieval.png',
-    role: 'texture',
+    role: 'albedo',
     tier: 'core',
     license: 'CC0-1.0',
     bytes: 15783,

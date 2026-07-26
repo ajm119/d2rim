@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-26T02:03:11.955Z",
+  "generatedAt": "2026-07-26T02:08:09.810Z",
   "assets": {
     "env.overcast": {
       "url": "npm:@pmndrs/assets@1.7.0/hdri/forest.exr.js",

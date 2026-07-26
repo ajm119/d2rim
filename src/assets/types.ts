@@ -37,6 +37,13 @@ export type AssetRole =
   | 'mask'
   /** A glTF / GLB scene. */
   | 'gltf'
+  /**
+   * The external binary payload of a non-embedded `.gltf`. Fetched so the
+   * loader can resolve it, but never requested by semantic key on its own.
+   */
+  | 'gltf-buffer'
+  /** An audio buffer: sound effect, ambience or music. Decoded by WebAudio. */
+  | 'audio'
   /** Opaque bytes with no interpretation. */
   | 'binary';
 

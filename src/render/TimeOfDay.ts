@@ -140,9 +140,11 @@ export interface TimeOfDayPreset {
  * calibrated against: mid-morning, near-total stratus at low altitude, thick
  * wet aerosol, ground mist. Cold, flat, and *bright in the sky while dark on
  * the ground*, which is the specific overcast signature — not a uniform grey
- * wash. The cloud deck is deliberately not opaque (`coverage` 0.94, not 1.0) so
- * there is a faint hot spot where the sun is, which is what stops an overcast
- * sky reading as a painted dome.
+ * wash. The deck is unbroken (`coverage` 1.0) — Act I's sky is stratus, not
+ * scattered cumulus — but its *optical depth* still varies across the map, so
+ * there is a soft bright region where the sun is behind the thinnest cloud.
+ * That gradient is what stops an overcast sky reading as a painted dome, and it
+ * comes out of the density field rather than from holes punched in the deck.
  */
 export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDayPreset>> = {
   bloodMoor: {
@@ -150,8 +152,8 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
     latitudeDeg: 51,
     dayOfYear: 305, // early November: low sun, long shadows, no summer warmth.
     mood: {
-      cloudCoverage: 0.94,
-      cloudOpticalDepth: 16,
+      cloudCoverage: 1.0,
+      cloudOpticalDepth: 62,
       cloudBaseAltitude: 900,
       cloudThickness: 700,
       hazeDensity: 2.6,
@@ -160,10 +162,10 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
     },
   },
   dawn: {
-    hours: 6.6,
+    hours: 7.6,
     mood: {
-      cloudCoverage: 0.62,
-      cloudOpticalDepth: 9,
+      cloudCoverage: 0.66,
+      cloudOpticalDepth: 30,
       cloudBaseAltitude: 1500,
       cloudThickness: 900,
       hazeDensity: 2.2,
@@ -174,8 +176,8 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
   clearNoon: {
     hours: 12.4,
     mood: {
-      cloudCoverage: 0.12,
-      cloudOpticalDepth: 6,
+      cloudCoverage: 0.22,
+      cloudOpticalDepth: 22,
       cloudBaseAltitude: 2200,
       cloudThickness: 1100,
       hazeDensity: 1,
@@ -184,12 +186,12 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
     },
   },
   dusk: {
-    hours: 17.15,
+    hours: 16.4,
     latitudeDeg: 51,
     dayOfYear: 305,
     mood: {
-      cloudCoverage: 0.58,
-      cloudOpticalDepth: 11,
+      cloudCoverage: 0.6,
+      cloudOpticalDepth: 30,
       cloudBaseAltitude: 1700,
       cloudThickness: 1000,
       hazeDensity: 2.1,
@@ -199,10 +201,10 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
   },
   night: {
     hours: 1.4,
-    moonPhase: 0.72,
+    moonPhase: 0.55,
     mood: {
-      cloudCoverage: 0.45,
-      cloudOpticalDepth: 8,
+      cloudCoverage: 0.42,
+      cloudOpticalDepth: 26,
       cloudBaseAltitude: 1400,
       cloudThickness: 800,
       hazeDensity: 1.6,
@@ -214,7 +216,7 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
     hours: 15.0,
     mood: {
       cloudCoverage: 1.0,
-      cloudOpticalDepth: 48,
+      cloudOpticalDepth: 130,
       cloudBaseAltitude: 620,
       cloudThickness: 1600,
       hazeDensity: 3.4,
@@ -564,11 +566,11 @@ export class TimeOfDay implements GameModule {
       this.#manualSun ?? horizonFromEquatorial(declination, sunHourAngle, this.latitudeDeg);
     applyBody(this.#sun, sunAngles, this.northOffsetDeg, SUN_ANGULAR_RADIUS_DEG);
 
-    // Moon: opposite the sun at full, coincident at new. Its declination swings
-    // with the phase for the same reason — the moon sits on the far side of the
-    // ecliptic from the sun when it is full.
-    const phaseOffsetHours = (this.moonPhase - 0.5) * 24;
-    const moonHourAngle = (wrapHours(this.#hours - phaseOffsetHours) - 12) * 15;
+    // Moon: coincident with the sun at new, opposite it at full. The hour angle
+    // therefore leads the sun's by a full turn per synodic cycle, which is what
+    // makes a full moon transit at local midnight and a first-quarter moon at
+    // 18:00.
+    const moonHourAngle = sunHourAngle + this.moonPhase * 360;
     const moonDeclination = -declination * Math.cos(2 * Math.PI * (this.moonPhase - 0.5));
     const moonAngles = horizonFromEquatorial(moonDeclination, moonHourAngle, this.latitudeDeg);
     applyBody(this.#moon, moonAngles, this.northOffsetDeg, MOON_ANGULAR_RADIUS_DEG);
