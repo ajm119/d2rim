@@ -971,7 +971,15 @@ export class BloodMoor implements GameModule {
     // `(1 - r^2)^2` then drives the edge to *exactly* zero rather than to a
     // small non-zero value cut short by geometry.
     const emberFalloff = oneMinus(emberRadial.mul(emberRadial)).clamp(0, 1);
-    const emberBody = mix(vec3(3.8, 1.25, 0.3), vec3(0.14, 0.02, 0.008), emberRadial.pow(0.55));
+    // Peak scene-linear radiance 5.2. Measured: at 3.8 the fire core resolved to
+    // 204/255 while the overcast sky sat at 211, so the focal point of the
+    // composition was not the brightest thing in its own frame. A fire has to
+    // win that comparison — the sky is a 0.8-value field covering a third of the
+    // image and the fire is a forty-pixel emitter, and if the emitter is not
+    // clearly hotter the eye goes to the field. The tone curve still rolls it
+    // off rather than clipping, which is what the plateau-free radial profile
+    // below exists to guarantee.
+    const emberBody = mix(vec3(5.2, 1.7, 0.4), vec3(0.14, 0.02, 0.008), emberRadial.pow(0.55));
     // Coal structure: the bed is not a light, it is a hundred embers at
     // different temperatures. Two octaves of world-stable noise, scrolled very
     // slowly, so the hot spots migrate the way a real bed's do.

@@ -221,7 +221,16 @@ function growBranch(
   // it aliases without it, and the grade's lateral aberration paints it
   // magenta. Stylized silhouettes want to be *bold* anyway — thin is not the
   // same as delicate.
-  const tipRadius = Math.max(0.032, spec.radius * 0.45);
+  // 0.055 m floor, from 0.032. A branch thinner than about a pixel does not
+  // resolve — it samples as a blend of itself and whatever is behind it, and
+  // what is behind a ridge treeline is a 209/255 overcast sky. So the finest
+  // twigs came back as a *pale grey haze* rather than as a dark filigree,
+  // which is the opposite of the silhouette they exist to make, and no albedo
+  // value can fix it because the pixel is mostly not the branch. At the ridge
+  // distance (~50 m) and a 34 deg lens on a 1280 px frame, 0.055 m subtends
+  // roughly 1.4 px, which is the minimum width at which a dark line against a
+  // bright field survives resolve.
+  const tipRadius = Math.max(0.055, spec.radius * 0.45);
 
   for (let node = 0; node <= nodes; node++) {
     const t = node / nodes;
