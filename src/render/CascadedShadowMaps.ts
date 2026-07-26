@@ -463,6 +463,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
 
   /** Set once `setup()` has built the render target. */
   #built = false;
+  #coordinateSystem: THREE.CoordinateSystem = THREE.WebGLCoordinateSystem;
   #reversedDepth = false;
   #node: THREE.Node | null = null;
   #rendering = false;
@@ -755,8 +756,6 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
     this.#uFade.value = far * 0.85;
   }
 
-  #coordinateSystem: THREE.CoordinateSystem = THREE.WebGLCoordinateSystem;
-
   // -- shader -------------------------------------------------------------
 
   override setup(builder: THREE.NodeBuilder): THREE.Node | null {
@@ -980,8 +979,11 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
         const blend = clamp(viewDepth.sub(band.y).mul(band.z), 0, 1).toVar('csmBlend');
 
         // Only the sliver of the frame inside a blend band pays for the second
-        // cascade lookup. `sampleCascade` is a real shader function, so calling
-        // it inside a branch emits a call, not a duplicated body.
+        // cascade lookup. TSL inlines `Fn` bodies, so this does duplicate the
+        // filter code in the compiled shader — but it sits inside a branch that
+        // the overwhelming majority of fragments skip, and the alternative
+        // (sampling both cascades unconditionally) would double the cost of the
+        // whole frame to fix a seam a few pixels wide.
         If(blend.greaterThan(0), () => {
           const next = min(index.add(1), float(cascades - 1));
           result.assign(
@@ -1033,7 +1035,9 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
           return vec3(banded, banded, banded);
         }
         // 'cascades': a distinct hue per cascade, modulated by the shadow term
-        // so that the shadows themselves stay legible inside the tint.
+        // so that the shadows themselves stay legible inside the tint. The
+        // boundary is a hard `step` on purpose — this view is for reading split
+        // *placement*, so it must not be softened by the blend band.
         const palette: Array<[number, number, number]> = [
           [1.0, 0.35, 0.35],
           [0.35, 1.0, 0.45],

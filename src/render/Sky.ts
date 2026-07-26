@@ -130,6 +130,7 @@
 import * as THREE from 'three/webgpu';
 import {
   abs,
+  cameraPosition,
   acos,
   asin,
   atan,
@@ -145,7 +146,10 @@ import {
   max,
   min,
   mix,
+  normalize,
   oneMinus,
+  output,
+  positionWorld,
   positionWorldDirection,
   pow,
   remapClamp,
@@ -158,6 +162,7 @@ import {
   uniform,
   vec2,
   vec3,
+  vec4,
 } from 'three/tsl';
 
 import { SimplexNoise, WorleyNoise } from '../assets/Procedural';
@@ -272,6 +277,11 @@ export interface SkyOptions {
   installBackground?: boolean;
   /** Install `scene.environment`. Default true. */
   installEnvironment?: boolean;
+  /**
+   * Install `scene.fogNode`, giving every material aerial perspective from this
+   * model with no per-material work. Default true.
+   */
+  installFog?: boolean;
   /** Draw a procedural star field at night. Default true. */
   stars?: boolean;
   /** Cloud tiling scale: kilometres per texture repeat. Default 9. */
@@ -297,6 +307,12 @@ const CLOUD_LAYERS = 4;
  * distribution and is what produces the silver lining.
  */
 const CLOUD_PHASE_G = 0.78;
+
+/**
+ * Maximum separation, in texture repeats, between the deck's lowest and highest
+ * density slab. See the clamp in `Sky.#buildSkyNode`.
+ */
+const CLOUD_MAX_SHEAR = 0.15;
 
 /** Asymmetry parameter used by the two-stream slab solution. */
 const CLOUD_SLAB_G = 0.85;
@@ -435,6 +451,12 @@ interface SceneWithBackgroundNode {
   backgroundNode: THREE.Node | null;
 }
 
+/** Same story for `Scene.fogNode`, which the node renderer reads but the
+ * @types/three r185 `Scene` declaration omits. */
+interface SceneWithFogNode {
+  fogNode: THREE.Node | null;
+}
+
 export class Sky implements GameModule {
   readonly name = 'Sky';
 
@@ -560,6 +582,7 @@ export class Sky implements GameModule {
       sunMoveThresholdDeg: options.sunMoveThresholdDeg ?? 0.35,
       installBackground: options.installBackground ?? true,
       installEnvironment: options.installEnvironment ?? true,
+      installFog: options.installFog ?? true,
       stars: options.stars ?? true,
       cloudTileKm: options.cloudTileKm ?? 9,
       cloudWind: options.cloudWind ?? [0.01, 0.004],
@@ -623,6 +646,9 @@ export class Sky implements GameModule {
     if (this.#options.installEnvironment) {
       ctx.scene.environment = this.#envTexture;
     }
+    if (this.#options.installFog) {
+      (ctx.scene as unknown as SceneWithFogNode).fogNode = this.fogNode();
+    }
   }
 
   update(ctx: GameContext, dt: number): void {
@@ -654,8 +680,9 @@ export class Sky implements GameModule {
     const ctx = this.#ctx;
     if (ctx !== null) {
       if (ctx.scene.environment === this.#envTexture) ctx.scene.environment = null;
-      const scene = ctx.scene as unknown as SceneWithBackgroundNode;
+      const scene = ctx.scene as unknown as SceneWithBackgroundNode & SceneWithFogNode;
       if (scene.backgroundNode !== null) scene.backgroundNode = null;
+      if (scene.fogNode !== null) scene.fogNode = null;
       ctx.services.unregister(AtmosphereKey);
       ctx.services.unregister(SkyKey);
     }
@@ -1462,32 +1489,46 @@ export class Sky implements GameModule {
     // brightest it reads as a blazing hole under an otherwise leaden deck.
     const aboveHorizon = smoothstep(float(-0.004), float(0.006), mu);
 
-    let densitySum: FloatNode = float(0.0);
-    let midDistance: FloatNode = float(0.0);
-    let midUv: Vec2Node = vec2(0.0, 0.0);
+    // Anchor on the middle of the deck, then displace each layer along the view
+    // ray by its own shell intersection. That displacement *is* the parallax:
+    // overhead the layers barely separate, toward the horizon they slide apart
+    // and the deck is seen edge-on.
+    const midDistance = this.#shellDistance(mu, planet.add(baseKm).add(thickness.mul(0.5)));
+    const midUv = vec2(dir.x, dir.z).mul(midDistance).mul(scale).add(u.cloudWind);
+    const uvPerKm = vec2(dir.x, dir.z).mul(scale);
 
+    let densitySum: FloatNode = float(0.0);
     for (let i = 0; i < CLOUD_LAYERS; i++) {
       const heightFraction = (i + 0.5) / CLOUD_LAYERS;
       const shell = planet.add(baseKm).add(thickness.mul(heightFraction));
-      const t = this.#shellDistance(mu, shell);
-      const p = dir.mul(t);
-      const uv = vec2(p.x, p.z).mul(scale).add(u.cloudWind);
-      densitySum = densitySum.add(this.#cloudDensity(uv, float(heightFraction)));
-      if (i === CLOUD_LAYERS >> 1) {
-        midDistance = t;
-        midUv = uv;
-      }
+      const offset = uvPerKm.mul(this.#shellDistance(mu, shell).sub(midDistance));
+      // Clamped, because a single 2D noise field has no vertical correlation:
+      // once the layers are more than about a cloud apart in the texture they
+      // are sampling unrelated weather, and the deck breaks into hard
+      // horizontal stripes near the horizon. Limiting the shear degrades the
+      // parallax to a single coherent sheet exactly where its vertical
+      // structure stops being resolvable anyway.
+      const shear = length(offset);
+      const limited = offset.mul(min(float(1.0), float(CLOUD_MAX_SHEAR).div(max(shear, float(1e-5)))));
+      densitySum = densitySum.add(this.#cloudDensity(midUv.add(limited), float(heightFraction)));
     }
 
-    // Beyond a few tens of kilometres one pixel covers many tiles of the
-    // density texture, and no amount of mip filtering keeps that stable. Fade
-    // the per-pixel density toward its analytic mean instead — which is exactly
-    // what an infinitely wide filter footprint would converge to anyway.
+    // Toward the horizon the deck is compressed so hard that a single pixel
+    // covers tens of texels. Mip filtering prefilters the *density*, but the
+    // coverage remap immediately re-thresholds that average back into a hard
+    // edge, so the deck breaks into blocks the size of a high mip's texels.
+    //
+    // The fix has to be applied to the shaped density, not the sample: once the
+    // filter footprint exceeds the feature size, converge to the analytic mean
+    // — which is what an ideal filter would return anyway. Driving the blend
+    // off the actual screen-space footprint rather than off distance makes it
+    // correct at any resolution, field of view and cloud scale.
+    const footprint = length(fwidth(midUv));
     const meanDensity = u.cloudMeanDensity;
     const density = mix(
       densitySum.div(CLOUD_LAYERS),
       meanDensity,
-      smoothstep(float(30.0), float(95.0), midDistance),
+      smoothstep(float(0.005), float(0.035), footprint),
     );
 
     // Vertical optical depth drives how much light gets through the deck; the
@@ -1610,6 +1651,32 @@ export class Sky implements GameModule {
    */
   aerialPerspectiveNode(color: Vec3Node, direction: Vec3Node, distance: FloatNode): Vec3Node {
     return this.#applyAerialPerspective(color, direction, distance.mul(0.001));
+  }
+
+  /**
+   * A node for `scene.fogNode`, applying this module's aerial perspective to
+   * every material's final colour.
+   *
+   * This is the intended integration point, and it is installed automatically
+   * unless {@link SkyOptions.installFog} is false. Three's node renderer hands
+   * a fog node the already-lit output and takes its result as the final colour,
+   * so one assignment gives terrain, props, characters and vegetation the same
+   * extinction and in-scattering as the sky behind them — without any of those
+   * systems knowing this module exists, and without anyone being tempted to add
+   * a second `FogExp2` that disagrees with it.
+   *
+   * ```ts
+   * scene.fogNode = sky.fogNode();   // done automatically at init
+   * ```
+   */
+  fogNode(): THREE.Node<'vec4'> {
+    const toFragment = positionWorld.sub(cameraPosition);
+    const distanceKm = length(toFragment).mul(0.001);
+    const direction = normalize(toFragment);
+    return vec4(
+      this.#applyAerialPerspective(output.rgb, direction, distanceKm),
+      output.a,
+    );
   }
 
   /** The live sky-view radiance texture, for passes that want the sky colour. */

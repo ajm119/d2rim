@@ -54,7 +54,12 @@
  */
 
 import * as THREE from 'three/webgpu';
-import { clusteredLights } from 'three/addons/tsl/lighting/ClusteredLightsNode.js';
+// The class, not the `clusteredLights()` TSL helper: that helper is built with
+// `nodeProxy`, which converts every constructor argument into a `ConstNode`.
+// `ClusteredLightsNode` expects plain numbers and computes its cluster grid with
+// them, so going through the proxy yields `NaN` grid dimensions and a compute
+// dispatch of `NaN` workgroups. Constructing directly is the only correct form.
+import ClusteredLightsNode from 'three/addons/tsl/lighting/ClusteredLightsNode.js';
 
 import { serviceKey, type ServiceLocator } from '../core/ServiceLocator';
 import type { GameContext, GameModule } from '../core/types';
@@ -100,6 +105,58 @@ export interface SkySunProvider {
 
 /** Service key the sky module should register itself under for sun tracking. */
 export const SkySunKey = serviceKey<SkySunProvider>('render.sky.sun');
+
+/* --- push contract: `src/render/Sky.ts` ---------------------------------- *
+ *
+ * The sky/atmosphere module (owned by another module, `src/render/Sky.ts`)
+ * pushes celestial state instead of being polled. The interfaces below are a
+ * deliberate structural mirror of the ones it declares, replicated here rather
+ * than imported so that neither module depends on the other's file — the
+ * contract is the service id `'lighting.celestial'` and these shapes.
+ *
+ * If `Sky.ts` changes them, this file must change with it; the shapes are small
+ * and the coupling is explicit, which is the point.
+ * ------------------------------------------------------------------------- */
+
+/** One celestial body, in a form a `DirectionalLight` takes directly. */
+export interface CelestialLightSample {
+  /** World-space unit vector from the scene *toward* the body. */
+  readonly direction: THREE.Vector3;
+  /** Hue of the light, normalised so the largest channel is 1. */
+  readonly color: THREE.Color;
+  /**
+   * Illuminance on a surface facing the body, in linear render units. Already
+   * includes atmospheric extinction and cloud attenuation, and already zero
+   * when the body is below the horizon.
+   */
+  readonly illuminance: number;
+  /** `0` fully set, `1` fully risen. */
+  readonly visibility: number;
+}
+
+/** Everything the lighting rig needs from the sky, in one object. */
+export interface CelestialLightState {
+  readonly sun: CelestialLightSample;
+  readonly moon: CelestialLightSample;
+  /** Irradiance on an upward-facing surface from the sky hemisphere. */
+  readonly skyIrradiance: THREE.Color;
+  /** Irradiance on a downward-facing surface (ground bounce). */
+  readonly groundIrradiance: THREE.Color;
+  /** `0` full daylight, `1` full night. */
+  readonly nightFactor: number;
+}
+
+/** Implemented by {@link LightingModule}; the sky pushes state into it. */
+export interface CelestialLightSink {
+  setCelestialLight(state: CelestialLightState): void;
+}
+
+/**
+ * Service id the sky module looks for. Registering under it is what makes the
+ * time-of-day cycle drive the key light and its cascaded shadows with no
+ * wiring in `main.ts`.
+ */
+export const CelestialLightSinkKey = serviceKey<CelestialLightSink>('lighting.celestial');
 
 /* ------------------------------------------------------------------------- *
  * Public types
@@ -289,6 +346,28 @@ export interface LightingOptions {
   sun?: SunConfig;
   /** Ambient defaults, applied at init. */
   ambient?: AmbientConfig;
+  /**
+   * Which body drives the key light when the sky pushes celestial state.
+   *
+   * - `auto` (default) — whichever of sun and moon is currently brighter, so
+   *   the world keeps a directional key and real shadows through the night.
+   * - `sun` — always the sun; the world goes flat and IBL-only after dusk.
+   */
+  keyLight?: 'auto' | 'sun';
+  /**
+   * Multiplier applied to the illuminance the sky reports before it reaches the
+   * light. Default 1 — the sky's units are already the render units.
+   */
+  keyLightScale?: number;
+  /**
+   * Drive the hemisphere fill from the sky's own irradiance integrals.
+   *
+   * Off by default and deliberately so: those integrals describe the same
+   * radiance the environment map already delivers through IBL, and enabling
+   * both double-counts the sky. Turn it on only when image-based lighting is
+   * disabled.
+   */
+  ambientFromSky?: boolean;
 }
 
 /* ------------------------------------------------------------------------- *
@@ -417,7 +496,8 @@ export class LightingModule implements GameModule {
   #nextId = 1;
 
   #clusteredActive = false;
-  #detachResize: (() => void) | null = null;
+  /** Set once a sky module has pushed celestial state; disables the pull path. */
+  #celestialPushed = false;
 
   #stats: LightingStats = {
     registered: 0,
@@ -478,6 +558,11 @@ export class LightingModule implements GameModule {
     };
 
     ctx.services.register(LightingKey, this.#createService());
+    ctx.services.register(CelestialLightSinkKey, {
+      setCelestialLight: (state: CelestialLightState): void => {
+        this.setCelestialLight(state);
+      },
+    });
     ctx.events.emit('lighting:ready', {
       clustered: this.#clusteredActive,
       maxPointLights: this.#pointSlots.length,
@@ -505,9 +590,8 @@ export class LightingModule implements GameModule {
     for (const slot of this.#allSlots()) slot.light.dispose();
     this.#sunShadows?.dispose();
     this.#sunShadows = null;
-    this.#detachResize?.();
-    this.#detachResize = null;
     this.#events = null;
+    this.#services?.unregister(CelestialLightSinkKey);
     this.#services?.unregister(LightingKey);
     this.#records.length = 0;
     this.#scene = null;
@@ -633,6 +717,16 @@ export class LightingModule implements GameModule {
   /**
    * Install `ClusteredLightsNode` as the scene's lights node.
    *
+   * **Caveat for the integrator.** The cluster grid is sized from the
+   * renderer's *drawing-buffer* size, while the fragment side reads
+   * `screenCoordinate`, which is in *render-target* pixels. Those agree for the
+   * canvas and for any full-resolution post-processing chain. A pass that
+   * renders the scene at a different internal resolution (a half-res forward
+   * pass, or an offscreen capture at a size other than the canvas) will
+   * misalign the tiles and produce visibly blocky point-light shading. If a
+   * render-scale option is ever added, keep the canvas and the scene pass the
+   * same size, or turn clustering off with `disableClustered`.
+   *
    * three caches one `LightsNode` per scene inside its private `Lighting`
    * manager, created lazily through `createNode()`. Temporarily replacing that
    * factory and forcing the cache to populate is the supported way to install a
@@ -645,7 +739,7 @@ export class LightingModule implements GameModule {
     const lighting = renderer.lighting;
     if (lighting === undefined) return false;
 
-    const node = clusteredLights(
+    const node = new ClusteredLightsNode(
       Math.max(1, this.#options.maxPointLights ?? 128),
       this.#options.clusterTileSize ?? 32,
       this.#options.clusterZSlices ?? 24,
@@ -679,8 +773,15 @@ export class LightingModule implements GameModule {
 
   // -- per-frame ----------------------------------------------------------
 
-  /** Track the sky module's sun, when one is registered. */
+  /**
+   * Pull the sun from a sky module that exposes {@link SkySunProvider}.
+   *
+   * This is the fallback path. A sky module that pushes through
+   * {@link CelestialLightSinkKey} is authoritative and this does nothing, so the
+   * two never fight over the sun.
+   */
   #trackSky(): void {
+    if (this.#celestialPushed) return;
     const sky = this.#services?.tryGet(SkySunKey);
     if (sky === undefined) return;
 
@@ -873,6 +974,40 @@ export class LightingModule implements GameModule {
     this.#sunTarget.position.copy(_direction).multiplyScalar(-1);
     this.#sunTarget.updateMatrixWorld(true);
     this.#sun.updateMatrixWorld(true);
+  }
+
+  /**
+   * Adopt a celestial state pushed by the sky module.
+   *
+   * Public because it is also the useful manual entry point: a cutscene or a
+   * scripted lightning strike can drive the key light through the same path the
+   * time-of-day cycle uses, and get consistent cascade refitting for free.
+   */
+  setCelestialLight(state: CelestialLightState): void {
+    this.#celestialPushed = true;
+    const preferMoon =
+      (this.#options.keyLight ?? 'auto') === 'auto' &&
+      state.moon.illuminance > state.sun.illuminance;
+    const key = preferMoon ? state.moon : state.sun;
+
+    if (key.direction.lengthSq() > 1e-8) this.#applySunDirection(key.direction);
+    this.#sun.color.copy(key.color);
+    this.#sunBaseIntensity = key.illuminance * (this.#options.keyLightScale ?? 1);
+    this.#sun.intensity = this.#sunBaseIntensity;
+
+    if (this.#options.ambientFromSky === true) {
+      this.#hemisphere.color.copy(state.skyIrradiance);
+      this.#hemisphere.groundColor.copy(state.groundIrradiance);
+      if (this.#hemisphere.intensity === 0) this.#hemisphere.intensity = 1;
+    }
+
+    // A key light with no energy left cannot cast a meaningful shadow, and a
+    // cascade pass is a full scene traversal. Park it rather than pay for it.
+    const shadow = this.#sunShadows;
+    if (shadow !== null) {
+      const wanted = this.#sunBaseIntensity > 1e-4;
+      if (this.#sun.castShadow !== wanted) this.#sun.castShadow = wanted;
+    }
   }
 
   #setSun(config: SunConfig): void {

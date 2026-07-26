@@ -266,6 +266,24 @@ export interface AerialPerspectiveSettings {
   /** Aerosol multiplier for the near-ground layer. 1 = clear, 2-3 = wet murk. */
   hazeDensity: number;
   /**
+   * Per-channel multiplier on the *direct solar* source term, `[0,1]`.
+   *
+   * This is how a cloud deck gets into the fog. Air under heavy overcast is not
+   * lit by the sun; leaving this at 1 produces the single most conspicuous
+   * failure in a physically based sky — a leaden grey deck with a brilliant
+   * sunlit haze glowing underneath it. {@link module:render/Sky} drives it from
+   * the deck's transmittance.
+   */
+  sunOcclusion: THREE.Vector3;
+  /**
+   * Extra isotropic radiance illuminating the medium, in render units.
+   *
+   * The counterpart to {@link sunOcclusion}: what the sun stops delivering, the
+   * cloud base delivers instead, diffusely. Keeping both here means the fog
+   * darkens *and* takes on the deck's colour, which is what actually happens.
+   */
+  ambientRadiance: THREE.Vector3;
+  /**
    * Extra grey extinction, 1/km, for genuine ground mist that is not part of
    * the atmospheric model (river fog, marsh vapour). Scatters the same source
    * function, so it still cannot disagree with the sky.
@@ -275,11 +293,15 @@ export interface AerialPerspectiveSettings {
   mistScaleHeightKm: number;
 }
 
-export const DEFAULT_AERIAL_PERSPECTIVE: AerialPerspectiveSettings = {
-  hazeDensity: 1,
-  mistDensity: 0,
-  mistScaleHeightKm: 0.09,
-};
+export function defaultAerialPerspective(): AerialPerspectiveSettings {
+  return {
+    hazeDensity: 1,
+    sunOcclusion: new THREE.Vector3(1, 1, 1),
+    ambientRadiance: new THREE.Vector3(0, 0, 0),
+    mistDensity: 0,
+    mistScaleHeightKm: 0.09,
+  };
+}
 
 /** Result of an aerial-perspective query along one view ray segment. */
 export interface AerialPerspectiveSample {
@@ -304,9 +326,15 @@ export interface AerialPerspectiveUniforms {
   readonly rayleighScattering: THREE.Vector3;
   /** Mie scattering, 1/km, at the observer's altitude. */
   readonly mieScattering: number;
-  /** Sun radiance already multiplied by transmittance to the observer. */
+  /**
+   * Solar irradiance reaching the observer: `E_sun * T_sun * sunOcclusion`.
+   * Already includes any cloud-deck occlusion.
+   */
   readonly sunRadiance: THREE.Vector3;
-  /** Multiple-scattering term at the observer's altitude. */
+  /**
+   * Isotropic source at the observer's altitude: the atmosphere's own multiple
+   * scattering plus {@link AerialPerspectiveSettings.ambientRadiance}.
+   */
   readonly multiScatter: THREE.Vector3;
   /** Cornette-Shanks `g`. */
   readonly miePhaseG: number;
@@ -426,7 +454,7 @@ export interface AtmosphereOptions {
  */
 export class Atmosphere implements AtmosphereService {
   readonly params: AtmosphereParams;
-  readonly aerial: AerialPerspectiveSettings = { ...DEFAULT_AERIAL_PERSPECTIVE };
+  readonly aerial: AerialPerspectiveSettings = defaultAerialPerspective();
   readonly solarIlluminance: THREE.Vector3;
   readonly sunDirection = new THREE.Vector3(0, 1, 0);
 
@@ -1001,6 +1029,17 @@ export class Atmosphere implements AtmosphereService {
     this.#transmittanceToTop(r0, this.sunDirection.y, sunT);
     this.#sampleMultiScatter(r0, this.sunDirection.y, ms);
 
+    // Occlusion (a cloud deck) removes direct sun and replaces it with the
+    // diffuse field the deck itself emits.
+    const occ = this.aerial.sunOcclusion;
+    const amb = this.aerial.ambientRadiance;
+    sunT[0] *= occ.x;
+    sunT[1] *= occ.y;
+    sunT[2] *= occ.z;
+    ms[0] = ms[0] * occ.y + amb.x / Math.max(1e-6, this.solarIlluminance.x);
+    ms[1] = ms[1] * occ.y + amb.y / Math.max(1e-6, this.solarIlluminance.y);
+    ms[2] = ms[2] * occ.y + amb.z / Math.max(1e-6, this.solarIlluminance.z);
+
     const eR = Math.max(1e-9, extR);
     const eG = Math.max(1e-9, extG);
     const eB = Math.max(1e-9, extB);
@@ -1067,6 +1106,9 @@ export class Atmosphere implements AtmosphereService {
     this.#transmittanceToTop(r0, this.sunDirection.y, sunT);
     this.#sampleMultiScatter(r0, this.sunDirection.y, ms);
 
+    const occ = this.aerial.sunOcclusion;
+    const amb = this.aerial.ambientRadiance;
+
     const u = this.uniforms;
     u.rayleighScattering.set(
       medium.rayleigh[0],
@@ -1080,14 +1122,14 @@ export class Atmosphere implements AtmosphereService {
       medium.extinction[2] + medium.mie * (haze - 1) + mist,
     );
     u.sunRadiance.set(
-      sunT[0] * this.solarIlluminance.x,
-      sunT[1] * this.solarIlluminance.y,
-      sunT[2] * this.solarIlluminance.z,
+      sunT[0] * this.solarIlluminance.x * occ.x,
+      sunT[1] * this.solarIlluminance.y * occ.y,
+      sunT[2] * this.solarIlluminance.z * occ.z,
     );
     u.multiScatter.set(
-      ms[0] * this.solarIlluminance.x,
-      ms[1] * this.solarIlluminance.y,
-      ms[2] * this.solarIlluminance.z,
+      ms[0] * this.solarIlluminance.x * occ.y + amb.x,
+      ms[1] * this.solarIlluminance.y * occ.y + amb.y,
+      ms[2] * this.solarIlluminance.z * occ.y + amb.z,
     );
     u.miePhaseG = this.params.miePhaseG;
     u.sunDirection.copy(this.sunDirection);

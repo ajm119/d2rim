@@ -88,11 +88,17 @@ import type { GameContext, GameModule } from '../core/types';
 /**
  * What this module needs from the sky/atmosphere system.
  *
- * The sky module is expected to register an object matching this shape under
- * {@link SkyEnvironmentKey}. `environmentVersion` must increment whenever
- * `environmentTexture` is regenerated in place (time-of-day changes, weather
- * transitions) so that the PMREM chain can be rebuilt; if it is omitted, the
- * texture identity alone is used and in-place edits will not be noticed.
+ * The sky module registers an object matching this shape under
+ * {@link SkyEnvironmentKey} — `'render.sky'`, the same id `src/render/Sky.ts`
+ * uses for its own service, which is deliberate: its `Sky` class already
+ * satisfies this interface structurally, so no adapter is needed.
+ *
+ * Regenerating the texture *in place* (a time-of-day step, a weather
+ * transition) does not need `environmentVersion`: setting `needsUpdate` bumps
+ * three's `Texture.pmremVersion`, and `PMREMNode` rebuilds the prefiltered
+ * chain on the next render by itself. `environmentVersion` exists for a
+ * provider that mutates pixel data without touching `needsUpdate`, which would
+ * otherwise go unnoticed here.
  *
  * If no such service is registered, this module falls back to the
  * `env.overcast` HDRI from the AssetManager, and failing that leaves whatever
