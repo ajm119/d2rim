@@ -158,7 +158,7 @@ class SparkCloud {
     this.#geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 500);
 
     this.#material = new THREE.PointsMaterial({
-      size: 0.075,
+      size: 0.045,
       sizeAttenuation: true,
       vertexColors: true,
       transparent: true,
@@ -314,10 +314,13 @@ export interface FeedbackOptions {
   readonly hitStop?: boolean;
 }
 
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
 export class CombatFeedback implements GameModule {
   readonly name = 'combat.feedback';
 
-  readonly #options: Required<FeedbackOptions>;
+  /** Mutable because {@link CombatFeedback.setHitStop} toggles one field. */
+  readonly #options: Mutable<Required<FeedbackOptions>>;
   readonly #sparks = new SparkCloud();
   readonly #numbers: FloatingNumber[] = [];
   readonly #lights: ImpactLight[] = [];
@@ -365,6 +368,22 @@ export class CombatFeedback implements GameModule {
   /** Current shake offset, for a capture that wants to assert it is non-zero. */
   get shakeOffset(): THREE.Vector3 {
     return this.#offset;
+  }
+
+  /**
+   * Turn hit stop on or off at runtime.
+   *
+   * Capture and drive harnesses need this: a 16× slowdown on every impact means
+   * a scripted encounter costs sixteen times the frames to reach the same
+   * simulated state, and in a software rasteriser that is the difference
+   * between a two-minute run and a forty-minute one.
+   */
+  setHitStop(enabled: boolean): void {
+    this.#options.hitStop = enabled;
+    if (!enabled && this.#hitStopLeft > 0) {
+      this.#hitStopLeft = 0;
+      if (this.#ctx !== null) this.#ctx.time.scale = 1;
+    }
   }
 
   /* -- lifecycle ----------------------------------------------------------- */
@@ -484,17 +503,20 @@ export class CombatFeedback implements GameModule {
       : cold
         ? this.#colour.setHex(0x8fd8ff)
         : this.#colour.setHex(0xff5a32);
-    const count = blocked ? 10 : Math.round(12 + Math.min(26, severity * 90));
+    const count = blocked ? 8 : Math.round(10 + Math.min(18, severity * 55));
     this.#sparks.burst(
       payload.point,
       payload.normal,
       payload.direction,
       count,
       colour,
-      blocked ? 3 : 4.2 + severity * 5,
+      blocked ? 3 : 4.5 + severity * 6,
       () => this.#random(),
     );
-    this.#addImpactLight(payload.point, colour, blocked ? 4 : 8 + severity * 22);
+    // Kept modest on purpose. The post stack blooms this, and an impact light
+    // bright enough to look right without bloom turns the target into a white
+    // blob with it — which reads as a rendering fault, not as a hit.
+    this.#addImpactLight(payload.point, colour, blocked ? 1.8 : 2.6 + severity * 5.5);
 
     const target = this.#findCombatant(ctx, payload.target);
     if (target !== null && isFlashable(target)) {
@@ -541,7 +563,7 @@ export class CombatFeedback implements GameModule {
       radius: 3.2,
       name: 'combat.impact',
     });
-    this.#lights.push({ handle, peak: intensity, life: 0.16, maxLife: 0.16 });
+    this.#lights.push({ handle, peak: intensity, life: 0.12, maxLife: 0.12 });
   }
 
   #updateLights(dt: number): void {

@@ -347,6 +347,7 @@ export abstract class EnemyBase implements Combatant {
    * deterministic without also scripting the pathfinding.
    */
   teleport(x: number, y: number, z: number): void {
+    if (this.#state === 'dead') return;
     this.#scratch.set(x, y, z);
     this.controller.setPosition(this.#scratch);
     this.object.position.copy(this.#scratch);
@@ -751,9 +752,14 @@ export abstract class EnemyBase implements Combatant {
     this.#knockback.set(0, 0, 0);
     this.graph?.cancelActions(undefined, 0.08);
     this.graph?.playAction('death', { layer: 'full', hold: true, fadeIn: 0.08 });
-    // Stop occupying space the instant it dies: a corpse that blocks the
-    // player's next step is the most annoying kind of collision bug.
-    this.controller.dispose();
+    // The capsule is deliberately *not* torn down here. It is in the `player`
+    // collision group, which by the layer table does not collide with the
+    // player or with other characters, so a corpse already blocks nothing —
+    // and disposing it leaves a live `CharacterController` whose rigid body is
+    // gone, so the next call to `setPosition` or `move` traps inside the Rapier
+    // WASM with `RuntimeError: unreachable`. That is a crash, in the middle of
+    // combat, triggered by anything that touches a corpse. The collider goes
+    // away with the rest of the enemy in `dispose`, at cull time.
     this.ctx.events.emit('combat:death', {
       combatant: this.id,
       faction: 'enemy',
@@ -829,8 +835,15 @@ export abstract class EnemyBase implements Combatant {
     for (const entry of this.#tintables) {
       const emissive = entry.material.emissive;
       if (emissive === undefined) continue;
-      emissive.copy(entry.baseColor).lerp(colour, Math.min(1, amount));
-      entry.material.emissiveIntensity = entry.baseIntensity + amount * 2.4;
+      // Capped well short of a full white-out. The tint has to read as "that
+      // one, right now" at a glance without erasing the silhouette — a fully
+      // blown-out skeleton is less legible than a tinted one, not more.
+      // Kept well short of a white-out. Emissive is *added* to the lit result
+      // and then bloomed by the post stack, so radiance much above ~0.8 stops
+      // reading as "that one, hit, now" and starts reading as a rendering
+      // fault: the silhouette disappears exactly when the player needs it.
+      emissive.copy(entry.baseColor).lerp(colour, Math.min(0.5, amount * 0.5));
+      entry.material.emissiveIntensity = entry.baseIntensity + amount * 0.55;
     }
   }
 

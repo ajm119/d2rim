@@ -203,7 +203,11 @@ export class EnemyDirector implements GameModule {
       root,
       clips,
       position: ground,
-      yaw: Math.atan2(-ground.x, -ground.z),
+      // Facing *away* from the player's spawn, not toward it. With a 14 m
+      // vision cone, skeletons pointed at the origin all notice the hero the
+      // instant the game finishes loading and the moor opens with six enemies
+      // already charging. Backs turned, the player gets to choose the fight.
+      yaw: Math.atan2(ground.x, ground.z),
       physics,
       combat,
       ctx,

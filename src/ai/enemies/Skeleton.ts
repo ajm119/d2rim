@@ -112,7 +112,7 @@ function profile(overrides: Partial<EnemyProfile> & Pick<EnemyProfile, 'variant'
       poise: 9,
     },
     perception: {
-      visionRange: 17,
+      visionRange: 14,
       visionHalfAngle: (65 * Math.PI) / 180,
       hearingRange: 6.5,
       noiseMultiplier: 1.8,

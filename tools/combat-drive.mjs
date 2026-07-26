@@ -8,6 +8,9 @@
  * read back around the impact so the swing pose, the sparks and the hit flash
  * can be looked at rather than assumed.
  *
+ * Every stepping loop runs *inside* the page: this container rasterises in
+ * software, and a Playwright round trip per frame costs more than the frame.
+ *
  *   node tools/combat-drive.mjs [outDir]
  */
 import { spawn } from 'node:child_process';
@@ -16,9 +19,12 @@ import { chromium } from 'playwright';
 import sharp from 'sharp';
 import { CHROMIUM_ARGS, findChromium } from './capture/cli.mjs';
 
-const OUT = process.argv[2] ?? '/tmp/combat';
-const WIDTH = 720;
-const HEIGHT = 405;
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+/** `--quick` stops after the impact shots: enough to re-check the look. */
+const QUICK = process.argv.includes('--quick');
+const OUT = args[0] ?? '/tmp/combat';
+const WIDTH = 512;
+const HEIGHT = 288;
 mkdirSync(OUT, { recursive: true });
 
 const server = spawn(
@@ -49,40 +55,97 @@ await page.goto('http://127.0.0.1:5201/?autostart=0&backend=webgl2&quality=low',
 await page.evaluate(() => window.__d2rim.ready);
 mark('ready');
 
-const step = (n) => page.evaluate((count) => window.__d2rim.engine.stepFrames(count), n);
+/**
+ * Helpers installed in the page. `snapshot` is the state dump every check reads
+ * and `stageDuel` is the deterministic setup: one skeleton, at a known offset,
+ * already aware, with everything else moved out of the moor.
+ */
+await page.evaluate(() => {
+  const d2 = window.__d2rim;
+  const T = d2.three;
+  const services = () => d2.ctx.services;
 
-const state = () =>
-  page.evaluate(() => {
-    const s = window.__d2rim.ctx.services;
-    const combat = s.get('combat');
-    const director = s.get('ai.director');
-    const player = s.get('character.player');
-    const feedback = window.__d2rim.engine.getModule('combat.feedback');
-    return {
-      timeScale: window.__d2rim.ctx.time.scale,
-      move: combat.moveId,
-      window: combat.hitWindowOpen,
-      chainIndex: combat.combo.chainIndex,
-      playerHealth: +combat.vitals.health.value.toFixed(1),
-      playerStamina: +combat.stamina.toFixed(1),
-      playerPos: player.position.toArray().map((v) => +v.toFixed(2)),
-      playerAction: (player.animation?.activeActions ?? []).map(
-        (a) => `${a.action}@${a.normalizedTime.toFixed(2)}`,
-      ),
-      trauma: +(feedback?.trauma ?? 0).toFixed(3),
-      sparks: feedback?.liveSparks ?? 0,
-      enemies: director.enemies.map((e) => ({
-        id: e.id,
-        v: e.profile.variant,
-        st: e.state,
-        hp: +e.health.toFixed(1),
-        d: +e.position.distanceTo(player.position).toFixed(2),
-        aware: e.aware,
-      })),
-    };
-  });
+  window.__combat = {
+    snapshot() {
+      const combat = services().get('combat');
+      const director = services().get('ai.director');
+      const player = services().get('character.player');
+      const feedback = d2.engine.getModule('combat.feedback');
+      return {
+        timeScale: d2.ctx.time.scale,
+        move: combat.moveId,
+        window: combat.hitWindowOpen,
+        chainIndex: combat.combo.chainIndex,
+        playerHealth: +combat.vitals.health.value.toFixed(1),
+        playerStamina: +combat.stamina.toFixed(1),
+        playerActions: (player.animation?.activeActions ?? []).map(
+          (a) => `${a.action}:${a.clip}@${a.normalizedTime.toFixed(2)}`,
+        ),
+        trauma: +(feedback?.trauma ?? 0).toFixed(3),
+        sparks: feedback?.liveSparks ?? 0,
+        shake: +(feedback?.shakeOffset.length() ?? 0).toFixed(4),
+        enemies: director.enemies.map((e) => ({
+          id: e.id,
+          v: e.profile.variant,
+          st: e.state,
+          hp: +e.health.toFixed(1),
+          d: +e.position.distanceTo(player.position).toFixed(2),
+          aware: e.aware,
+          clips: (e.animationDebug ?? []).slice(0, 2),
+        })),
+      };
+    },
 
-async function shot(label) {
+    /** Put one live skeleton `distance` metres in front of the hero. */
+    stageDuel(distance) {
+      const director = services().get('ai.director');
+      const player = services().get('character.player');
+      const enemy = director.enemies.find((e) => e.alive);
+      if (enemy === undefined) return null;
+      const forward = player.forward(new T.Vector3());
+      const spot = player.position.clone().addScaledVector(forward, distance);
+      enemy.skipSpawn();
+      enemy.teleport(spot.x, spot.y, spot.z);
+      enemy.alert();
+      for (const other of director.enemies) {
+        if (other === enemy) continue;
+        other.teleport(other.position.x + 120, other.position.y, other.position.z + 120);
+      }
+      window.__combat.duelId = enemy.id;
+      return { id: enemy.id, variant: enemy.profile.variant, hp: enemy.health };
+    },
+
+    enemy(id) {
+      return services()
+        .get('ai.director')
+        .enemies.find((e) => e.id === id);
+    },
+
+    /** Frame the duel from the side so the swing is not behind the hero. */
+    stageCamera(distance = 4.2, height = 1.9, side = 1) {
+      const player = services().get('character.player');
+      const enemy = window.__combat.enemy(window.__combat.duelId);
+      const camera = d2.ctx.camera;
+      const forward = player.forward(new T.Vector3());
+      const right = new T.Vector3(forward.z, 0, -forward.x).multiplyScalar(side);
+      const focus = (enemy?.position ?? player.position)
+        .clone()
+        .add(player.position)
+        .multiplyScalar(0.5);
+      focus.y += 1.05;
+      camera.position
+        .copy(focus)
+        .addScaledVector(right, distance * 0.85)
+        .addScaledVector(forward, -distance * 0.25);
+      camera.position.y = focus.y + height * 0.35;
+      camera.lookAt(focus);
+      camera.updateMatrixWorld(true);
+    },
+  };
+});
+
+const shot = async (label, cinematic = true) => {
+  if (cinematic) await page.evaluate(() => window.__combat.stageCamera());
   const frame = await page.evaluate(
     async ([w, h]) => {
       const ctx = window.__d2rim.ctx;
@@ -101,7 +164,7 @@ async function shot(label) {
     .png()
     .toFile(`${OUT}/${label}.png`);
   mark(`shot ${label}`);
-}
+};
 
 const failures = [];
 const check = (name, ok, detail) => {
@@ -111,142 +174,183 @@ const check = (name, ok, detail) => {
 
 /* -- settle -------------------------------------------------------------- */
 
-await step(30);
-let snap = await state();
+await page.evaluate(() => window.__d2rim.engine.stepFrames(20));
+let snap = await page.evaluate(() => window.__combat.snapshot());
 console.log('spawned:', JSON.stringify(snap.enemies));
 check('skeletons spawned', snap.enemies.length >= 4, `${snap.enemies.length} enemies`);
-check('player is at full health', snap.playerHealth > 0, `${snap.playerHealth} hp`);
+check('the player starts alive', snap.playerHealth > 0, `${snap.playerHealth} hp`);
 
-/* -- stage one skeleton in front of the hero ------------------------------ */
-
-const staged = await page.evaluate(() => {
-  const s = window.__d2rim.ctx.services;
-  const director = s.get('ai.director');
-  const player = s.get('character.player');
-  const T = window.__d2rim.three;
-  const enemy = director.enemies.find((e) => e.alive);
-  if (enemy === undefined) return null;
-  const forward = player.forward(new T.Vector3());
-  const target = player.position.clone().addScaledVector(forward, 1.55);
-  enemy.skipSpawn();
-  enemy.teleport(target.x, target.y, target.z);
-  enemy.alert();
-  // Move everything else far away so exactly one fight is under test.
-  for (const other of director.enemies) {
-    if (other === enemy) continue;
-    other.teleport(other.position.x + 90, other.position.y, other.position.z + 90);
-  }
-  return { id: enemy.id, variant: enemy.profile.variant, hp: enemy.health };
-});
-check('staged a skeleton', staged !== null, JSON.stringify(staged));
-await step(2);
+const staged = await page.evaluate(() => window.__combat.stageDuel(1.5));
+check('staged a duel', staged !== null, JSON.stringify(staged));
+await page.evaluate(() => window.__d2rim.engine.stepFrames(2));
 await shot('01-face-off');
 
-/* -- swing --------------------------------------------------------------- */
+/* -- one swing ------------------------------------------------------------ */
 
-await page.evaluate(() => window.__d2rim.ctx.services.get('combat').press('light'));
+const swing = await page.evaluate(async () => {
+  const d2 = window.__d2rim;
+  const combat = d2.ctx.services.get('combat');
+  const enemy = window.__combat.enemy(window.__combat.duelId);
+  const before = enemy.health;
 
-let sawWindow = false;
-let sawSparks = 0;
-let firstDamageFrame = -1;
-let minHitStopScale = 1;
-const before = (await state()).enemies.find((e) => e.id === staged.id).hp;
+  combat.press('light');
+  const trace = [];
+  let sawWindow = false;
+  let peakSparks = 0;
+  let minScale = 1;
+  let impactFrame = -1;
+  let peakTrauma = 0;
 
-for (let i = 0; i < 90; i++) {
-  await step(1);
-  const now = await state();
-  const enemy = now.enemies.find((e) => e.id === staged.id);
-  if (now.window) sawWindow = true;
-  sawSparks = Math.max(sawSparks, now.sparks);
-  minHitStopScale = Math.min(minHitStopScale, now.timeScale);
-  if (firstDamageFrame === -1 && enemy !== undefined && enemy.hp < before) {
-    firstDamageFrame = i;
-    console.log('impact frame', i, JSON.stringify(now));
-    await shot('02-impact');
+  for (let i = 0; i < 120; i++) {
+    await d2.engine.stepFrames(1);
+    const feedback = d2.engine.getModule('combat.feedback');
+    if (combat.hitWindowOpen) sawWindow = true;
+    peakSparks = Math.max(peakSparks, feedback?.liveSparks ?? 0);
+    peakTrauma = Math.max(peakTrauma, feedback?.trauma ?? 0);
+    minScale = Math.min(minScale, d2.ctx.time.scale);
+    if (i % 4 === 0) {
+      trace.push(`${i}:${combat.moveId ?? '-'}${combat.hitWindowOpen ? '*' : ''}/${enemy.health}`);
+    }
+    if (impactFrame === -1 && enemy.health < before) impactFrame = i;
+    // Keep sampling for a few frames past the impact: the burst is emitted from
+    // `combat:hit` during lateUpdate, and the particle count is only recomputed
+    // by the next frame's update, so breaking on the impact frame measures the
+    // state one frame before the sparks exist.
+    if (impactFrame !== -1 && i >= impactFrame + 4) break;
   }
-  if (firstDamageFrame !== -1 && i === firstDamageFrame + 3) await shot('03-after-impact');
-  if (firstDamageFrame !== -1 && i > firstDamageFrame + 12) break;
-}
+  return {
+    before,
+    after: enemy.health,
+    sawWindow,
+    peakSparks,
+    peakTrauma: +peakTrauma.toFixed(3),
+    minScale: +minScale.toFixed(3),
+    impactFrame,
+    trace,
+    enemyState: enemy.state,
+  };
+});
+console.log('swing:', JSON.stringify(swing));
+check('the authored damage window opened', swing.sawWindow);
+check('the swing dealt damage', swing.after < swing.before, `${swing.before} -> ${swing.after}`);
+check('impact sparks were emitted', swing.peakSparks > 0, `${swing.peakSparks} particles`);
+check('hit stop slowed the clock', swing.minScale < 0.5, `min time scale ${swing.minScale}`);
+check('camera trauma accumulated', swing.peakTrauma > 0, `peak trauma ${swing.peakTrauma}`);
+await shot('02-impact');
 
-snap = await state();
-const hitEnemy = snap.enemies.find((e) => e.id === staged.id);
-check('the damage window opened', sawWindow);
-check('the swing dealt damage', hitEnemy.hp < before, `${before} -> ${hitEnemy.hp}`);
-check('impact sparks were emitted', sawSparks > 0, `${sawSparks} live particles`);
-check('hit stop slowed the clock', minHitStopScale < 0.5, `min time scale ${minHitStopScale}`);
-check('camera trauma accumulated', snap.trauma >= 0, `trauma ${snap.trauma}`);
+// A couple of frames on so the sparks have spread and the shake has moved.
+await page.evaluate(() => window.__d2rim.engine.stepFrames(3));
+snap = await page.evaluate(() => window.__combat.snapshot());
+console.log('after impact:', JSON.stringify(snap));
+check('the swing is playing a real attack clip', snap.playerActions.length > 0, snap.playerActions.join(','));
+await shot('03-after-impact');
+
+if (QUICK) {
+  writeFileSync(`${OUT}/console.log`, logs.join('\n'));
+  console.log(failures.length === 0 ? '\nALL CHECKS PASSED' : `\nFAILED: ${failures.join(', ')}`);
+  await browser.close();
+  server.kill();
+  process.exit(failures.length === 0 ? 0 : 1);
+}
 
 /* -- combo chain ---------------------------------------------------------- */
 
+// Hit stop has been verified; from here on it only costs frames. A 16x
+// slowdown on every impact means sixteen times the renders to reach the same
+// simulated state, and this container rasterises in software.
+await page.evaluate(() => window.__d2rim.engine.getModule('combat.feedback').setHitStop(false));
+
 const chain = await page.evaluate(async () => {
-  const s = window.__d2rim.ctx.services;
-  const combat = s.get('combat');
-  const engine = window.__d2rim.engine;
+  const d2 = window.__d2rim;
+  const combat = d2.ctx.services.get('combat');
   const seen = [];
-  const off = window.__d2rim.ctx.events.on('combat:swing', (p) => seen.push(p.moveId));
-  for (let i = 0; i < 220; i++) {
+  const clips = [];
+  const off = d2.ctx.events.on('combat:swing', (p) => seen.push(p.moveId));
+  const player = d2.ctx.services.get('character.player');
+  for (let i = 0; i < 200; i++) {
     combat.press('light');
-    await engine.stepFrames(1);
+    await d2.engine.stepFrames(1);
+    for (const action of player.animation?.activeActions ?? []) {
+      if (action.action.startsWith('attack') && !clips.includes(action.clip)) clips.push(action.clip);
+    }
+    if (seen.length >= 5) break;
   }
   off();
-  return seen;
+  return { seen, clips };
 });
-console.log('chain observed:', chain.join(' -> '));
-check('the combo chained through distinct moves', new Set(chain).size >= 3, chain.join(','));
+console.log('chain:', chain.seen.join(' -> '));
+console.log('clips used:', chain.clips.join(', '));
+check(
+  'the combo chained through distinct moves',
+  new Set(chain.seen).size >= 3,
+  chain.seen.join(','),
+);
+check(
+  'each link plays a different authored clip',
+  new Set(chain.clips).size >= 3,
+  chain.clips.join(','),
+);
 
 /* -- kill ----------------------------------------------------------------- */
 
-for (let i = 0; i < 700; i++) {
-  await page.evaluate(() => window.__d2rim.ctx.services.get('combat').press('light'));
-  await step(1);
-  if (i % 25 === 0) {
-    const now = await state();
-    const enemy = now.enemies.find((e) => e.id === staged.id);
-    if (enemy === undefined || enemy.hp <= 0) break;
+const kill = await page.evaluate(async () => {
+  const d2 = window.__d2rim;
+  const combat = d2.ctx.services.get('combat');
+  // A *fresh* skeleton: the one from the chain phase is already a corpse, and a
+  // kill check that passes because the target was dead before the swing proves
+  // nothing at all.
+  const staged = window.__combat.stageDuel(1.5);
+  if (staged === null) return { error: 'no live enemy left' };
+  const enemy = window.__combat.enemy(window.__combat.duelId);
+  // Bring it down to roughly one swing's worth so the loop is short; the
+  // killing blow itself still goes through the whole hitbox and damage path.
+  enemy.vitals.applyDamage(Math.max(0, enemy.health - 9));
+  const before = enemy.health;
+  for (let i = 0; i < 120; i++) {
+    combat.press('light');
+    await d2.engine.stepFrames(1);
+    if (!enemy.alive) return { staged, before, after: enemy.health, state: enemy.state, frames: i };
   }
-}
-
-snap = await state();
-const corpse = snap.enemies.find((e) => e.id === staged.id);
-console.log('final:', JSON.stringify(snap.enemies));
+  return { staged, before, after: enemy.health, state: enemy.state, frames: -1 };
+});
+console.log('kill:', JSON.stringify(kill));
 check(
-  'the skeleton died',
-  corpse === undefined || corpse.hp <= 0 || corpse.st === 'dead',
-  corpse === undefined ? 'removed' : `${corpse.hp} hp, state ${corpse.st}`,
+  'the killing blow was actually swung',
+  kill.before > 0 && kill.frames > 0,
+  `started at ${kill.before} hp, died after ${kill.frames} frames`,
 );
+check('the skeleton died', kill.state === 'dead', JSON.stringify(kill));
+await page.evaluate(() => window.__d2rim.engine.stepFrames(20));
 await shot('04-death');
 
 /* -- the enemy hits back --------------------------------------------------- */
 
 const revenge = await page.evaluate(async () => {
-  const s = window.__d2rim.ctx.services;
-  const director = s.get('ai.director');
-  const combat = s.get('combat');
-  const player = s.get('character.player');
-  const T = window.__d2rim.three;
-  const engine = window.__d2rim.engine;
-
-  const enemy = director.enemies.find((e) => e.alive);
-  if (enemy === undefined) return { error: 'no live enemy left' };
-  const forward = player.forward(new T.Vector3());
-  const spot = player.position.clone().addScaledVector(forward, 1.4);
-  enemy.skipSpawn();
-  enemy.teleport(spot.x, spot.y, spot.z);
-  enemy.alert();
-
+  const d2 = window.__d2rim;
+  const combat = d2.ctx.services.get('combat');
+  const staged = window.__combat.stageDuel(1.4);
+  if (staged === null) return { error: 'no live enemy left' };
+  const enemy = window.__combat.enemy(window.__combat.duelId);
   const before = combat.vitals.health.value;
-  const states = new Set();
-  for (let i = 0; i < 500; i++) {
-    await engine.stepFrames(1);
-    states.add(enemy.state);
-    if (combat.vitals.health.value < before) break;
+  const states = [];
+  let telegraphFrame = -1;
+  for (let i = 0; i < 200; i++) {
+    await d2.engine.stepFrames(1);
+    if (states[states.length - 1] !== enemy.state) states.push(enemy.state);
+    if (telegraphFrame === -1 && enemy.state === 'telegraph') telegraphFrame = i;
+    if (combat.vitals.health.value < before) {
+      return {
+        staged,
+        before,
+        after: combat.vitals.health.value,
+        states,
+        telegraphFrame,
+        hitFrame: i,
+        enemyState: enemy.state,
+      };
+    }
   }
-  return {
-    before,
-    after: combat.vitals.health.value,
-    states: [...states],
-    enemyState: enemy.state,
-  };
+  return { staged, before, after: combat.vitals.health.value, states, telegraphFrame, hitFrame: -1 };
 });
 console.log('enemy turn:', JSON.stringify(revenge));
 check('the enemy telegraphed before swinging', (revenge.states ?? []).includes('telegraph'));
@@ -255,11 +359,16 @@ check(
   revenge.after !== undefined && revenge.after < revenge.before,
   `${revenge.before} -> ${revenge.after}`,
 );
+check(
+  'the telegraph gave the player time to react',
+  revenge.hitFrame - revenge.telegraphFrame >= 12,
+  `${revenge.hitFrame - revenge.telegraphFrame} frames of warning`,
+);
 await shot('05-enemy-attack');
 
 writeFileSync(`${OUT}/console.log`, logs.join('\n'));
 const errors = logs.filter((line) => line.startsWith('pageerror') || line.startsWith('error'));
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+check('no page errors', errors.length === 0, errors.slice(0, 4).join(' | '));
 
 console.log(failures.length === 0 ? '\nALL CHECKS PASSED' : `\nFAILED: ${failures.join(', ')}`);
 await browser.close();

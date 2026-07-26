@@ -411,18 +411,28 @@ export class ComboMachine {
 /* Player statistics                                                           */
 /* -------------------------------------------------------------------------- */
 
-/** A level-1 Barbarian with a hand axe, roughly D2's opening numbers. */
+/**
+ * A level-2 Barbarian with a hand axe, roughly D2's opening numbers.
+ *
+ * The attack rating is set deliberately high for the level: against a skeleton
+ * (defence 34, level 2) it lands about 81% of swings. Diablo II's own opening
+ * numbers give closer to a coin flip, and a coin flip is fine in a game where
+ * you click a target and watch — it is *miserable* in a game where you aimed
+ * the swing yourself, because the player reads a miss as the hitbox lying to
+ * them rather than as a dice roll. Whiffing is a positioning outcome here, not
+ * a statistical one.
+ */
 export const PLAYER_OFFENSE: OffenseStats = {
-  level: 1,
-  attackRating: 105,
+  level: 2,
+  attackRating: 150,
   damage: { physical: { min: 9, max: 17 } },
   criticalChance: 0.09,
   criticalMultiplier: 2,
 };
 
 export const PLAYER_DEFENSE_BASE = {
-  level: 1,
-  defense: 42,
+  level: 2,
+  defense: 60,
   resistances: { fire: 0, cold: 0, lightning: 0, poison: 0 },
   blockChance: 0.42,
   blockAbsorb: 1,
@@ -847,6 +857,10 @@ export class CombatSystem implements GameModule {
     }
 
     if (this.#blocking) {
+      // A full-body move plays on the other layer, so it will not interrupt the
+      // looping block action on its own — the Barbarian would swing a two-hander
+      // while still holding his guard up.
+      graph.cancelActions('upper', 0.1);
       this.#blocking = false;
       this.#blockHandleActive = false;
     }
