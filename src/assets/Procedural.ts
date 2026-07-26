@@ -919,6 +919,19 @@ export interface ScatterSample {
   readonly normal: THREE.Vector3;
   /** Uniform scale chosen for this instance. */
   readonly scale: number;
+  /**
+   * Optional extra Y-only multiplier on top of {@link scale}, default 1.
+   *
+   * Uniform scaling cannot hide a repeat: an instance at 1.6x is recognisably
+   * the same shape as one at 0.9x, and a viewer finds the correspondence in
+   * about a second. Squashing or stretching the vertical independently changes
+   * the *proportion* — which is what a silhouette is read by — so the same
+   * geometry supplies several apparent species instead of several sizes of one.
+   * Non-uniform scale does skew the normals; on unlit-dark background geometry
+   * like a bare treeline that is invisible, which is exactly why it is opt-in
+   * per sample rather than applied everywhere.
+   */
+  readonly stretch?: number;
   /** Rotation about Y, radians. */
   readonly rotation: number;
   readonly index: number;
@@ -1079,6 +1092,7 @@ export function buildInstancedMesh(
     spin.setFromAxisAngle(up, sample.rotation);
     quaternion.copy(align).multiply(spin);
     scaleVector.setScalar(sample.scale);
+    scaleVector.y *= sample.stretch ?? 1;
     matrix.compose(sample.position, quaternion, scaleVector);
     mesh.setMatrixAt(sample.index, matrix);
   }

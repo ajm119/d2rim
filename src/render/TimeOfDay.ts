@@ -174,7 +174,21 @@ export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDay
       cloudOpticalDepth: 40,
       cloudBaseAltitude: 900,
       cloudThickness: 700,
-      hazeDensity: 2.6,
+      // 3.9, from 2.6. This is the aerosol multiplier on aerial perspective and
+      // it is the cheapest fix available for two separate defects at once.
+      //
+      // Depth: distant hills were measuring at the same value *and hue* as the
+      // near ground, so the frame had three depth planes drawn and none of them
+      // separated. Aerial perspective is the only cue that does that work for
+      // free on every material in the scene at once.
+      //
+      // The world edge: the ground mesh is a 260 m plane, and at 2.6 the eye
+      // could see the far rim of it end on a pale strip against the sky. Fog is
+      // the art-directable way to end a world — at 3.9 the extinction integral
+      // over 130 m puts transmittance under 0.05, so the mesh boundary is
+      // optically invisible before it is geometrically reached. Extending the
+      // height field instead would cost triangles for a result nobody sees.
+      hazeDensity: 3.9,
       mistDensity: 0.34,
       skyIntensity: 1,
     },

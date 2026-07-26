@@ -52,9 +52,20 @@ const GROUND_DETAIL = {
   // free — it is the same texture fetch either way — and it is the difference
   // between "photoscanned PBR" being a claim and being visible.
   normalStrength: 0.95,
-  albedoStrength: 0.5,
-  fadeStart: 8,
-  fadeEnd: 26,
+  // 0.3, from 0.5. The strength and the fade distance trade against each other:
+  // at a 26 m fade a strong albedo detail reads as surface, and at a 65 m fade
+  // the same strength reads as pale streaking across a whole hillside, because
+  // the tiling frequency is now far below one cycle per pixel out there. The
+  // normal keeps its strength - a normal has no such failure mode, it simply
+  // stops being resolvable.
+  albedoStrength: 0.3,
+  // 18 -> 65 m, from 8 -> 26 m. The subject of every shot in this scene sits
+  // between 15 and 200 m from the lens, so a detail layer that has faded out by
+  // 26 m is not visible in a single authored frame. The fetch costs the same at
+  // any fade distance — it is one extra tap either way — and pushing the fade
+  // out is the only reason the photoscanned normal ever appears in a capture.
+  fadeStart: 18,
+  fadeEnd: 65,
 } as const;
 
 const STONE_DETAIL = {
@@ -62,8 +73,8 @@ const STONE_DETAIL = {
   tiling: 10,
   normalStrength: 1.0,
   albedoStrength: 0.42,
-  fadeStart: 6,
-  fadeEnd: 20,
+  fadeStart: 12,
+  fadeEnd: 48,
 } as const;
 
 const FINE_DETAIL = {
@@ -116,10 +127,16 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     antiTile: 'hex',
     detail: GROUND_DETAIL,
     macro: {
-      metres: 34,
+      // 22 m, from 34. Past the detail fade this octave is the entire texture
+      // budget for the mid and far ground, and at 34 m wavelength its lobes
+      // were larger than the whole visible slope — which is what read as
+      // "blotchy leopard print" rather than as ground shading. Shortening the
+      // wavelength puts two or three cycles across the same hillside, which is
+      // structure; the amplitude comes down to match so it stays shading.
+      metres: 22,
       // Raised from 0.3, same reasoning as `deadGrass`: past the detail fade
       // this octave is the whole texture budget.
-      albedoAmount: 0.44,
+      albedoAmount: 0.3,
       roughnessAmount: 0.2,
       // A rust-brown that reads as iron-rich soil and dried blood, not as a
       // warm filter. Very dark, so it darkens *and* separates hue.
@@ -238,7 +255,15 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'rock',
     useProceduralBase: false,
-    albedoTint: [0.66, 0.72, 0.6],
+    // Saturation clamped and the tint pulled cold and dark. The moss layer in
+    // this scan is a saturated yellow-green that survived every previous pass
+    // because `albedoSaturation` was never set on this archetype at all — the
+    // green went out of the conifers and stayed on the escarpment rocks, where
+    // it read as blotchy teal and as a colour family from a different game.
+    // Moss is an *accent* in this palette: it is allowed to exist and it is not
+    // allowed to be the second most chromatic thing in the frame.
+    albedoSaturation: 0.3,
+    albedoTint: [0.3, 0.335, 0.31],
     roughnessRange: [0.5, 0.95],
     metalness: 0,
     reflectance: 0.042,
@@ -288,14 +313,26 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     // an overcast frame by a wide margin, which inverted the whole focal
     // hierarchy — the eye went to the wall, not to the fire. Blue held highest
     // so the wet stone stays cold against the warm light.
-    albedoTint: [0.245, 0.265, 0.30],
+    //
+    // 0.13, down again from 0.245. The direction was right and the magnitude
+    // was not: the wall was still measuring brighter than the sky in the hero
+    // frame, and a man-made mass that is the brightest thing in the picture
+    // while not being the subject is a focal-hierarchy failure regardless of
+    // how well textured it is. A rain-blackened ruin belongs in the lower third
+    // of the histogram, which is where 0.13 puts it against this exposure.
+    albedoTint: [0.13, 0.145, 0.175],
     // 0.35. The masonry scan is warm dry limestone and the cold tint alone
     // could not move it — a multiply preserves channel ratios, so the wall came
     // out dark *and still cream*, and it was the only warm mass in a frame
     // whose whole palette rule is that the fire is the only warm thing. Pulled
     // most of the way to grey first, the cold tint finally has authority over
     // the hue. Not to zero: mortar has to stay separable from stone.
-    albedoSaturation: 0.35,
+    // 0.55, up from 0.35 — i.e. *less* chroma removed, not more. With the tint
+    // now dark enough to have real authority over the hue, over-desaturating on
+    // top of it was flattening the mortar-vs-block distinction that is the only
+    // course structure this scan carries. What survives at 0.55 under a
+    // [0.13, 0.145, 0.175] tint is a cold grey-green, which is the target.
+    albedoSaturation: 0.55,
     roughnessRange: [0.32, 0.88],
     metalness: 0,
     reflectance: 0.05,

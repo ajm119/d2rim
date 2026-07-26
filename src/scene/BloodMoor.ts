@@ -101,8 +101,10 @@ import {
   luminance,
   mix,
   mx_noise_float,
+  normalView,
   normalWorldGeometry,
   oneMinus,
+  positionViewDirection,
   positionLocal,
   positionWorld,
   vec2,
@@ -283,9 +285,42 @@ const TRACK: readonly [THREE.Vector2, THREE.Vector2, THREE.Vector2] = [
   new THREE.Vector2(CAMPFIRE.x + 0.4, CAMPFIRE.y + 1.1),
 ];
 
-
 /** Where the Barbarian stands: between the camera and the fire, off-centre. */
 const HERO = new THREE.Vector2(1.1, 0.4);
+
+/** The ruined wall's heading, radians. Shared by the wall and its supply stack. */
+const WALL_YAW = THREE.MathUtils.degToRad(24);
+
+/**
+ * Where the four seats round the fire go, as bearings *relative to the camera*.
+ *
+ * None of them is within 60 deg of the lens bearing, so the arc the camera
+ * looks through stays open. Uneven spacing on purpose: four props at 90 deg
+ * intervals is a compass rose and reads as placed.
+ */
+const FIRE_SEAT_BEARINGS: readonly number[] = [1.22, 2.44, 3.49, 4.66];
+
+/**
+ * Is this ground position on the camera's sightline to the Barbarian?
+ *
+ * A capsule from the hero back toward the eye, 1.5 m in radius. `backlit-
+ * silhouette` exists to prove rim separation on the subject and its pose is
+ * deterministic, so a prop landing in this volume is a reproducible way to
+ * ruin the one shot that has to work. Cheap enough to run per candidate at
+ * build time — a point-segment distance and one compare.
+ */
+function isOnHeroSightline(x: number, z: number): boolean {
+  const ax = HERO.x;
+  const az = HERO.y;
+  const bx = CAMERA.position.x;
+  const bz = CAMERA.position.z;
+  const dx = bx - ax;
+  const dz = bz - az;
+  const t = THREE.MathUtils.clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+  const cx = ax + dx * t;
+  const cz = az + dz * t;
+  return Math.hypot(x - cx, z - cz) < 1.5;
+}
 
 /** Standing height of the figure, in metres. The scene's scale reference. */
 const HERO_HEIGHT = 1.85;
@@ -443,7 +478,7 @@ export class BloodMoor implements GameModule {
     const flicker =
       1 + 0.085 * Math.sin(t * 7.31) + 0.055 * Math.sin(t * 11.97 + 1.7) + 0.03 * Math.sin(t * 19.3);
     this.#fireLight?.setIntensity(FIRE_INTENSITY * flicker);
-    if (this.#fireGlow !== null) this.#fireGlow.intensity = FIRE_INTENSITY * flicker;
+    if (this.#fireGlow !== null) this.#fireGlow.intensity = FIRE_SCATTER_INTENSITY * flicker;
     // The emissive geometry flickers on the same curve as the light it stands
     // for. If the two drift apart the fire reads as a lamp with a fire painted
     // on it — the single most common failure of this effect.
@@ -520,8 +555,15 @@ export class BloodMoor implements GameModule {
     // Behind and above the composition, on roughly the camera's own bearing so
     // the rim lands on the silhouette edges the lens can actually see. A rim
     // light 90° off the lens axis rims a contour nobody is looking at.
-    rim.position.set(-11.0, 14.0, -34.0);
-    rim.target.position.set(2.0, 0.6, -2.0);
+    // Elevation dropped from 21° to 16°. A rim that comes in steeply lands on
+    // the tops of things, and the tops of things are not the silhouette the
+    // lens sees. At 16° it rakes the vertical edges — the Barbarian's shoulder
+    // and arm, the wall's broken end, the trunks on the ridge — which is where
+    // the separation actually has to happen. Bearing is unchanged: it is
+    // already within 8° of directly opposed to the camera axis, which is what
+    // makes it a backlight rather than a second key.
+    rim.position.set(-12.5, 11.0, -34.0);
+    rim.target.position.set(2.0, 0.9, -2.0);
     rim.castShadow = false;
     this.#root.add(rim);
     this.#root.add(rim.target);
@@ -639,7 +681,11 @@ export class BloodMoor implements GameModule {
     const mossy = materials.get('mossyRock');
     const rng = createRng(`${SCATTER_SEED}.escarpment`);
 
-    const blocks: readonly { x: number; z: number; s: readonly [number, number, number] }[] = [
+    const blocks: readonly {
+      x: number;
+      z: number;
+      s: readonly [number, number, number];
+    }[] = [
       { x: -13.5, z: -6.0, s: [5.4, 4.2, 6.8] },
       { x: -11.2, z: 1.8, s: [4.2, 3.4, 5.0] },
       { x: -15.8, z: 4.6, s: [6.0, 5.2, 5.6] },
@@ -703,7 +749,12 @@ export class BloodMoor implements GameModule {
     // second leading line converging on the fire.
     const origin = new THREE.Vector3(-5.6, 0, -11.4);
     const yaw = THREE.MathUtils.degToRad(24);
-    const courses: readonly { along: number; height: number; length: number; depth: number }[] = [
+    const courses: readonly {
+      along: number;
+      height: number;
+      length: number;
+      depth: number;
+    }[] = [
       { along: -4.6, height: 3.4, length: 3.0, depth: 0.86 },
       { along: -1.5, height: 2.9, length: 3.2, depth: 0.86 },
       { along: 1.6, height: 1.9, length: 3.0, depth: 0.82 },
@@ -711,6 +762,7 @@ export class BloodMoor implements GameModule {
       { along: 5.9, height: 0.5, length: 1.6, depth: 0.7 },
     ];
 
+    const wallRng = createRng(`${SCATTER_SEED}.wallcrown`);
     const group = new THREE.Group();
     group.name = 'ruinedWall';
     group.rotation.y = yaw;
@@ -735,10 +787,12 @@ export class BloodMoor implements GameModule {
           fadeEnd: 18,
           clipSilhouette: false,
         },
-        // The masonry set is bright limestone. Tinted down and toward the
-        // scene's cold grey so a two-metre wall is not the brightest object in
-        // an overcast frame, which it otherwise is by a wide margin.
-        albedoTint: [0.30, 0.32, 0.35],
+        // Deliberately *not* overriding the archetype tint any more. This
+        // per-course override at 0.30 was silently defeating the wetStone
+        // archetype's own value (now 0.13) — two places setting the same
+        // number, one of them out of date, which is how the wall ended up
+        // measuring brighter than the sky after the archetype had already been
+        // darkened twice. One authority per decision.
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `ruinedWall.${index}`;
@@ -753,6 +807,51 @@ export class BloodMoor implements GameModule {
       mesh.receiveShadow = true;
       group.add(mesh);
       this.#disposables.push(geometry, material);
+
+      // **Break the top.**
+      //
+      // Everything above is about the wall's *surface*. None of it addresses
+      // the fact that an extruded box has a dead-straight top edge, and against
+      // a bright overcast sky that straight edge is the only thing about the
+      // wall the eye actually resolves at distance. A silhouette cannot be
+      // fixed with a texture: in stylized work the silhouette *is* the read,
+      // and a ruin whose outline is a perfect horizontal is not a ruin.
+      //
+      // So the top course is re-cut into 0.5 m capstones with randomised
+      // heights and randomised gaps — some standing proud, some slumped, some
+      // missing entirely. Deterministic from the scatter seed, so the frame is
+      // the same every capture. Cost is five to seven extra boxes per course
+      // sharing the course's own material: no new draw call after batching, and
+      // twelve triangles each.
+      const stoneWidth = 0.5;
+      const stoneCount = Math.max(2, Math.round(course.length / stoneWidth));
+      for (let c = 0; c < stoneCount; c++) {
+        // Two missing per course on average. A gap in a wall crown is what
+        // makes the remaining stones read as stones rather than as crenellation.
+        if (wallRng.next() < 0.3) continue;
+        const rise = 0.1 + wallRng.next() * 0.24;
+        const capGeometry = new THREE.BoxGeometry(
+          stoneWidth * (0.82 + wallRng.next() * 0.16),
+          rise,
+          course.depth * (0.78 + wallRng.next() * 0.2),
+        );
+        const cap = new THREE.Mesh(capGeometry, material);
+        cap.name = `ruinedWall.${index}.cap.${c}`;
+        cap.position.set(
+          course.along + (c + 0.5 - stoneCount / 2) * stoneWidth,
+          base + course.height - 0.25 + rise * 0.5 - 0.04,
+          (wallRng.next() - 0.5) * 0.12,
+        );
+        cap.rotation.set(
+          (wallRng.next() - 0.5) * 0.12,
+          (wallRng.next() - 0.5) * 0.22,
+          (wallRng.next() - 0.5) * 0.16,
+        );
+        cap.castShadow = true;
+        cap.receiveShadow = true;
+        group.add(cap);
+        this.#disposables.push(capGeometry);
+      }
     });
   }
 
@@ -851,24 +950,45 @@ export class BloodMoor implements GameModule {
     const emberGeometry = new THREE.CircleGeometry(0.42, 20);
     emberGeometry.rotateX(-Math.PI / 2);
     const emberRadial = positionLocal.xz.length().div(0.42).clamp(0, 1);
-    const emberMaterial = new THREE.MeshBasicNodeMaterial({ toneMapped: true });
+    // Additive and depth-write-off, like the flame. The bed used to be an
+    // opaque disc, and an opaque disc has a polygon edge — which is precisely
+    // the "hard-edged horizontal bright bar under the logs" the critique
+    // measured. No radiance ramp can hide a silhouette; the silhouette has to
+    // stop existing.
+    const emberMaterial = new THREE.MeshBasicNodeMaterial({
+      toneMapped: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    // A profile with *no plateau anywhere*, times a squared radial vanish.
+    //
+    // `smoothstep(0.18, 0.95)` held a constant peak across the inner 18% of
+    // the disc, and a constant peak is a clipped core no matter how bright it
+    // is — that is what read as a flat cream ellipse at 1:1. The `pow(0.55)`
+    // ramp is monotonic from r = 0 outward, so every single texel of the bed
+    // differs from its neighbour and the tone curve has a gradient to roll off.
+    // `(1 - r^2)^2` then drives the edge to *exactly* zero rather than to a
+    // small non-zero value cut short by geometry.
+    const emberFalloff = oneMinus(emberRadial.mul(emberRadial)).clamp(0, 1);
+    const emberBody = mix(vec3(3.8, 1.25, 0.3), vec3(0.14, 0.02, 0.008), emberRadial.pow(0.55));
+    // Coal structure: the bed is not a light, it is a hundred embers at
+    // different temperatures. Two octaves of world-stable noise, scrolled very
+    // slowly, so the hot spots migrate the way a real bed's do.
+    const coalSpace = positionLocal.mul(11.0).add(vec3(0, this.#fireTime.mul(0.5), 0));
+    const coals = mx_noise_float(coalSpace)
+      .mul(0.42)
+      .add(mx_noise_float(coalSpace.mul(2.4).add(vec3(3, 0, 9))).mul(0.2))
+      .add(1);
     emberMaterial.colorNode = vec4(
-      mix(
-        // Peak radiance ~2.4, and confined to a 12 cm core. This is the
-        // correction to the "white blob": the old bed was a *uniform* 1.6 over
-        // a 0.34 m ellipsoid, so a hundred-odd pixels all sat at the same
-        // value, and a hundred pixels at the same value with a hard edge is by
-        // definition a blob. Radiance has to have structure before a tone curve
-        // can roll anything off.
-        vec3(2.4, 0.86, 0.22),
-        vec3(0.09, 0.012, 0.006),
-        smoothstep(0.18, 0.95, emberRadial),
-      ).mul(this.#fireFlicker),
+      emberBody.mul(emberFalloff.mul(emberFalloff)).mul(saturate(coals)).mul(this.#fireFlicker),
       float(1),
     );
     const ember = new THREE.Mesh(emberGeometry, emberMaterial);
     ember.name = 'campfire.ember';
     ember.position.y = 0.09;
+    // After the opaque pass, before the flame.
+    ember.renderOrder = 9;
     group.add(ember);
     this.#disposables.push(emberGeometry, emberMaterial);
 
@@ -885,9 +1005,9 @@ export class BloodMoor implements GameModule {
     // bonfire, not a campfire, and the extra size was most of why the mesh read
     // as a paper cone: the more screen area a soft emitter covers, the more it
     // has to be *structured* to stay convincing.
-    const flameGeometry = new THREE.CylinderGeometry(0.012, 0.15, 0.60, 9, 6, true);
-    flameGeometry.translate(0, 0.30, 0);
-    const flameHeight = positionLocal.y.div(0.60).clamp(0, 1);
+    const flameGeometry = new THREE.CylinderGeometry(0.012, 0.15, 0.6, 9, 6, true);
+    flameGeometry.translate(0, 0.3, 0);
+    const flameHeight = positionLocal.y.div(0.6).clamp(0, 1);
     const flameMaterial = new THREE.MeshBasicNodeMaterial({
       transparent: true,
       depthWrite: false,
@@ -899,9 +1019,9 @@ export class BloodMoor implements GameModule {
     // combustion is failing. The last stop is nearly black so the flame ends in
     // air rather than in a cut edge.
     const flameColour = mix(
-      mix(vec3(1.18, 0.44, 0.115), vec3(0.68, 0.185, 0.025), smoothstep(0.0, 0.40, flameHeight)),
+      mix(vec3(1.18, 0.44, 0.115), vec3(0.68, 0.185, 0.025), smoothstep(0.0, 0.4, flameHeight)),
       vec3(0.12, 0.011, 0.002),
-      smoothstep(0.40, 1.0, flameHeight),
+      smoothstep(0.4, 1.0, flameHeight),
     );
     // Two incommensurable travelling waves up the flame, so the licks never
     // repeat on a visible beat, times the global flicker.
@@ -920,7 +1040,21 @@ export class BloodMoor implements GameModule {
     const flameAlpha = oneMinus(smoothstep(0.02, 0.86, flameHeight))
       .mul(lick)
       .mul(this.#fireFlicker)
-      .mul(0.34);
+      // **The silhouette dissolve.** Everything above shapes the flame's
+      // radiance; none of it removes the fact that a swept surface has a
+      // tangent silhouette, and a tangent silhouette on an emitter is a hard
+      // cut edge — the "flat beige trapezoid with a straight diagonal edge"
+      // the critique measured. `|N·V|` is 1 where the cone faces the lens and
+      // 0 exactly along that silhouette, so raising it to a power and
+      // multiplying it into alpha drives the outline to nothing while leaving
+      // the body untouched. It is the same term a soft-particle billboard uses,
+      // evaluated per fragment for two ALU and no depth-buffer fetch.
+      .mul(smoothstep(0.0, 0.55, normalView.dot(positionViewDirection).abs()).pow(1.35))
+      // And the same treatment at the base, where the cone otherwise cuts a
+      // straight line through the logs it is supposed to be burning out of.
+      // The ember bed underneath now carries the radiance across that gap.
+      .mul(smoothstep(0.0, 0.16, flameHeight))
+      .mul(0.72);
     flameMaterial.colorNode = vec4(flameColour.mul(flameAlpha), flameAlpha);
     // Break the cone.
     //
@@ -936,10 +1070,13 @@ export class BloodMoor implements GameModule {
     // Done in the vertex stage, on 9x5 rings: 54 vertices of noise per frame
     // for the entire effect, which is nothing next to the fragment cost of the
     // additive overdraw it sits inside.
-    const wobbleSpace = positionLocal.mul(vec3(3.1, 1.7, 3.1)).add(vec3(0, this.#fireTime.mul(-2.6), 0));
+    const wobbleSpace = positionLocal
+      .mul(vec3(3.1, 1.7, 3.1))
+      .add(vec3(0, this.#fireTime.mul(-2.6), 0));
     const wobble = mx_noise_float(wobbleSpace)
-      .mul(0.12)
-      .add(mx_noise_float(wobbleSpace.mul(2.7).add(vec3(11, 0, 5))).mul(0.06));
+      .mul(0.19)
+      .add(mx_noise_float(wobbleSpace.mul(2.7).add(vec3(11, 0, 5))).mul(0.11))
+      .add(mx_noise_float(wobbleSpace.mul(6.1).add(vec3(4, 0, 17))).mul(0.05));
     flameMaterial.positionNode = positionLocal.add(
       vec3(positionLocal.x, 0, positionLocal.z).mul(wobble.mul(flameHeight.add(0.25)).mul(9)),
     );
@@ -967,7 +1104,12 @@ export class BloodMoor implements GameModule {
         position: { x, y: base + 0.62, z },
         color: FIRE_COLOR,
         intensity: FIRE_INTENSITY,
-        radius: 7,
+        // 9 m, from 7. The cutoff radius is a culling bound, not a falloff
+        // law: at 7 m the clustered rig stopped evaluating the light exactly
+        // where the warm pool was still worth about 10% of the ambient, and
+        // that hard boundary is visible as a ring on the ground once the
+        // intensity is high enough for the pool to reach it at all.
+        radius: 9,
         decay: 2,
         castShadow: true,
         // Highest priority in the scene: if the clustered rig ever has to drop
@@ -988,7 +1130,7 @@ export class BloodMoor implements GameModule {
     // which is how `RenderBridges` gathers volumetric lights, ignores layers
     // entirely — so the bridge still finds it. `visible = false` would not
     // work: that *is* what `traverseVisible` filters on.
-    const glow = new THREE.PointLight(new THREE.Color(FIRE_COLOR), FIRE_INTENSITY, 7, 2);
+    const glow = new THREE.PointLight(new THREE.Color(FIRE_COLOR), FIRE_SCATTER_INTENSITY, 9, 2);
     glow.name = 'campfire.scatter';
     glow.position.set(x, base + 0.62, z);
     glow.castShadow = false;
@@ -1081,9 +1223,32 @@ export class BloodMoor implements GameModule {
    * negligible.
    */
   #placeDeadTrees(): void {
-    const materials = this.#materials;
-    const bark = materials?.create('bark', DEAD_WOOD_OVERRIDES) ?? null;
-    if (bark === null) return;
+    // **The treeline deliberately does not use the photoscanned bark archetype.**
+    //
+    // It used to, and the value would not come down. Three separate rounds of
+    // `albedoTint` and `envMapIntensity` cuts left the ridge trunks measuring
+    // 159/255 against a 209/255 sky — a 1.3 : 1 separation, where a silhouette
+    // needs at least 2.5 : 1. The archetype stack is a *surface* description:
+    // triplanar bark, detail normal, macro variation, wetness, parallax. Every
+    // one of those is a multiplier or an additive term with its own opinion
+    // about the final value, which is exactly what is wanted on a rock the
+    // player can walk up to and exactly what cannot be tolerated on the one
+    // class of geometry in this frame whose correct rendering is a controlled
+    // near-black.
+    //
+    // At 40–200 m none of that surface detail is resolvable anyway — the ridge
+    // treeline is two pixels of trunk against sky. So it gets a plain material
+    // with one authored albedo and a hard-capped environment response, and the
+    // value becomes a number this file owns outright instead of the output of a
+    // six-stage pipeline. The geometry's baked grey vertex ramp still
+    // multiplies through, which is what grounds the trunks into the mud and
+    // stops any two trees being quite the same value.
+    const bark = new THREE.MeshStandardNodeMaterial({
+      color: new THREE.Color(DEAD_WOOD_ALBEDO[0], DEAD_WOOD_ALBEDO[1], DEAD_WOOD_ALBEDO[2]),
+      roughness: 0.94,
+      metalness: 0,
+    });
+    bark.name = 'deadWood.silhouette';
     // The neutral grey ramp baked into the geometry (dark at the base,
     // lightening toward the twigs, ±12% per limb) multiplies in through
     // `NodeMaterial`'s stock vertex-colour path, after the library's colour
@@ -1098,11 +1263,23 @@ export class BloodMoor implements GameModule {
     // fix is to cut the *environment* term specifically rather than the albedo,
     // because the albedo is what the rim light and the fire still have to work
     // against, and darkening that would kill the rim too.
-    bark.envMapIntensity = 0.28;
+    // 0.10, from 0.28. Same argument as the albedo and it has to be made in
+    // both places: the albedo is what the rim light and the fire work against,
+    // the environment term is what the *sky* relights the limbs with, and it is
+    // the sky the trees have to stay dark against. Cutting only one of the two
+    // leaves the other free to bring the value straight back up, which is what
+    // happened last pass.
+    // 0.06. The environment term is what the *sky* relights the limbs with, and
+    // the sky is precisely what they have to stay dark against. Capping it here
+    // is the other half of owning the value outright.
+    bark.envMapIntensity = 0.06;
     this.#disposables.push(bark);
 
     const geometries = DEAD_TREE_VARIANTS.map((variant, index) =>
-      generateDeadTreeGeometry({ ...variant, seed: `${SCATTER_SEED}.deadtree.${index}` }),
+      generateDeadTreeGeometry({
+        ...variant,
+        seed: `${SCATTER_SEED}.deadtree.${index}`,
+      }),
     );
     for (const geometry of geometries) this.#disposables.push(geometry);
 
@@ -1155,7 +1332,12 @@ export class BloodMoor implements GameModule {
     for (const sample of samples) {
       const hash = Math.abs(Math.round(sample.position.x * 7.3 + sample.position.z * 13.1));
       const bucket = buckets[hash % geometries.length];
-      bucket?.push({ ...sample, index: bucket.length });
+      // Per-instance non-uniform height, hashed from the same position so it is
+      // deterministic and uncorrelated with the variant choice. 0.72-1.46 is a
+      // wide enough proportion range that two instances of one geometry do not
+      // read as the same tree; see `ScatterSample.stretch`.
+      const stretch = 0.72 + (((hash * 2654435761) % 1000) / 1000) * 0.74;
+      bucket?.push({ ...sample, stretch, index: bucket.length });
     }
 
     geometries.forEach((geometry, index) => {
@@ -1172,15 +1354,20 @@ export class BloodMoor implements GameModule {
     // lens that they are cut by the frame edge. A framing tree that fits
     // entirely inside the frame is a prop; one that runs off the top corner is
     // architecture.
-    const framing: readonly { x: number; z: number; variant: number; scale: number; yaw: number }[] =
-      [
-        { x: -7.6, z: 5.4, variant: 1, scale: 1.35, yaw: 2.35 },
-        { x: 13.4, z: 2.4, variant: 0, scale: 1.18, yaw: 0.6 },
-        // A third, further back and smaller, on the fire's far side: it stops
-        // the right-hand framing tree from reading as a lone bookend and gives
-        // the midground a second depth step.
-        { x: 9.4, z: -14.6, variant: 2, scale: 1.1, yaw: 4.1 },
-      ];
+    const framing: readonly {
+      x: number;
+      z: number;
+      variant: number;
+      scale: number;
+      yaw: number;
+    }[] = [
+      { x: -7.6, z: 5.4, variant: 1, scale: 1.35, yaw: 2.35 },
+      { x: 13.4, z: 2.4, variant: 0, scale: 1.18, yaw: 0.6 },
+      // A third, further back and smaller, on the fire's far side: it stops
+      // the right-hand framing tree from reading as a lone bookend and gives
+      // the midground a second depth step.
+      { x: 9.4, z: -14.6, variant: 2, scale: 1.1, yaw: 4.1 },
+    ];
 
     for (const [index, place] of framing.entries()) {
       const geometry = geometries[place.variant];
@@ -1240,12 +1427,31 @@ export class BloodMoor implements GameModule {
   #placeFence(keys: readonly AssetKey[]): void {
     if (keys.length === 0) return;
     const rng = createRng(`${SCATTER_SEED}.fence`);
+    // **Re-laid so that it is actually a leading line.**
+    //
+    // The previous run went (13.5, 15.5) -> (8.9, -12.8): almost exactly down
+    // the camera's own bearing at a constant 4 m to its right, which projects
+    // to a near-vertical line hard against the right frame edge, receding away
+    // from the fire. That is not a leading line, it is a fence post border.
+    //
+    // A leading line has to *converge* on the focal point in screen space. This
+    // path is authored in the camera's basis rather than in world XZ: each
+    // control point sits at a chosen depth along the view axis and a chosen
+    // fraction of the frame half-width to the right of centre, and that
+    // fraction falls monotonically — 100%, 83%, 65%, 50% — while the depth
+    // rises, so the run enters at the lower-right corner and drives diagonally
+    // up-and-left to arrive at the fire, which sits at 32% right.
+    //
+    // It stops about 2.3 m short of the ring. The eye completes a line that is
+    // interrupted just before its destination far more strongly than one that
+    // is drawn all the way there, and a fence running into a fire is a fire
+    // hazard rather than a composition.
     const path: readonly THREE.Vector2[] = [
-      new THREE.Vector2(13.5, 15.5),
-      new THREE.Vector2(10.2, 8.4),
-      new THREE.Vector2(8.4, 1.2),
-      new THREE.Vector2(7.6, -5.6),
-      new THREE.Vector2(8.9, -12.8),
+      new THREE.Vector2(11.2, 9.6),
+      new THREE.Vector2(9.6, 6.0),
+      new THREE.Vector2(8.4, 2.6),
+      new THREE.Vector2(7.0, -0.4),
+      new THREE.Vector2(5.5, -2.6),
     ];
     const gate = keys.find((key) => key.includes('gate'));
     const plain = keys.find((key) => !key.includes('gate')) ?? keys[0];
@@ -1295,19 +1501,83 @@ export class BloodMoor implements GameModule {
     });
   }
 
-  /** Barrels, crates and firewood, clustered at the camp rather than strewn. */
+  /**
+   * Barrels, crates and firewood — in three authored groups, not a scatter.
+   *
+   * The previous version dropped eleven props into an 11 m disc with a 0.95 m
+   * minimum spacing, and a Poisson disc is the mathematical definition of "no
+   * grouping": every prop is the same distance from every other prop, so there
+   * is no hierarchy, no negative space and nothing for the eye to rest on. It
+   * photographed as exactly what it was, assets scattered on a hillside.
+   *
+   * Composition needs the opposite of uniformity. Three groups with empty
+   * ground between them, each doing a different job:
+   *
+   * - **supplies**, stacked hard against the wall, which welds the largest
+   *   man-made mass in the frame to the camp and gives the left-hand third
+   *   somewhere to terminate;
+   * - **the fire ring**, exactly four seat-height props at ~1.6 m, placed on
+   *   the arc *away* from the lens so they read as occupancy without ever
+   *   standing between the camera and the focal point;
+   * - **the wreck**, a tight knot where the fence line bends, which gives the
+   *   leading line a waypoint instead of letting it run uninterrupted.
+   *
+   * Every group is then filtered against a keep-out capsule running from the
+   * Barbarian back toward the camera, so no prop can land on the sightline to
+   * the subject. `backlit-silhouette`'s pose is deterministic, so the salmon
+   * barrel parked in front of the hero in that shot was a reproducible bug and
+   * this is a reproducible fix.
+   */
   #placeCampsiteClutter(clutter: readonly AssetKey[], logs: readonly AssetKey[]): void {
     if (clutter.length > 0) {
-      const samples = scatter({
-        count: Math.round(11 * this.#scatterDensity) + 3,
-        area: 11,
-        center: new THREE.Vector3(CAMPFIRE.x - 1.4, 0, CAMPFIRE.y - 2.6),
-        seed: `${SCATTER_SEED}.clutter`,
-        scaleRange: [0.85, 1.15],
-        surface: this.field.surface,
-        maxSlopeDegrees: 26,
-        minSpacing: 0.95,
-      });
+      const rng = createRng(`${SCATTER_SEED}.clusters`);
+      const samples: ScatterSample[] = [];
+      let index = 0;
+
+      const place = (x: number, z: number, scale: number): void => {
+        if (isOnHeroSightline(x, z)) return;
+        samples.push({
+          position: new THREE.Vector3(x, this.field.heightAt(x, z), z),
+          normal: this.field.normalAt(x, z),
+          scale,
+          rotation: rng.next() * Math.PI * 2,
+          index: index++,
+        });
+      };
+
+      // 1. Supplies against the wall. A stack reads as a stack because its
+      //    members are close enough to overlap in silhouette; 0.55-0.8 m apart
+      //    at this prop scale is touching.
+      const supplyCount = Math.max(3, Math.round(5 * this.#scatterDensity));
+      for (let i = 0; i < supplyCount; i++) {
+        const along = (i / Math.max(1, supplyCount - 1) - 0.5) * 2.4;
+        place(
+          -3.9 + Math.cos(WALL_YAW) * along + (rng.next() - 0.5) * 0.5,
+          -9.1 - Math.sin(WALL_YAW) * along + (rng.next() - 0.5) * 0.5,
+          0.9 + rng.next() * 0.3,
+        );
+      }
+
+      // 2. Four seats round the fire. Bearings are measured from the direction
+      //    of the camera, so the open arc is always the one the lens looks
+      //    through however the fire is later moved.
+      const toCamera = Math.atan2(CAMERA.position.z - CAMPFIRE.y, CAMERA.position.x - CAMPFIRE.x);
+      for (const offset of FIRE_SEAT_BEARINGS) {
+        const angle = toCamera + offset;
+        const radius = 1.55 + rng.next() * 0.25;
+        place(
+          CAMPFIRE.x + Math.cos(angle) * radius,
+          CAMPFIRE.y + Math.sin(angle) * radius,
+          0.78 + rng.next() * 0.14,
+        );
+      }
+
+      // 3. The wreck at the fence dogleg.
+      for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2 + rng.next() * 0.6;
+        place(7.9 + Math.cos(angle) * 0.62, 1.6 + Math.sin(angle) * 0.62, 0.85 + rng.next() * 0.35);
+      }
+
       this.#instance(clutter, samples, 'clutter', {
         alignToGround: 0.45,
         shadow: true,
@@ -1320,14 +1590,16 @@ export class BloodMoor implements GameModule {
     if (logs.length > 0) {
       const samples = scatter({
         count: 5,
-        area: 5.5,
-        center: new THREE.Vector3(CAMPFIRE.x + 1.5, 0, CAMPFIRE.y + 1.4),
+        // 2.6 m, from 5.5. Firewood belongs *at* the fire; spread over five and
+        // a half metres it stopped being a woodpile and became more scatter.
+        area: 2.6,
+        center: new THREE.Vector3(CAMPFIRE.x + 1.9, 0, CAMPFIRE.y + 1.1),
         seed: `${SCATTER_SEED}.logs`,
         scaleRange: [0.8, 1.1],
         surface: this.field.surface,
         maxSlopeDegrees: 30,
-        minSpacing: 0.8,
-      });
+        minSpacing: 0.55,
+      }).filter((sample) => !isOnHeroSightline(sample.position.x, sample.position.z));
       this.#instance(logs, samples, 'logs', {
         alignToGround: 0.8,
         shadow: true,
@@ -1367,7 +1639,15 @@ export class BloodMoor implements GameModule {
     const origin = new THREE.Vector2(-5.6, -11.4);
     const yaw = THREE.MathUtils.degToRad(24);
     const samples: ScatterSample[] = [];
-    const count = Math.round(18 * this.#scatterDensity);
+    // 7, from 18. `prop.rubble.*` are dungeon *floor* tiles: near-flat plates
+    // authored to sit inside a room. Laid on open ground and seen at a grazing
+    // angle, each one presents as a dark irregular sliver two or three pixels
+    // thick. That is the "hard-edged black polygonal shard" two independent
+    // critiques both read as a rendering bug — and it is not one, which is why
+    // it survived rounds of shadow-bias and occlusion work. It is the wrong
+    // asset at the wrong angle, and the only fix for that is fewer of them,
+    // larger, and buried deeper.
+    const count = Math.round(7 * this.#scatterDensity);
 
     for (let i = 0; i < count; i++) {
       // Biased toward the broken end: `t^0.65` clusters samples at the high
@@ -1381,7 +1661,8 @@ export class BloodMoor implements GameModule {
       samples.push({
         position: new THREE.Vector3(x, this.field.heightAt(x, z), z),
         normal: this.field.normalAt(x, z),
-        scale: 0.55 + rng.next() * 0.85,
+        // Bigger, so what remains reads as a fallen block rather than a chip.
+        scale: 0.95 + rng.next() * 0.75,
         rotation: rng.next() * Math.PI * 2,
         index: i,
       });
@@ -1392,7 +1673,7 @@ export class BloodMoor implements GameModule {
       shadow: true,
       // Sunk further than before. These pieces carry their own base plate, and
       // burying it is what stops the plate reading as a shard in its own right.
-      sink: 0.22,
+      sink: 0.4,
       targetHeight: 0.55,
     });
   }
@@ -1701,47 +1982,125 @@ export class BloodMoor implements GameModule {
 interface WeatheringGrade {
   /** How far the sampled albedo is dragged toward its own luminance, 0–1. */
   readonly desaturation: number;
-  /** Multiplied onto the desaturated albedo. Decides value and residual hue. */
-  readonly tint: THREE.Color;
+  /**
+   * Multiplied onto the *dark* end of the desaturated albedo.
+   *
+   * See {@link weatherMaterial}: the tint is a two-stop ramp driven by the
+   * albedo's own luminance, not a constant. This is the cold stop.
+   */
+  readonly shadowTint: THREE.Color;
+  /** The warm stop of the same ramp, multiplied onto the light end. */
+  readonly lightTint: THREE.Color;
+  /**
+   * How hard residual red chroma is pulled back after grading, 0–1.
+   *
+   * 0 leaves the hue alone; 1 removes warm chroma entirely. The palette rule
+   * is that the fire is the only warm source, so props get most of this and the
+   * hero gets almost none.
+   */
+  readonly warmClamp: number;
+  /** Peak strength of the world-space soot/grime multiply, 0–1. */
+  readonly grime: number;
+  /** Peak strength of the up-facing dust / edge-wear lift, 0–1. */
+  readonly wear: number;
   /** Added to 0.6x the source roughness. Nothing out here is polished. */
   readonly roughnessFloor: number;
   readonly envMapIntensity: number;
 }
 
-const WEATHERING_TINT = new THREE.Color(0.235, 0.243, 0.268);
-
 /**
  * How far every prop albedo is dragged toward its own luminance.
  *
- * 0.72, and this is the number that decides whether the frame has a palette.
- * The kit props put all of their colour in an atlas and leave the base-colour
- * *factor* white, so multiplying the factor — which is what this pass used to
- * do — darkens a prop but cannot desaturate one. The result was a moor full of
- * salmon-pink barrels: dark, and still carrying the atlas's fully saturated
- * hues, which the warm firelight then pushed further into candy. Pulling the
- * sampled albedo 72% of the way to grey *before* the weathering tint leaves
- * roughly a quarter of the original chroma — enough that oak still reads warmer
- * than iron, nowhere near enough for any prop to compete with the fire.
+ * **0.30, down from 0.72, and this is the number that decides whether the
+ * frame has a palette or just a filter.**
+ *
+ * The previous value came from the right diagnosis and the wrong remedy. The
+ * kit props put all of their colour in an atlas and leave the base-colour
+ * *factor* white, so multiplying the factor can darken a prop but never
+ * desaturate one, and the moor filled with salmon-pink barrels. Desaturating
+ * the *sample* fixed that. But 0.72 with a near-neutral grey multiply does not
+ * produce palette discipline — it produces palette *collapse*: wood, iron,
+ * cloth, masonry and the hero all land on one hue at one value, which is grey
+ * mush by construction and reads as untextured plastic at 1:1.
+ *
+ * Discipline means deliberate separation inside a limited range, not
+ * compression to a point. So the chroma stays (0.30), and the control moves to
+ * three cheaper, *selective* operators that cannot flatten material identity:
+ *
+ * 1. a luminance-driven two-stop tint (cold shades, warm lights), which is what
+ *    restores the wood-vs-iron read;
+ * 2. a `warmClamp` on residual red chroma, which enforces "only the fire is
+ *    warm" without touching value or material distinction;
+ * 3. a low value on both tint stops, which is what actually keeps props out of
+ *    the highlights.
  */
-const WEATHERING_DESATURATION = 0.72;
+const WEATHERING_DESATURATION = 0.3;
 
-/** The world grade: barrels, crates, fence, rubble, lumber. */
+/**
+ * The world grade: barrels, crates, fence, rubble, lumber.
+ *
+ * `envMapIntensity` 0.22 (from 0.55) and `roughnessFloor` 0.60 (from 0.42) are
+ * one fix, not two: under a full-overcast IBL the environment is the dominant
+ * light source, and a prop that both catches it strongly and has a tight
+ * specular lobe ends up the brightest object in a grimdark moor. Between them
+ * they take a white picket fence out of the highlights without touching its
+ * albedo, which is the correct place to fix "the sky is relighting my props".
+ */
 const PROP_WEATHERING: WeatheringGrade = {
   desaturation: WEATHERING_DESATURATION,
-  tint: WEATHERING_TINT,
-  roughnessFloor: 0.42,
-  envMapIntensity: 0.55,
+  // Measured off the capture, not chosen. At (0.20, 0.225, 0.285) ->
+  // (0.44, 0.395, 0.315) the barrels and crates came back as near-white plastic
+  // at 1:1, because the KayKit atlas cells are already bright and a 0.44
+  // multiply on a 0.9 cell is still a 0.4 albedo — brighter than the mud they
+  // stand on, and far brighter than anything in a grimdark moor may be while
+  // not being the fire. Halved. The *ramp between* these two is what does the
+  // art direction; their absolute level is what keeps props out of the
+  // highlights. They are independent knobs on the same pair of numbers.
+  shadowTint: new THREE.Color(0.105, 0.12, 0.155),
+  lightTint: new THREE.Color(0.235, 0.21, 0.165),
+  warmClamp: 0.55,
+  grime: 0.4,
+  wear: 0.16,
+  roughnessFloor: 0.6,
+  // 0.5, *not* the 0.22 the critique asked for, and this is a correction to the
+  // critique rather than to the previous pass. `envMapIntensity` in three gates
+  // ambient **diffuse** as well as ambient specular. Under a full overcast sky
+  // the environment is essentially the entire light budget on a prop, so
+  // cutting this is not "stop the props catching the sky", it is "take away
+  // 60% of the light on the props" — measured, it took the barrels and the
+  // rubble down to rgb(24, 29, 33), i.e. it re-created the black-shard defect
+  // this pass exists to remove, by a completely different mechanism.
+  //
+  // The right lever for value is the albedo, which is what `shadowTint` and
+  // `lightTint` above now are: dark enough that a prop cannot compete with the
+  // fire, while still being *lit*. The high `roughnessFloor` is what stops the
+  // sky showing up as a specular highlight, and that one is kept.
+  envMapIntensity: 0.5,
 };
 
 /**
- * The subject grade. Half the desaturation and a value about a stop higher, so
- * the figure separates from the mud without leaving the palette.
+ * The subject grade.
+ *
+ * Desaturation drops to 0.14 and the warm clamp to almost nothing. This is
+ * standard stylized-AAA practice and it is the opposite of what the previous
+ * pass did: the subject is the colour anchor of the frame and should hold more
+ * chroma than anything else in it except the fire. At 0.44 desaturation the
+ * Barbarian was a featureless beige blob — no fur, no straps, no belt — because
+ * every material distinction the atlas gives him had been averaged away.
+ *
+ * Value stays low-ish and `envMapIntensity` stays modest so he still belongs to
+ * the world; the separation he needs comes from the rim light, not from being
+ * brighter than the mud.
  */
 const HERO_WEATHERING: WeatheringGrade = {
-  desaturation: 0.44,
-  tint: new THREE.Color(0.4, 0.408, 0.44),
-  roughnessFloor: 0.3,
-  envMapIntensity: 0.7,
+  desaturation: 0.14,
+  shadowTint: new THREE.Color(0.17, 0.19, 0.245),
+  lightTint: new THREE.Color(0.42, 0.375, 0.3),
+  warmClamp: 0.12,
+  grime: 0.26,
+  wear: 0.22,
+  roughnessFloor: 0.34,
+  envMapIntensity: 0.62,
 };
 
 /**
@@ -1757,12 +2116,28 @@ const HERO_WEATHERING: WeatheringGrade = {
  * specular lobe worth the name — and `porosity` is raised so the wetness system
  * darkens it in the rain rather than glossing it.
  */
+/**
+ * The treeline's authored albedo. See `#placeDeadTrees` for why it is a
+ * constant here rather than a `SurfaceSpec.albedoTint`.
+ *
+ * 0.030. Against an overcast sky landing at 209/255 this puts a lit trunk face
+ * in the 60-75/255 band, which is the ~3 : 1 value separation a silhouette
+ * needs to read as a shape rather than as a smudge.
+ */
+const DEAD_WOOD_ALBEDO: readonly [number, number, number] = [0.03, 0.029, 0.036];
+
 const DEAD_WOOD_OVERRIDES: Partial<SurfaceSpec> = {
   // 0.075. Measured, not guessed: at 0.135 the ridge trees were landing around
   // 0.45 in display space against a 0.75 sky, which is a mid-grey tree — and a
   // mid-grey tree is not a silhouette, it is a smudge. A silhouette is a *value*
   // relationship and it needs at least a 3:1 separation from what is behind it.
-  albedoTint: [0.062, 0.060, 0.072],
+  // 0.034. Measured off the capture rather than guessed at, twice now: at
+  // 0.062 the ridge trunks came back at 159/255 against a 209/255 sky, a
+  // 1.3 : 1 separation, which is camouflage and not a silhouette. A bare tree
+  // in front of a bright overcast sky is one of the few objects in a frame
+  // whose correct rendering is *almost black*, and stylized work needs at
+  // least 2.5 : 1 there because the silhouette carries the entire read.
+  albedoTint: [0.034, 0.033, 0.04],
   roughnessRange: [0.78, 1],
   normalStrength: 1.35,
   porosity: 0.86,
@@ -1779,7 +2154,6 @@ const DEAD_WOOD_OVERRIDES: Partial<SurfaceSpec> = {
   },
 };
 
-
 /**
  * The rim light's colour and strength. See `#buildLightRig`.
  *
@@ -1788,15 +2162,39 @@ const DEAD_WOOD_OVERRIDES: Partial<SurfaceSpec> = {
  * against, and at the sky's own colour it would simply add to it.
  */
 const RIM_COLOR = 0x9fc2e8;
-const RIM_INTENSITY = 0.7;
+/**
+ * 2.6, up from 0.7.
+ *
+ * The old value was chosen as if the rim were competing with a sun. It is not:
+ * under full overcast the sky dome delivers most of the irradiance on every
+ * surface in the frame, and a 0.7-intensity directional against an ambient of
+ * comparable magnitude cannot separate anything — it lifts the whole object by
+ * a few percent and produces no edge at all. That is why nine capture shots had
+ * no determinable light direction and why `backlit-silhouette`, the shot that
+ * exists to prove rim separation, had none.
+ *
+ * A rim light's job is a *ratio*, not a level: the lit edge has to measure
+ * roughly twice the background immediately outside the silhouette. Against this
+ * ambient that needs an intensity in the 2–3 range. It is still shadowless and
+ * still one N·L term, so the cost is unchanged.
+ */
+const RIM_INTENSITY = 2.6;
 
 /**
- * The shadow fill. Deep blue-teal at a tenth of the rim's strength — enough to
- * put a hue in the darkest quarter of the histogram and no more. Grimdark is
- * not black; black is where detail and mood both go to die.
+ * The shadow fill. Deep blue-teal — enough to put a hue in the darkest quarter
+ * of the histogram and no more. Grimdark is not black; black is where detail
+ * and mood both go to die.
+ *
+ * 0.34. Cut to 0.15 with the rim raise and measured straight back up: at 0.15
+ * the basin floor in front of the escarpment went to rgb(2, 3, 27) over an
+ * eighth of the frame, i.e. a hard black wedge with no hue in it at all, which
+ * is the exact failure this light exists to prevent. The rim/fill *ratio* is
+ * what makes a silhouette read, and at 2.6 : 0.34 that ratio is 7.6 : 1 —
+ * far more separation than the old 0.7 : 0.4 (1.75 : 1) while still leaving
+ * enough light in the shade for it to keep its blue.
  */
 const SHADOW_FILL_COLOR = 0x4d6d8c;
-const SHADOW_FILL_INTENSITY = 0.4;
+const SHADOW_FILL_INTENSITY = 0.34;
 
 /** Sodium-lamp orange would be wrong; wood fire is redder and dirtier. */
 const FIRE_COLOR = 0xff7a30;
@@ -1816,8 +2214,33 @@ const FIRE_COLOR = 0xff7a30;
  * nothing. With the key restored and the double-count gone, a campfire that
  * stops being the dominant illuminant at about six metres is the right size of
  * source — which is what a ~1 kW wood fire actually is.
+ *
+ * **4.5, up from 2.3.** The reasoning above is right and the arithmetic was
+ * wrong. `decay: 2` is inverse-square, so an intensity of 2.3 delivers 2.3 at
+ * one metre and 0.14 at four — against an overcast IBL contributing on the
+ * order of 1.5 to the same surface. That is a fire that is the dominant
+ * illuminant inside a 1.2 m bubble and invisible outside it, which is exactly
+ * what the captures showed: crates a metre from the flame reading cold grey,
+ * and therefore no warm/cold premise anywhere in the frame.
+ *
+ * 8.4 puts the crossover — where firelight equals ambient — at about 2.4 m and
+ * keeps the fire a *visible* fraction of the light out to 4–5 m, which is the
+ * radius of the camp. It does not blow the ring stones out because those were
+ * already re-tinted to 0.115 albedo and the source was lifted to 0.62 m.
  */
-const FIRE_INTENSITY = 2.3;
+const FIRE_INTENSITY = 4.5;
+
+/**
+ * The same fire's in-scatter strength, kept separate on purpose.
+ *
+ * The volumetric bridge reads a light's intensity to scale in-scattering
+ * through the froxel volume, and scattering integrates along the whole ray
+ * rather than falling off with one inverse square. Feeding it the shading
+ * intensity is what once let a 6 m campfire tint a 50 m basin crimson. Surface
+ * shading and participating-media scattering are two different transport
+ * problems and they get two different numbers.
+ */
+const FIRE_SCATTER_INTENSITY = 3.0;
 
 /**
  * Layer for objects that exist only so a screen-space or volumetric pass can
@@ -1827,7 +2250,6 @@ const FIRE_INTENSITY = 2.3;
  * `Renderer._projectObject` drops it from the render list.
  */
 const VOLUMETRIC_ONLY_LAYER = 3;
-
 
 type GLTFLike = { scene: THREE.Group; animations: THREE.AnimationClip[] };
 
@@ -1861,7 +2283,11 @@ function isGLTF(value: unknown): value is GLTFLike {
  *
  * ```
  *   albedo = texture(map) · material.color
- *   graded = mix(albedo, luminance(albedo), WEATHERING_DESATURATION) · WEATHERING_TINT
+ *   albedo  = texture(map) · material.color
+ *   flat    = mix(albedo, luminance(albedo), desaturation)
+ *   tinted  = flat · mix(shadowTint, lightTint, luminance(flat))
+ *   grimed  = tinted · worldSootNoise + upFacingDust
+ *   graded  = grey(grimed) + chroma(grimed) · warmClampMatrix
  * ```
  *
  * The reason this is safe — and the reason the previous author was right to be
@@ -1904,10 +2330,86 @@ function weatherMaterial(source: THREE.Material, grade: WeatheringGrade): THREE.
   const factor = new THREE.Color().copy(clone.color);
   const sampled = map === null ? vec4(1, 1, 1, 1) : texture(map);
   const albedo = sampled.rgb.mul(vec3(factor.r, factor.g, factor.b));
-  const graded = mix(albedo, vec3(luminance(albedo)), float(grade.desaturation)).mul(
-    vec3(grade.tint.r, grade.tint.g, grade.tint.b),
+
+  // 1. Desaturate, lightly. See `WEATHERING_DESATURATION`.
+  const flattened = mix(albedo, vec3(luminance(albedo)), float(grade.desaturation)).toVar(
+    'weatherFlattened',
   );
-  node.colorNode = vec4(graded, sampled.a);
+
+  // 2. The two-stop tint. The ramp parameter is the albedo's *own* luminance,
+  //    so a prop's dark half and its light half get different hues rather than
+  //    different brightnesses of one hue. That is the entire difference between
+  //    a limited palette and a monochrome one, and it costs one `mix`.
+  // NB: every `toVar` name in this function is prefixed. TSL emits the name
+  // verbatim as a GLSL identifier, and `flat` — the obvious name for the
+  // desaturated albedo — is a reserved interpolation qualifier in GLSL ES 3.0.
+  // It compiles silently on the WebGPU/WGSL path and hard-fails the WebGL2
+  // fragment shader, which is a divergence between backends introduced by a
+  // variable name.
+  const key = saturate(luminance(flattened)).toVar('weatherKey');
+  const tinted = flattened
+    .mul(
+      mix(
+        vec3(grade.shadowTint.r, grade.shadowTint.g, grade.shadowTint.b),
+        vec3(grade.lightTint.r, grade.lightTint.g, grade.lightTint.b),
+        key,
+      ),
+    )
+    .toVar('weatherTinted');
+
+  // 3. Surface craft, in two world-space terms that cost four noise samples
+  //    between them and give the kit props the painterly variation their flat
+  //    atlas cells cannot.
+  //
+  //    - soot/grime: a two-octave world-space noise multiply. World space, not
+  //      UV space, so the pattern does not repeat per instance — fifty crates
+  //      cloned from one mesh stop reading as fifty copies of one crate.
+  //    - dust/wear: up-facing surfaces get a slight cold lift. This is the
+  //      cheapest legible substitute for curvature-driven edge wear: on the
+  //      chunky, hard-edged, large-facet KayKit silhouettes the top faces *are*
+  //      the worn edges, so an N·up term lands almost exactly where a curvature
+  //      map would and needs no extra vertex data.
+  const grimeSpace = positionWorld.mul(0.85);
+  const soot = mx_noise_float(grimeSpace)
+    .mul(0.5)
+    .add(mx_noise_float(grimeSpace.mul(3.3).add(vec3(19, 4, 7))).mul(0.28))
+    .add(0.5);
+  const grimed = tinted
+    .mul(mix(float(1), saturate(soot), float(grade.grime)))
+    .add(
+      vec3(0.055, 0.058, 0.066).mul(
+        float(grade.wear).mul(smoothstep(0.35, 0.98, normalWorldGeometry.y)),
+      ),
+    )
+    .toVar('weatherGrimed');
+
+  // 4. The warm clamp. Mixing toward luminance preserves hue *direction*, so a
+  //    salmon barrel desaturates into a paler salmon barrel and stays the most
+  //    chromatic warm thing in a frame whose whole premise is that the fire is
+  //    the only warm source. Scaling the red component of the residual chroma
+  //    vector — not the red channel of the colour — pulls warm props toward the
+  //    cold ambient while leaving cold ones and overall value untouched.
+  const grey = luminance(grimed);
+  const chroma = grimed.sub(vec3(grey));
+  const graded = vec3(grey).add(
+    vec3(
+      chroma.x.mul(float(1 - grade.warmClamp)),
+      chroma.y.mul(float(1 - grade.warmClamp * 0.35)),
+      chroma.z,
+    ),
+  );
+
+  // Alpha is forced to 1 and the material forced opaque. The kit atlases carry
+  // padding cells with alpha < 1, and any prop whose source material happened
+  // to arrive with `transparent: true` — which the key-copy above faithfully
+  // preserves — then punched a hole through itself. Nothing in this prop set is
+  // legitimately translucent, so the correct fix is to say so once here rather
+  // than to audit fifty-seven glTF materials.
+  node.colorNode = vec4(graded.max(vec3(0)), 1);
+  node.transparent = false;
+  node.opacity = 1;
+  node.alphaTest = 0;
+  node.depthWrite = true;
   // The factor is folded into the node above; leaving it on would apply twice.
   node.color.setRGB(1, 1, 1);
 

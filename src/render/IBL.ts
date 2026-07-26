@@ -318,6 +318,14 @@ export function prefilteredMipCount(sourceSize: number): number {
  * Uses the *geometric* normal deliberately: the whole point of the term is to
  * catch cases where the shading normal has been bent away from the geometry.
  */
+/**
+ * The lowest value {@link IBLService.occlusionNode} will ever compose to.
+ *
+ * Deliberately below {@link AO_FLOOR} so the GTAO floor is the one that
+ * normally governs; this is the backstop for the other factors in the product.
+ */
+export const INDIRECT_OCCLUSION_FLOOR = 0.15;
+
 const horizonOcclusionNode = Fn(([fade]: [THREE.Node<'float'>]) => {
   // Reflection about the shading normal, in view space, then compared against
   // the geometric normal *in the same space*. Both are unit vectors, so the dot
@@ -569,7 +577,15 @@ export class IBLModule implements GameModule {
         const fade = self.#options.horizonOcclusion;
         if (fade > 0) ao = ao.mul(horizonOcclusionNode(float(fade)));
 
-        return clamp(ao, 0, 1);
+        // Floored, not clamped to zero. This term multiplies *indirect* light
+        // and nothing else, so under an overcast sky — where the environment
+        // is essentially the whole light budget — a zero here renders literal
+        // black regardless of albedo. Three separate factors are multiplied
+        // together above (baked AO map, screen-space AO, horizon fade); each is
+        // individually reasonable and their product is not. The floor is the
+        // statement that no cavity in an open-air scene occludes more than
+        // ~85% of the sky, which is true and is one `clamp` either way.
+        return clamp(ao, INDIRECT_OCCLUSION_FLOOR, 1);
       },
 
       prefilteredRadiance(

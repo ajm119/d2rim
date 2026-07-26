@@ -569,6 +569,15 @@ interface TraceUniforms {
 const HALF_PI = Math.PI / 2;
 
 /**
+ * The lowest visibility {@link GTAOModule.occlusionNode} will ever report.
+ *
+ * See the long note at the return of the `occlusion` Fn: this exists because
+ * `aoNode` gates *indirect* light, and in an overcast scene indirect light is
+ * effectively all the light there is.
+ */
+export const AO_FLOOR = 0.24;
+
+/**
  * The GTAO trace.
  *
  * Structure, following Jimenez et al. §"Implementation":
@@ -775,9 +784,20 @@ export class GTAOModule implements GameModule, GTAOService {
   readonly #resolution = uniform(new THREE.Vector2(1, 1));
   readonly #lowResolution = uniform(new THREE.Vector2(1, 1));
   readonly #ndcToUv = uniform(new THREE.Vector2(0.5, -0.5));
-  readonly #radius = uniform(0.8);
+  // 0.25 m, down from 0.8 m.
+  //
+  // The search radius is a *world-space* sphere, and every prop in the Blood
+  // Moor camp is smaller than the old one: a barrel is 0.35 m across, a crate
+  // 0.4 m. At 0.8 m the horizon search swallowed whole objects, so a barrel
+  // resolved as being inside its own occluder and shaded as if it were buried.
+  // A radius has to be smaller than the objects it is meant to crease or it
+  // stops being ambient occlusion and becomes an object-scale darkening mask.
+  readonly #radius = uniform(0.25);
   readonly #falloff = uniform(0.4);
-  readonly #intensity = uniform(1.15);
+  // 0.85, down from 1.15. Above 1 the exponent pushes visibility toward 0
+  // faster than geometry warrants, which in a scene whose light budget is
+  // almost entirely indirect is the difference between a crease and a hole.
+  readonly #intensity = uniform(0.85);
   readonly #thinOccluder = uniform(0.6);
   readonly #horizonBias = uniform(0.02);
   readonly #sliceRotation = uniform(0);
@@ -814,8 +834,8 @@ export class GTAOModule implements GameModule, GTAOService {
   constructor(options: GTAOOptions = {}) {
     this.#quality = options.quality ?? 'high';
     this.#options = {
-      radius: options.radius ?? 0.8,
-      intensity: options.intensity ?? 1.15,
+      radius: options.radius ?? 0.25,
+      intensity: options.intensity ?? 0.85,
       falloff: options.falloff ?? 0.4,
       thinOccluderCompensation: options.thinOccluderCompensation ?? 0.6,
       horizonBias: options.horizonBias ?? 0.02,
@@ -1163,7 +1183,26 @@ export class GTAOModule implements GameModule, GTAOService {
       const withBounce = mix(visibility, bounced, this.#multiBounce);
       // `aoStrength` lerps the whole term towards 1 (no occlusion) rather than
       // scaling it, so turning the effect down never inverts it.
-      return mix(float(1), withBounce, this.#aoStrength);
+      const strengthened = mix(float(1), withBounce, this.#aoStrength);
+      // **The floor, and why it is not a fudge.**
+      //
+      // three binds this node to `material.aoNode`, which `PhysicalLightingModel`
+      // applies to *indirect* light only. That is the correct place for it in a
+      // scene lit by a sun. It is a trap in a scene lit by a full overcast sky,
+      // because there the IBL *is* the light budget — the key contributes maybe
+      // a fifth of the irradiance on a ground-facing surface and nothing at all
+      // on a downward one. So a visibility of 0 does not mean "no ambient", it
+      // means literally black, and the frame filled with hard-edged black
+      // polygonal shards wherever the half-res trace found a closed horizon.
+      //
+      // Physically, visibility 0 is also a lie: a surface in a fully enclosed
+      // pocket still receives inter-reflected light, which is exactly what the
+      // multi-bounce term above is modelling and exactly what it cannot do once
+      // its input has been driven to zero. Flooring the composed term at 0.24
+      // is the cheap analytic stand-in for "no real cavity in an open-air scene
+      // is darker than a quarter of the sky it sits under", and it costs one
+      // `max` per shaded fragment.
+      return strengthened.max(AO_FLOOR);
     });
     this.#occlusionNode = occlusion();
   }

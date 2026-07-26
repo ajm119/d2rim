@@ -260,7 +260,11 @@ function growBranch(
       const shade = THREE.MathUtils.clamp(
         (0.58 + 0.34 * heightRamp) * (0.88 + 0.24 * limbRandom),
         0.35,
-        1.05,
+        // 1.0, not 1.05. Vertex colour multiplies *after* the material's colour
+        // node, so any value above 1 is an unbounded brightener applied to the
+        // one class of geometry in the scene whose entire job is to stay dark
+        // against a bright sky.
+        1.0,
       );
       colors.push(shade, shade, shade);
     }
@@ -399,4 +403,16 @@ export const DEAD_TREE_VARIANTS: readonly DeadTreeOptions[] = [
   { height: 4.6, radius: 0.17, depth: 4, spread: 0.5, upBias: 0.42, lean: 0.14 },
   // A broken snag: two forks and a blunt top. Every treeline needs a stump.
   { height: 3.0, radius: 0.28, depth: 2, spread: 0.9, upBias: 0.05, lean: 0.19 },
+  // Two more, added because four was legible as four. On a ridge carrying ~165
+  // instances the eye pairs mirrored repeats within a second or two, and once
+  // it has, the whole treeline reads as procedural — which is the specific
+  // cohesion tell stylized work cannot afford, because a stylized skyline is
+  // *only* its silhouette. Six geometries plus per-instance non-uniform Y
+  // scale (see `ScatterSample.stretch`) puts the number of distinguishable
+  // outlines into the dozens for the cost of two more instanced draw calls.
+  //
+  // Both are deliberately off the shape language of the first four rather than
+  // interpolations of them: one narrow and vertical, one squat and clawed.
+  { height: 5.9, radius: 0.145, depth: 4, spread: 0.34, upBias: 0.58, lean: 0.05 },
+  { height: 3.8, radius: 0.235, depth: 5, spread: 0.95, upBias: -0.05, lean: 0.32 },
 ] as const;

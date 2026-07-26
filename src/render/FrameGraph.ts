@@ -777,7 +777,18 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // actually work on it, and the material tints have come down far enough
       // (masonry 0.44 -> 0.245, and every prop desaturated in-shader) that
       // nothing clips there any more.
-      exposure: 1.35,
+      // 1.72, up from 1.35. Measured off the shipped captures: no shot reached
+      // luma 0.92 and the fire shots capped at 0.83, i.e. the top fifth of the
+      // range was empty in every frame in the set, which is the definition of
+      // murk. At the same time 3-5% of each frame sat below 0.02. Both ends
+      // were wrong in the same direction — the whole histogram was sitting too
+      // low and being stretched at the bottom by a contrast pivot beneath it.
+      //
+      // Raising exposure alone would grey the shadows out. It is paired with
+      // `contrastPivot` moving up to 0.28 (see below), so the extra stop lands
+      // in the highlights and the shadow population is pushed back down by the
+      // contrast operator rather than lifted with everything else.
+      exposure: 1.72,
       // Retained for the metering path, which is still live for gameplay
       // scenes; it has no effect while `autoExposure` is off.
       middleGrey: 0.17,
@@ -824,7 +835,12 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // a clear amber, so the cold sky-lit half of every object and the warm
       // fire-lit half of it are two different colours rather than two
       // brightnesses of the same one.
-      lift: [-0.007, 0.0, 0.022],
+      // Blue lift raised and red lift deepened. With the pivot moved up, the
+      // contrast operator is now genuinely darkening the shadow population, so
+      // the split-tone has to work harder to stop that population going neutral
+      // black — grimdark shadows must retain *hue*, and a shadow with no light
+      // in it has no hue to retain.
+      lift: [-0.004, 0.004, 0.046],
       gamma: [1.0, 1.0, 0.982],
       gain: [1.055, 1.005, 0.945],
       // 0.94, up from 0.86. Desaturating a stylized frame is exactly backwards.
@@ -847,7 +863,16 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // population on each side, which is what a contrast adjustment is for.
       // 0.17, following the exposure lock down. The pivot has to sit at the
       // *frame's* midtone or contrast becomes a brightness control.
-      contrastPivot: 0.15,
+      // 0.28, up from 0.15. The pivot is the value the contrast operator
+      // rotates about: everything below it darkens, everything above brightens.
+      // At 0.15 essentially the entire ground population was *above* the pivot,
+      // so "contrast" was acting as a brightness control on the mud and the
+      // fog, which is how a frame ends up with no blacks and no whites at once.
+      // 0.235 sits at the raised exposure's actual midtone and puts the ground
+      // on both sides of it, which is what a contrast adjustment is for. Backed
+      // off from a first attempt at 0.28, which pushed 11.5% of the frame below
+      // luma 0.02 - the shadow population must be darkened, not deleted.
+      contrastPivot: 0.235,
       // Just enough to keep the eye off the corners. Any more and it reads as
       // a filter rather than as a lens — and with a correctly exposed frame far
       // less of it is needed to feel moody.
@@ -860,7 +885,14 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // highest-frequency edge in the entire image and radial RGB offsets land
       // hardest exactly there. Stylized art direction cannot afford a coloured
       // fringe on a silhouette — the silhouette *is* the art.
-      chromaticAberration: 0.12,
+      // 0.04. Even at 0.12 this was still painting visible magenta fringes on
+      // the ridge twigs — a bare tree against a bright overcast sky is the
+      // highest-contrast, highest-frequency edge in the image and radial RGB
+      // offsets land hardest exactly there. Stylized art direction cannot
+      // afford a coloured fringe on a silhouette, because the silhouette *is*
+      // the art. At 0.04 the effect survives as a lens character on the frame
+      // corners and cannot resolve as colour on a one-pixel branch.
+      chromaticAberration: 0.04,
       grain: 0.012,
     },
   });
@@ -951,8 +983,20 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
     // now the sun's job again, which is the correct owner of it and is only
     // available because the key light has been restored (see TimeOfDay's
     // `cloudOpticalDepth`).
-    radius: 0.55,
-    intensity: 1.25,
+    // 0.28 m, from 0.55. The direction was right twice and still short: a
+    // world-space search radius has to be *smaller than the objects it creases*
+    // or it stops being ambient occlusion. Every prop in the camp is 0.3-0.45 m
+    // across, so at 0.55 m a barrel sat entirely inside its own search sphere
+    // and resolved as fully occluded — which, bound to `aoNode` and therefore
+    // gating indirect light in a scene lit almost entirely by indirect light,
+    // rendered as the hard-edged black polygonal shards that were the single
+    // most damaging defect in the build. 0.28 m puts the search inside the
+    // contact seam where a barrel meets mud, which is what it is for.
+    radius: 0.28,
+    // 0.85, from 1.25. Above 1 the exponent drives visibility toward zero
+    // faster than the geometry warrants. Paired with the hard floor at the
+    // consumption end (`AO_FLOOR`), which is the real fix.
+    intensity: 0.85,
     multiBounce: 0.7,
     publishToIBL: true,
   });

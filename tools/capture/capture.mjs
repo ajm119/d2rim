@@ -517,6 +517,71 @@ async function writeReport(path, report, allShots, outDir) {
   await writeFile(path, `${JSON.stringify(output, null, 2)}\n`);
 }
 
+/**
+ * Pairs of shots that photograph the *same* scene and must therefore agree.
+ *
+ * Every entry here exists because the harness once shipped a divergence it had
+ * no way to notice. `exposure` is locked in `FrameGraph` and `autoExposure` is
+ * off, so two shots of one scene from one camera cannot legitimately differ in
+ * mean luminance — if they do, something in the backend path or the quality
+ * ladder is changing the picture rather than the cost of the picture.
+ *
+ * `meanLuminance` catches "two different times of day". `nearBlackShare`
+ * catches the other half of the same class of bug: a screen-space effect that
+ * is only enabled at some tiers and is punching black holes in the frame does
+ * not necessarily move the mean at all, because it removes light from a small
+ * fraction of pixels and the tone curve hides the rest.
+ */
+const PARITY_PAIRS = [
+  {
+    reference: 'wide-establishing',
+    subject: 'webgpu-backend-check',
+    why: 'both backends, identical pose, locked exposure',
+    meanLuminance: 0.03,
+    nearBlackShare: 0.01,
+  },
+  {
+    reference: 'quality-low',
+    subject: 'quality-ultra',
+    why: 'quality tiers must change cost, not art direction',
+    meanLuminance: 0.03,
+    nearBlackShare: 0.01,
+  },
+];
+
+/**
+ * Compare every {@link PARITY_PAIRS} entry whose two shots are both present.
+ *
+ * Silently skipped when only one side was captured — `--only` runs are the
+ * normal iteration workflow and must not fail for photographing one shot.
+ *
+ * @returns {{ id: string, message: string }[]}
+ */
+function checkParity(entries) {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const violations = [];
+
+  for (const pair of PARITY_PAIRS) {
+    const reference = byId.get(pair.reference);
+    const subject = byId.get(pair.subject);
+    if (reference?.stats == null || subject?.stats == null) continue;
+
+    for (const metric of ['meanLuminance', 'nearBlackShare']) {
+      const tolerance = pair[metric];
+      const delta = Math.abs(subject.stats[metric] - reference.stats[metric]);
+      if (delta <= tolerance) continue;
+      violations.push({
+        id: pair.subject,
+        message:
+          `parity: ${metric} differs from ${pair.reference} by ${delta.toFixed(4)} ` +
+          `(tolerance ${tolerance}; ${pair.why})`,
+      });
+    }
+  }
+
+  return violations;
+}
+
 /** Position in `order`, or one past the end for ids no longer in the shot list. */
 function indexOrLast(order, id) {
   const index = order.indexOf(id);
@@ -639,6 +704,14 @@ async function main() {
   } finally {
     await browser.close();
     server?.stop();
+  }
+
+  const parity = checkParity(report.shots);
+  for (const violation of parity) {
+    const entry = report.shots.find((shot) => shot.id === violation.id);
+    if (entry === undefined) continue;
+    entry.ok = false;
+    entry.failures.push(violation.message);
   }
 
   const passed = report.shots.filter((shot) => shot.ok);
