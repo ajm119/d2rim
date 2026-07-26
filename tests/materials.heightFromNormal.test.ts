@@ -169,18 +169,18 @@ describe('gradient integration', () => {
   it('reconstructs a known periodic surface', () => {
     const size = 64;
     const truth = analyticSurface(size);
-    const recovered = integrateGradients(gradientsOf(truth, size, size), { sweeps: 12 });
+    const recovered = integrateGradients(gradientsOf(truth, size, size));
     // Both normalised, because the absolute scale and offset of an integrated
-    // normal map are not determined by the data.
-    expect(rms(normalise(truth), recovered)).toBeLessThan(0.02);
+    // normal map are not determined by the data. Four V-cycles put the error
+    // below 1e-4, i.e. below the quantisation of the 8-bit texture the field is
+    // ultimately written into; a relaxation-only solver leaves ~1e-2 here.
+    expect(rms(normalise(truth), recovered)).toBeLessThan(1e-4);
   });
 
   it('preserves the *shape* well enough for parallax, not just the average', () => {
     const size = 64;
     const truth = normalise(analyticSurface(size));
-    const recovered = integrateGradients(gradientsOf(analyticSurface(size), size, size), {
-      sweeps: 12,
-    });
+    const recovered = integrateGradients(gradientsOf(analyticSurface(size), size, size));
     // Pearson correlation: a solver that converged to a plausible but wrong
     // low-frequency field would still pass an RMS test on a normalised pair if
     // the amplitude happened to match, but it cannot pass this.
@@ -197,7 +197,7 @@ describe('gradient integration', () => {
       vt += dt * dt;
       vr += dr * dr;
     }
-    expect(cov / Math.sqrt(vt * vr)).toBeGreaterThan(0.99);
+    expect(cov / Math.sqrt(vt * vr)).toBeGreaterThan(0.9999);
   });
 
   it('is stable on a flat field', () => {
@@ -297,7 +297,7 @@ describe('normal map decoding', () => {
         data[o + 3] = 255;
       }
     }
-    const field = heightFromNormalMap(data, size, size, { sweeps: 10 });
+    const field = heightFromNormalMap(data, size, size);
     expect(field.length).toBe(size * size);
     let lo = Infinity;
     let hi = -Infinity;
