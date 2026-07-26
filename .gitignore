@@ -48,3 +48,4 @@ postshot.mjs
 probe.html
 __*.mjs
 src/render/**/__*.ts
+tests/_*.test.ts
