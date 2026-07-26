@@ -89,6 +89,7 @@ import * as THREE from 'three/webgpu';
 import {
   cameraViewMatrix,
   float,
+  luminance,
   mix,
   normalMap,
   normalWorldGeometry,
@@ -517,7 +518,14 @@ function finishSurface(input: FinishInput): SurfaceNodes {
   const { spec, uniforms, scalars } = input;
 
   const tint = vec3(spec.albedoTint[0], spec.albedoTint[1], spec.albedoTint[2]);
-  let albedo = input.albedoRaw.mul(tint).mul(input.detailGain).toVar('surfaceAlbedoDry');
+  // Desaturate *before* the tint, so the tint decides hue rather than merely
+  // scaling whatever hue the scan happened to have. See `SurfaceSpec.albedoSaturation`.
+  const saturation = spec.albedoSaturation ?? 1;
+  const graded =
+    saturation >= 1
+      ? input.albedoRaw
+      : mix(vec3(luminance(input.albedoRaw)), input.albedoRaw, float(saturation));
+  let albedo = graded.mul(tint).mul(input.detailGain).toVar('surfaceAlbedoDry');
 
   let roughness = mix(
     float(spec.roughnessRange[0]),

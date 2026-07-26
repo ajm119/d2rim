@@ -267,6 +267,23 @@ export interface SurfaceSpec {
   readonly useProceduralBase: boolean;
   /** Linear-space multiplier on the sampled albedo. Grades a set into the palette. */
   readonly albedoTint: readonly [number, number, number];
+
+  /**
+   * Chroma retained in the sampled albedo, `0` grey to `1` untouched. Default 1.
+   *
+   * `albedoTint` cannot do this job and it is important to understand why:
+   * multiplying by a cold tint darkens a warm texture but leaves it warm — a
+   * limestone set that samples at (0.80, 0.70, 0.50) times a deliberately blue
+   * (0.29, 0.32, 0.35) still comes out warm-dominant, because a multiply
+   * preserves channel *ratios*. That is exactly how a ruined wall ends up
+   * reading as warm cream in a scene whose entire palette rule is that the
+   * campfire is the only warm thing in it.
+   *
+   * Pulling the albedo toward its own luminance first, and tinting afterwards,
+   * gives the tint authority over hue instead of only over value. One `mix` and
+   * one dot product per fragment.
+   */
+  readonly albedoSaturation?: number;
   /** Remap of the sampled roughness into `[min, max]`. */
   readonly roughnessRange: readonly [number, number];
   /** Constant metalness when no metalness map is bound. */

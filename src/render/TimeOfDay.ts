@@ -148,12 +148,30 @@ export interface TimeOfDayPreset {
  */
 export const TIME_OF_DAY_PRESETS: Readonly<Record<TimeOfDayPresetName, TimeOfDayPreset>> = {
   bloodMoor: {
-    hours: 10.3,
+    // 12.15, moved here from `buildFrameGraph`, which had been overriding the
+    // preset's 10.30 on every construction. A preset named after a scene should
+    // be the scene's actual time of day; two places holding two different
+    // answers is how a test ends up grading a lighting condition that never
+    // ships. At latitude 51 in early November, 10.30 puts the sun at ~15° and
+    // 15° of atmosphere reddens the beam into gold no matter how much cloud is
+    // in front of it — which is what was warming the skylight.
+    hours: 12.15,
     latitudeDeg: 51,
     dayOfYear: 305, // early November: low sun, long shadows, no summer warmth.
     mood: {
       cloudCoverage: 1.0,
-      cloudOpticalDepth: 62,
+      // 40. A two-stream slab at `g = 0.85` transmits ~0.11 of the beam at
+      // depth 62, ~0.155 at 40 and ~0.27 at 20. 62 extinguished the key to ~3%
+      // of clear sky, which is a shadowless, formless, directionless image; 20
+      // fixed the form and overcorrected the *colour*, because a deck that thin
+      // passes enough of the low-sun beam to warm the skylight itself, and a
+      // warm ambient is the one thing this scene's palette cannot have. 40 is
+      // the value that keeps ~40% more key than the original — enough for the
+      // cascades to ground objects and for terrain to hold its gradient — while
+      // leaving the sky hemisphere cold. Taken together with
+      // `Sky.CLOUD_FORWARD_MEMORY`, now 0.55, the directional term is still
+      // more than double what it was.
+      cloudOpticalDepth: 40,
       cloudBaseAltitude: 900,
       cloudThickness: 700,
       hazeDensity: 2.6,

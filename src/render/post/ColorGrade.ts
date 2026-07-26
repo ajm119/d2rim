@@ -213,7 +213,12 @@ export const GRIMDARK_GRADE: ColorGradeSettings = {
   vignetteStart: 0.42,
   vignetteRoundness: 0.55,
 
-  chromaticAberration: 0.7,
+  // 0.35 px at the frame corner, falling as r² to nothing in the centre third.
+  // Halved from 0.7: the offset is genuinely radial (see `aberrationScales`),
+  // but on an *aliased* high-contrast edge even a third of a pixel of channel
+  // separation reads as a coloured fringe rather than as lens character,
+  // because there is no partial coverage for it to blend into.
+  chromaticAberration: 0.35,
 
   grain: 0.016,
   grainSize: 1.5,

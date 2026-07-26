@@ -658,13 +658,24 @@ export class LightingModule implements GameModule {
     light.castShadow = castShadow;
     if (castShadow) {
       light.shadow.mapSize.set(mapSize, mapSize);
-      light.shadow.camera.near = 0.1;
-      light.shadow.camera.far = 20;
+      // Near raised from 0.1 and far cut from 20. A cube shadow's depth
+      // precision is set by the near/far ratio, and 0.1–20 is a ratio of 200
+      // spent on a range no local light in this project reaches the end of.
+      // The visible cost of that was severe: black shards radiating outward
+      // from the campfire across the mud, the crates and the escarpment —
+      // classic self-shadowing acne, and the single most obvious rendering
+      // artefact in the frame.
+      light.shadow.camera.near = 0.35;
+      light.shadow.camera.far = 14;
       // Cube shadows have no cascade to scale bias against, so both terms are
       // absolute. Normal bias does the heavy lifting; the depth bias is kept
-      // small so a torch does not detach from the ground it sits on.
-      light.shadow.bias = -0.0008;
-      light.shadow.normalBias = 0.04;
+      // small so a torch does not detach from the ground it sits on. 0.13 m of
+      // normal bias is large in absolute terms and affordable here because the
+      // things a torch shadows are decimetre-scale props at metre range, where
+      // a decimetre of contact-shadow softening is invisible and a field of
+      // black triangles is not.
+      light.shadow.bias = -0.0006;
+      light.shadow.normalBias = 0.13;
       light.shadow.radius = 3;
     }
     return { light, castsShadow: castShadow, bound: null };

@@ -69,7 +69,7 @@ import {
   exp2,
   float,
   materialAO,
-  normalWorldGeometry,
+  normalViewGeometry,
   normalView,
   pmremTexture,
   positionViewDirection,
@@ -320,10 +320,18 @@ export function prefilteredMipCount(sourceSize: number): number {
  */
 const horizonOcclusionNode = Fn(([fade]: [THREE.Node<'float'>]) => {
   // Reflection about the shading normal, in view space, then compared against
-  // the geometric normal. Both are unit vectors, so the dot is a cosine.
+  // the geometric normal *in the same space*. Both are unit vectors, so the dot
+  // is a cosine.
+  //
+  // This used to dot a view-space reflection against `normalWorldGeometry`.
+  // That is not a cosine of anything: the result rotated with the camera, went
+  // negative on surfaces facing away from the world axes, and — squared and
+  // multiplied into every material's `aoNode` — attenuated ambient diffuse and
+  // ambient specular scene-wide by an arbitrary camera-dependent factor. It is
+  // the reason the ground metered at luminance ~0 under a sky at 0.75.
   const reflectVec = reflect(positionViewDirection.negate(), normalView);
   const horizon = clamp(
-    float(1).add(fade.mul(dot(reflectVec, normalWorldGeometry))),
+    float(1).add(fade.mul(dot(reflectVec, normalViewGeometry))),
     0,
     1,
   );

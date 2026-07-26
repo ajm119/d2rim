@@ -503,6 +503,8 @@ export class PostStack implements GameModule {
 
   readonly #options: PostStackOptions;
   #quality: QualityTier = 'high';
+  /** Explicit auto-exposure setting from the constructor, or null to follow the tier. */
+  readonly #autoExposureOverride: boolean | null = null;
   #antiAlias: AntiAliasMode | 'auto';
   #renderScaleOverride: number | null;
 
@@ -572,6 +574,15 @@ export class PostStack implements GameModule {
     this.taa = new TAAPass(this.motion, options.taa ?? {});
     this.bloom = new BloomPass(options.bloom ?? {});
     this.composite = new CompositePass(this.bloom, this.grade, options.tonemap ?? {});
+    // An explicitly configured auto-exposure setting outranks the tier table.
+    //
+    // Without this, `#applyTier` re-derived auto exposure from the quality tier
+    // on every tier change and on init, which meant a scene that had
+    // deliberately locked its exposure got it silently unlocked at `low` (off)
+    // versus `high` (on) — and a *locked* key is the whole reason the same
+    // scene reads the same in every shot. See `Tonemap`'s note on why a
+    // composed frame should not meter itself.
+    this.#autoExposureOverride = options.tonemap?.autoExposure ?? null;
     this.fxaa = new FxaaPass();
 
     // Placeholder values; every field is rewritten before the first pass runs.
@@ -1084,7 +1095,7 @@ export class PostStack implements GameModule {
     this.fxaa.enabled = mode === 'fxaa';
 
     this.bloom.setMipCount(profile.bloomMips);
-    this.composite.setAutoExposureEnabled(profile.autoExposure);
+    this.composite.setAutoExposureEnabled(this.#autoExposureOverride ?? profile.autoExposure);
     this.grade.setGrainEnabled(profile.grain);
     this.grade.setChromaticAberrationEnabled(profile.chromaticAberration);
 

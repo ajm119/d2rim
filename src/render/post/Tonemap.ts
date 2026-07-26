@@ -100,6 +100,7 @@ import {
   mix,
   sRGBTransferEOTF,
   sRGBTransferOETF,
+  smoothstep,
   texture as textureNode,
   uniform,
   uv,
@@ -258,6 +259,41 @@ const AGX_MIN_EV = -12.47393;
 const AGX_MAX_EV = 4.026069;
 
 const REC709_LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+/**
+ * Meter weight at the corner of the frame, relative to 1.0 at its centre.
+ *
+ * 0.22 is roughly the classic centre-weighted-average distribution (Nikon's
+ * 60/40 within a 12 mm circle, extended smoothly). It is enough to stop a
+ * sky band along the top of frame from owning the exposure, and not so
+ * aggressive that walking toward a bright doorway leaves the exposure unmoved.
+ */
+const METER_EDGE_WEIGHT = 0.22;
+
+/**
+ * Scene luminance above which a meter tap starts losing weight, in the same
+ * relative render units as the lighting rig (mid-grey ≈ 0.18).
+ *
+ * 2.0 is roughly 3.5 stops over mid-grey: bright sky and bright metal still
+ * count, a flame core and a specular glint do not.
+ */
+const METER_HIGHLIGHT_CEILING = 2.0;
+
+/**
+ * Floor under the combined weight, so a frame that is *entirely* sky or
+ * entirely fire still meters something rather than dividing by zero and
+ * pinning the exposure to a clamp.
+ */
+const METER_MIN_WEIGHT = 0.04;
+
+/**
+ * Uniform hash of a pixel coordinate into `[0, 1)`. The classic sin-fract hash;
+ * good enough for dither, where the only requirement is that adjacent pixels
+ * are uncorrelated.
+ */
+function hash21(coord: THREE.Node<'vec2'>): THREE.Node<'float'> {
+  return coord.dot(vec2(12.9898, 78.233)).sin().mul(43758.5453).fract() as THREE.Node<'float'>;
+}
 
 /**
  * Sixth-order polynomial fit of the AgX sigmoid on `[0, 1]`.
@@ -678,6 +714,31 @@ export class CompositePass implements PostPass {
    * The first stage converts to `log2(luminance)`; later stages average an
    * already-logarithmic signal, which is what makes the end result a geometric
    * mean rather than an arithmetic one.
+   *
+   * ## Why the mean is weighted
+   *
+   * An unweighted full-frame mean is metering the *picture*, and the picture is
+   * mostly sky. Under a full overcast the sky sits two to three stops above
+   * anything on the ground and can cover half the frame, so an unweighted meter
+   * stops the world down until the ground has no midtones left — the exact
+   * failure this scene had. Two weights fix it, and they are the two a real
+   * camera has:
+   *
+   * 1. **Centre weighting** (`METER_EDGE_WEIGHT`). A cosine-ish radial falloff
+   *    from 1.0 at the frame centre to 0.22 at the corners. The subject is in
+   *    the middle of the frame; a band of sky along the top is not what the
+   *    exposure is for. This is the classic centre-weighted average meter.
+   *
+   * 2. **Highlight rejection** (`METER_HIGHLIGHT_CEILING`). Taps brighter than
+   *    the ceiling have their weight rolled off smoothly to zero, so a campfire
+   *    ember, a specular hit or a hole in the cloud cannot drag the average.
+   *    Rolled off rather than clipped: a hard cut makes the meter pop as a
+   *    bright object crosses the threshold.
+   *
+   * The pair is carried down the reduction chain as a premultiplied
+   * `(w·log2 L, w)` in `.rg`, and the final division happens once, in
+   * {@link #buildAdaptNode}. Averaging `w·x` and `w` separately and dividing at
+   * the end is exact; normalising per stage is not.
    */
   #buildMeterNode(
     source: THREE.TextureNode,
@@ -685,7 +746,8 @@ export class CompositePass implements PostPass {
     encodeLog: boolean,
   ): THREE.Node<'vec4'> {
     const base = uv();
-    let sum: THREE.Node<'float'> = float(0) as unknown as THREE.Node<'float'>;
+    let weightedSum: THREE.Node<'float'> = float(0) as unknown as THREE.Node<'float'>;
+    let weightSum: THREE.Node<'float'> = float(0) as unknown as THREE.Node<'float'>;
 
     for (let y = 0; y < 4; y++) {
       for (let x = 0; x < 4; x++) {
@@ -694,16 +756,40 @@ export class CompositePass implements PostPass {
         const offsetX = (x - 1.5) * 2;
         const offsetY = (y - 1.5) * 2;
         const offset = vec2(texel.x.mul(offsetX), texel.y.mul(offsetY));
-        const sample = source.sample(base.add(offset));
-        const value = encodeLog
-          ? sample.rgb.dot(REC709_LUMA).max(1e-5).log2()
-          : sample.r;
-        sum = sum.add(value) as unknown as THREE.Node<'float'>;
+        const coord = base.add(offset);
+        const sample = source.sample(coord);
+
+        if (encodeLog) {
+          const luminance = sample.rgb.dot(REC709_LUMA).max(1e-5);
+
+          // Radial centre weighting. `r2` is 0 at the centre and 0.5 at a
+          // corner of a square frame, so the scale puts the corner exactly at
+          // METER_EDGE_WEIGHT.
+          const centred = coord.sub(vec2(0.5, 0.5));
+          const r2 = centred.dot(centred).mul(2).clamp(0, 1);
+          const spatial = float(1).sub(r2.mul(1 - METER_EDGE_WEIGHT));
+
+          // Highlight rejection: full weight up to the ceiling, smoothly to
+          // zero an octave above it.
+          const highlight = float(1).sub(
+            smoothstep(
+              float(METER_HIGHLIGHT_CEILING),
+              float(METER_HIGHLIGHT_CEILING * 4),
+              luminance,
+            ),
+          );
+
+          const weight = spatial.mul(highlight).max(METER_MIN_WEIGHT);
+          weightedSum = weightedSum.add(weight.mul(luminance.log2())) as THREE.Node<'float'>;
+          weightSum = weightSum.add(weight) as THREE.Node<'float'>;
+        } else {
+          weightedSum = weightedSum.add(sample.r) as THREE.Node<'float'>;
+          weightSum = weightSum.add(sample.g) as THREE.Node<'float'>;
+        }
       }
     }
 
-    const mean = sum.div(16);
-    return vec4(mean, mean, mean, 1) as unknown as THREE.Node<'vec4'>;
+    return vec4(weightedSum.div(16), weightSum.div(16), 0, 1) as unknown as THREE.Node<'vec4'>;
   }
 
   /**
@@ -718,7 +804,11 @@ export class CompositePass implements PostPass {
     }
 
     const centre = vec2(0.5, 0.5);
-    const target = current.sample(centre).r;
+    // `.r` is the weight-premultiplied sum of log2 luminance, `.g` the sum of
+    // the weights. The division that turns them into a weighted geometric mean
+    // happens exactly once, here, at 1x1.
+    const meter = current.sample(centre);
+    const target = meter.r.div(meter.g.max(1e-4));
     const history = previous.sample(centre).r;
 
     // The exposure window is authored as a multiplier range and stored here as
@@ -856,6 +946,25 @@ export class CompositePass implements PostPass {
         this.#uElapsed as unknown as THREE.Node<'float'>,
       );
     }
+    // -- output dither ------------------------------------------------------
+    // A triangular-PDF dither of ±1 code value, applied in display space as the
+    // last operation before the write. The frame is a wide smooth sky gradient
+    // over a wide smooth firelight falloff — the two shapes that band worst in
+    // 8-bit — and TPDF (two independent uniforms differenced) is the standard
+    // fix: it decorrelates the quantisation error from the signal, so the
+    // contour becomes noise rather than a visible step. Amplitude is one code
+    // value, which is below the film grain already present and invisible on
+    // anything that is not a gradient.
+    //
+    // Cheaper and more correct than raising the intermediate targets: the HDR
+    // chain is already RGBA16F, so the banding was purely in the final encode.
+    {
+      const fragCoord = base.mul(this.#uResolution) as unknown as THREE.Node<'vec2'>;
+      const n1 = hash21(fragCoord);
+      const n2 = hash21(fragCoord.add(vec2(17.13, 91.77)));
+      encoded = encoded.add(n1.sub(n2).mul(1 / 255)) as unknown as THREE.Node<'vec3'>;
+    }
+
     encoded = encoded.clamp(0, 1) as unknown as THREE.Node<'vec3'>;
 
     // The renderer applies the sRGB OETF on the final write, so decode back to

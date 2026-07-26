@@ -154,15 +154,27 @@ import {
 /**
  * Where the froxel volume stops and aerial perspective takes over, in metres.
  *
- * Chosen, not tuned: at 96 m the froxel grid's furthest slice is ~4 m deep at
- * the default 64-slice exponential distribution, which is still fine enough
- * that a shaft edge does not stair-step, and it is comfortably past the far
- * treeline in the Blood Moor composition so the handoff never lands on a
- * silhouette. Pushing it further buys nothing — beyond ~100 m single-scatter
- * froxel fog and the atmosphere's aerial perspective agree to within a
- * rounding error anyway, and the froxel version costs a 3D texture.
+ * 45 m, not 96. The froxel volume owns *near-ground* fog: the pool in the
+ * basin, the shafts through the treeline, the warm air over the fire. It is a
+ * single-scatter model against a locally sampled source function, and it is
+ * very good at all three. What it is not is aerial perspective — it has no
+ * knowledge of the sky's radiance distribution, so at range it veils distance
+ * toward its own albedo rather than toward the horizon colour, and the result
+ * is a far ridge that goes *darker* with distance instead of lighter. That
+ * inversion destroys depth ordering, which is the single thing aerial
+ * perspective exists to establish.
+ *
+ * At 96 m the froxel volume owned the entire authored composition — ridge,
+ * treeline, escarpment, all of it — so there was no aerial perspective in the
+ * frame at all. 45 m puts the handoff just past the campfire and the fence
+ * line, and hands everything beyond to `Sky`'s aerial-perspective fog node,
+ * which integrates against the actual sky-view LUT and therefore lifts the
+ * ridge toward the horizon colour the way it must.
+ *
+ * The froxel grid's furthest slice is ~1.8 m deep at 45 m on the default
+ * 64-slice exponential distribution, so shaft edges are if anything crisper.
  */
-export const handoffDistance = 96;
+export const handoffDistance = 45;
 
 /** Namespace for every world-space procedural draw, so scatters never phase-lock. */
 export const SCATTER_SEED = 'd2rim.bloodMoor';
@@ -719,23 +731,58 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // hue skew turns exactly the two colours this frame lives on — orange
       // firelight and blue-grey shade — into yellow and cyan.
       look: 'grimdark',
-      autoExposure: true,
-      // Middle grey below the photographic 0.18. The moor is genuinely dark:
-      // wet mud sits near 0.09 albedo and the brief asks for grimdark, so
-      // metering the frame to 18% grey would be metering it to the wrong
-      // picture. This is the one exposure authority in the renderer.
-      middleGrey: 0.115,
-      exposureCompensation: -0.2,
-      // Exposure *multiplier* bounds, not stops. Deliberately tighter than the
-      // default [0.25, 6]: the moor has one very bright thing in it (the fire)
-      // and a wide open sky, and a metering range that generous lets a pan
-      // toward either of them re-expose the whole moor. Clamped like this the
-      // scene stays the brightness it was authored at, and the fire is allowed
-      // to be the brightest thing in the frame rather than being normalised
-      // back into the midtones.
-      autoExposureRange: [0.4, 4],
-      // Slow, and slower to open up than to stop down. A camera that
-      // re-exposes as it turns reads as a phone, not as a game.
+      // **Off, and this is an art-direction decision, not a limitation.**
+      //
+      // Auto exposure was the root cause of the frame's worst defect: the same
+      // scene reading as two different times of day. The meter converges over
+      // frames, so `wide-establishing` (20 warmup frames) settled dark and
+      // murky while `webgpu-backend-check` (0 warmup frames, because presenting
+      // to the WebGPU canvas loses the device in this container) photographed
+      // the unconverged value and came out a stop and a half brighter. The tier
+      // table made it worse again by switching metering off at `low` and on
+      // everywhere else, so `quality-low` was a third exposure. Three capture
+      // paths, three different pictures, one scene.
+      //
+      // A metered exposure is a *gameplay* feature — it stops a player walking
+      // out of a cellar into a white-out. A composed frame must not have one,
+      // for the same reason a cinematographer does not shoot a set on aperture
+      // priority: the key is a decision, and a decision that changes when the
+      // camera turns is not one. `PostStack` now treats an explicit setting
+      // here as outranking the tier, so this locks every backend, every tier
+      // and every warmup length to the same response.
+      autoExposure: false,
+      // The locked key, as a linear multiplier on scene radiance. Placed so the
+      // wet mud in open sky lands near 0.16–0.20 in display space — the low
+      // third of the histogram, with the fire and the sky above it and real
+      // shadow below — which is where a grimdark frame's midtone population
+      // belongs.
+      // 1.35. Locked exposure exposed (as it should) how much brighter the
+      // scene had quietly become: the overcast deck was thinned from optical
+      // depth 62 to 20 and the cloud's forward-scattering memory more than
+      // doubled, between them raising the key by something like two and a half
+      // stops. Auto exposure had been hiding all of it by stopping down, which
+      // is exactly why a metered frame is not an art-directed one — the
+      // brightness was never a decision, it was a feedback loop. At 1.35 the
+      // masonry and every prop clipped: not "looked bright", *clipped*, which
+      // is why the wall read as a flat cream slab with no visible stone in it
+      // at all. Texture detail cannot survive a clipped highlight. 0.45 was the
+      // overcorrection — a frame that is *black* is not grimdark, it is
+      // unexposed, and it throws away the shadow colour the whole palette
+      // depends on. Measured off the capture rather than guessed at: at 1.0 the
+      // sky sat at 190/255 and the fire at 186, while the mud, the grass, the
+      // Barbarian and the whole foreground were all under 30 — a bimodal
+      // histogram with nothing in the middle, which is the textbook description
+      // of a frame with no midtones. 1.35, with the ambient raised to match,
+      // puts the ground population back into the 40-80 band where a grade can
+      // actually work on it, and the material tints have come down far enough
+      // (masonry 0.44 -> 0.245, and every prop desaturated in-shader) that
+      // nothing clips there any more.
+      exposure: 1.35,
+      // Retained for the metering path, which is still live for gameplay
+      // scenes; it has no effect while `autoExposure` is off.
+      middleGrey: 0.17,
+      exposureCompensation: 0.0,
+      autoExposureRange: [0.8, 2.5],
       adaptationUp: 0.9,
       adaptationDown: 2.0,
     },
@@ -743,31 +790,77 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // Threshold above the diffuse range so only the fire and the brightest
       // sky can bloom. Anything lower and an overcast sky glows, which is the
       // "rainbow bloom" failure the brief rules out explicitly.
-      threshold: 1.35,
+      // Threshold just above the diffuse range so only the fire and the
+      // brightest sky can bloom. Dropped from 1.35 and the intensity raised
+      // from 0.34 because the ember's radiance came down by a factor of ~2.6
+      // at the same time (BloodMoor's `emberMaterial`): the fire has to get its
+      // halo from the bloom pyramid now instead of from being blown out, which
+      // is what gives it a soft edge rather than a hard elliptical one.
+      threshold: 1.0,
       knee: 0.55,
-      intensity: 0.34,
-      radius: 0.62,
+      intensity: 0.55,
+      radius: 0.66,
     },
     grade: {
       // −520 K: cool the whole image toward an overcast white point, then
       // hold a trace of green out of it with a positive tint so the mud and
       // moss stay separable instead of collapsing into the blue.
       temperature: -520,
-      tint: 0.015,
+      // Negative now, i.e. a touch toward magenta. The positive (green) tint
+      // was fighting the cold white balance and the result on screen was a
+      // ground that read teal — a hue that belongs to no part of this palette.
+      // Pulling it the other way lets the mud stay a cold *brown-grey*.
+      tint: -0.012,
       // Lift the shadows into blue and pull a little warmth out of the
       // highlights. This is the split-tone that keeps a desaturated image from
       // being grey mush: the shade is blue, the firelight is orange, and the
       // gap between them survives the saturation cut.
-      lift: [-0.004, 0.0, 0.012],
-      gamma: [1.0, 1.0, 0.985],
-      gain: [1.02, 1.0, 0.97],
-      saturation: 0.86,
-      contrast: 1.09,
-      contrastPivot: 0.4,
+      // Pushed hard, in both directions at once, because the target moved:
+      // this is no longer chasing photoreal grimdark, it is chasing *stylized*
+      // grimdark — Torchlight, Fable, the Diablo III cinematics — and stylized
+      // work is built on confident colour separation, not on the absence of
+      // colour. Grey mush is the failure mode of a timid grade, and the fix for
+      // it is a split-tone with real amplitude: shadows a clear blue, highlights
+      // a clear amber, so the cold sky-lit half of every object and the warm
+      // fire-lit half of it are two different colours rather than two
+      // brightnesses of the same one.
+      lift: [-0.007, 0.0, 0.022],
+      gamma: [1.0, 1.0, 0.982],
+      gain: [1.055, 1.005, 0.945],
+      // 0.94, up from 0.86. Desaturating a stylized frame is exactly backwards.
+      // The saturation *discipline* this scene needs — nothing chromatic but
+      // the fire, the rust and the moss — now lives where it belongs, in the
+      // material albedos (`SurfaceSpec.albedoSaturation`) and in the prop
+      // weathering pass, both of which can be selective. A global cut cannot:
+      // it takes the chroma out of the firelight just as hard as it takes it
+      // out of a salmon-pink barrel.
+      saturation: 0.94,
+      // 1.16. With a locked exposure there is finally a stable histogram to
+      // apply contrast to, and a stylized image wants more of it than a
+      // photographic one — the read has to survive being looked at for a third
+      // of a second.
+      contrast: 1.12,
+      // Pivot at the frame's actual midtone, not above it. At 0.4 the contrast
+      // operator only ever *darkened*, because with a correct exposure the mud,
+      // the wall and the fog all sit between 0.12 and 0.30 in display space and
+      // every one of them was below the pivot. 0.2 puts roughly half the ground
+      // population on each side, which is what a contrast adjustment is for.
+      // 0.17, following the exposure lock down. The pivot has to sit at the
+      // *frame's* midtone or contrast becomes a brightness control.
+      contrastPivot: 0.15,
       // Just enough to keep the eye off the corners. Any more and it reads as
-      // a filter rather than as a lens.
-      vignette: 0.24,
-      vignetteStart: 0.55,
+      // a filter rather than as a lens — and with a correctly exposed frame far
+      // less of it is needed to feel moody.
+      vignette: 0.17,
+      vignetteStart: 0.58,
+      // 0.12 px at the corner, down from the look's 0.35. Lateral aberration is
+      // a lens artefact and it is a *fine* one; at 0.35 it was painting visible
+      // magenta and cyan fringes onto every twig on the ridge, because a bare
+      // tree against a bright overcast sky is the highest-contrast,
+      // highest-frequency edge in the entire image and radial RGB offsets land
+      // hardest exactly there. Stylized art direction cannot afford a coloured
+      // fringe on a silhouette — the silhouette *is* the art.
+      chromaticAberration: 0.12,
       grain: 0.012,
     },
   });
@@ -794,11 +887,22 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
     // fog handoff; the froxel volume owns everything nearer than
     // `handoffDistance`.
     installFog: true,
+    // The froxel volume owns the near-ground mist. Declared, not poked: see
+    // `SkyOptions.nearMistExternal`.
+    nearMistExternal: true,
     stars: false,
   });
 
   const lighting = new LightingModule({
     keyLight: 'sun',
+    // 1.55. The key's *colour* is physically derived and must stay that way —
+    // it is what keeps the overcast cast honest — but its *strength* is an art
+    // direction decision, and the two should not be welded together. Thickening
+    // the cloud deck back to optical depth 40 was needed to get the skylight
+    // cold again (see `TimeOfDay`), and it took the key down with it. This
+    // scales the key back up without touching the hue, which is exactly the
+    // separation of concerns a cinematographer has between a gel and a dimmer.
+    keyLightScale: 1.55,
     ambientFromSky: true,
     shadows: {
       cascades: tier.shadowCascades,
@@ -809,16 +913,40 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // coming through cloud rather than from a clear sky.
       sunAngularRadius: 2.4,
       lambda: 0.6,
+      // Both biases roughly doubled from the module defaults (1.2 / 1.6).
+      //
+      // The escarpment is displaced rock geometry: large, near-planar facets
+      // meeting at sharp creases, lit at a raking angle by a low November sun.
+      // That is the worst case for shadow acne, and at the default bias it
+      // showed as hard-edged black wedges with dithered borders across the
+      // whole cliff — the single most obvious rendering artefact left in the
+      // frame, and one that reads as damage rather than as shading.
+      //
+      // The cost of buying it off is peter-panning: contact shadows detach by
+      // the normal-offset distance. That is affordable here and only here,
+      // because 3.2 texels at cascade 0's resolution is a couple of
+      // centimetres, and because the contact darkening that actually grounds
+      // objects in this scene is GTAO's job, not the sun's — see the GTAO
+      // radius note below.
+      depthBiasTexels: 2.4,
+      normalBiasTexels: 3.2,
     },
   });
 
   const gtao = new GTAOModule({
     quality: tier.gtao,
     resolutionScale: tier.gtaoScale,
-    // 1.1 m: large enough to darken the hollow a rock sits in, small enough
-    // that it does not turn the whole treeline into a smudge.
-    radius: 1.1,
-    intensity: 1.15,
+    // 0.55 m, down from 1.1. The contact seam where a barrel meets mud lives at
+    // the 0.1–0.3 m scale, and a metre-wide horizon search at half resolution
+    // averages that seam away into a broad, weak darkening that reads as dirt
+    // rather than as contact. Halving the world radius doubles the screen-space
+    // sampling density over the range that actually grounds objects. The broad
+    // occlusion the larger radius was buying — the hollow a rock sits in — is
+    // now the sun's job again, which is the correct owner of it and is only
+    // available because the key light has been restored (see TimeOfDay's
+    // `cloudOpticalDepth`).
+    radius: 0.55,
+    intensity: 1.25,
     multiBounce: 0.7,
     publishToIBL: true,
   });
@@ -828,10 +956,26 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
     // source, and at 1.0 it lifts every upward-facing surface far enough that
     // the tone curve has nothing left to do — the frame goes milky, which is
     // the opposite of the brief.
-    intensity: 0.82,
+    // 1.05, up from 0.82. The earlier cut to 0.58 was correct in *direction*
+    // and wrong in magnitude: ambient was flattening the frame, but ambient is
+    // also the only thing lighting the shaded two-thirds of an overcast scene,
+    // and cutting it crushed the mud and the foreground to black. The flatness
+    // is now fixed where it should have been fixed in the first place — with a
+    // directional rim and a directional fill in `BloodMoor.#buildLightRig` —
+    // which leaves the ambient free to do its actual job of holding shadow
+    // detail. Ambient is what was flattening the frame: under a
+    // full overcast dome the sky term is close to omnidirectional, so every
+    // stop of it goes on uniformly and buys no form. Cutting it and leaving the
+    // key and the rim alone is the whole difference between "lit from
+    // everywhere" and "lit". The shadows do not go black — the cold shadow fill
+    // in `BloodMoor.#buildLightRig` is there to put a hue in them.
+    intensity: 1.05,
     // Kills the light leaking up from below the horizon that a prefiltered
-    // equirect otherwise gives every downward-facing surface.
-    horizonOcclusion: 1,
+    // equirect otherwise gives every downward-facing surface. Below unity: at
+    // 1.0 the term is a hard cut, and a heightfield has a great many surfaces
+    // tilted a few degrees below horizontal that should be dimmed, not
+    // switched off. 0.7 keeps the leak suppressed and the far bank lit.
+    horizonOcclusion: 0.7,
     fallbackEnvironmentKey: 'env.overcast.grey',
   });
 
@@ -870,7 +1014,13 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // the 96 m volume is under 1, so the far ridge is *veiled* rather than
       // erased. Fog that hides the composition is not atmosphere, it is a
       // missing composition.
-      density: 0.016,
+      // 0.035/m over the 45 m volume is an optical depth of ~1.6 at the
+      // handoff, which is a fog you can see. At 0.016 over 96 m the extinction
+      // was comparable but the *source function* was near zero (see
+      // `ambientScatteringScale`), so it was an invisible veil: it removed
+      // contrast from the distance without adding any light back, which is
+      // exactly backwards for an overcast day.
+      density: 0.035,
       height: 2.0,
       heightFalloff: 0.62,
       // Cold and very slightly blue. Water droplets scatter almost neutrally;
@@ -887,7 +1037,12 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // if it were allowed to dominate.
       sunScatteringScale: 0.7,
       lightScatteringScale: 0.85,
-      ambientScatteringScale: 0.5,
+      // Unity, not 0.5. Under a full overcast the *ambient* term is not the
+      // one that would turn the frame to grey soup — it is the only in-scatter
+      // source there is, because the beam is behind the deck. Halving it was
+      // halving the fog's entire source function, which is why the volume
+      // extinguished the distance without ever lighting it.
+      ambientScatteringScale: 1.0,
       noiseStrength: 0.42,
       noiseScale: 0.055,
       wind: new THREE.Vector3(0.35, 0.02, 0.18),
@@ -906,11 +1061,6 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
   });
 
   const bridges = new RenderBridges({ post, ssr, lightShafts, tier });
-
-  // The froxel volume now owns the near-ground mist, so the atmosphere must
-  // stop modelling it or the first 96 m are fogged twice. Haze — the
-  // long-range term — stays exactly as the preset authored it.
-  timeOfDay.mood.mistDensity = 0;
 
   const modules: GameModule[] = [
     settings,

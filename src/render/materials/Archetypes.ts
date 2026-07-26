@@ -42,19 +42,28 @@ import type { MaterialArchetype, SurfaceSpec } from './types';
 const GROUND_DETAIL = {
   normalKey: 'detail.normal.organic',
   tiling: 14,
-  normalStrength: 0.55,
-  albedoStrength: 0.35,
-  fadeStart: 5,
-  fadeEnd: 14,
+  // Raised from 0.55/0.35 and pushed out from 5–14 m to 8–26 m.
+  //
+  // The photoscanned sets were doing almost no visible work on this geometry.
+  // Two reasons, and both are about scale: the terrain is a 260 m plane so
+  // almost none of it is inside 14 m, and the props are low-poly with large
+  // flat facets, which is exactly the case a detail normal exists to rescue.
+  // Nearly doubling the strength and roughly doubling the fade distance is
+  // free — it is the same texture fetch either way — and it is the difference
+  // between "photoscanned PBR" being a claim and being visible.
+  normalStrength: 0.95,
+  albedoStrength: 0.5,
+  fadeStart: 8,
+  fadeEnd: 26,
 } as const;
 
 const STONE_DETAIL = {
   normalKey: 'detail.normal.coarse',
   tiling: 10,
-  normalStrength: 0.6,
-  albedoStrength: 0.3,
-  fadeStart: 4,
-  fadeEnd: 11,
+  normalStrength: 1.0,
+  albedoStrength: 0.42,
+  fadeStart: 6,
+  fadeEnd: 20,
 } as const;
 
 const FINE_DETAIL = {
@@ -94,6 +103,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'mud',
     useProceduralBase: false,
+    albedoSaturation: 0.6,
     albedoTint: [0.52, 0.55, 0.58],
     roughnessRange: [0.55, 0.96],
     metalness: 0,
@@ -107,12 +117,14 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     detail: GROUND_DETAIL,
     macro: {
       metres: 34,
-      albedoAmount: 0.3,
-      roughnessAmount: 0.14,
+      // Raised from 0.3, same reasoning as `deadGrass`: past the detail fade
+      // this octave is the whole texture budget.
+      albedoAmount: 0.44,
+      roughnessAmount: 0.2,
       // A rust-brown that reads as iron-rich soil and dried blood, not as a
       // warm filter. Very dark, so it darkens *and* separates hue.
       tint: [0.05, 0.036, 0.028],
-      tintAmount: 0.28,
+      tintAmount: 0.4,
     },
     parallax: null,
     porosity: 0.95,
@@ -133,7 +145,13 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'grass',
     useProceduralBase: false,
-    albedoTint: [0.56, 0.60, 0.50],
+    // Was [0.56, 0.60, 0.50] — green-dominant, and it made the whole moor read
+    // olive. Dead grass in November is *straw*: red slightly over green, blue
+    // well under both, and the whole thing dark. The green channel is now the
+    // lowest of the three, which is the single change that gets living green
+    // out of a scene whose thesis is that nothing in it is alive.
+    albedoSaturation: 0.55,
+    albedoTint: [0.46, 0.435, 0.395],
     roughnessRange: [0.68, 0.99],
     metalness: 0,
     reflectance: 0.035,
@@ -149,10 +167,17 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     detail: GROUND_DETAIL,
     macro: {
       metres: 42,
-      albedoAmount: 0.34,
-      roughnessAmount: 0.1,
-      tint: [0.032, 0.048, 0.02],
-      tintAmount: 0.42,
+      // Raised from 0.34. On a 260 m ground plane at this camera the macro
+      // octave is the *only* thing breaking the far half of the terrain out of
+      // flat colour — the detail and normal layers have both faded out by
+      // 14 m. This is what stops the distance reading as untextured.
+      albedoAmount: 0.46,
+      roughnessAmount: 0.16,
+      // Rust-brown, not moss-green. The bright lobe of the macro noise now
+      // drifts toward dried bracken; moss is an *accent*, and accents belong on
+      // specific objects, not smeared across forty metres of ground.
+      tint: [0.052, 0.036, 0.022],
+      tintAmount: 0.5,
     },
     parallax: null,
     porosity: 0.88,
@@ -175,6 +200,7 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'rock',
     useProceduralBase: false,
+    albedoSaturation: 0.45,
     albedoTint: [0.7, 0.71, 0.75],
     roughnessRange: [0.45, 0.92],
     metalness: 0,
@@ -257,7 +283,19 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     },
     proceduralFallback: 'wetStone',
     useProceduralBase: false,
-    albedoTint: [0.44, 0.47, 0.52],
+    // 0.30, down from 0.44. The masonry set is bright dry limestone and this is
+    // rain-blackened ruin: at 0.44 a two-metre wall was the brightest object in
+    // an overcast frame by a wide margin, which inverted the whole focal
+    // hierarchy — the eye went to the wall, not to the fire. Blue held highest
+    // so the wet stone stays cold against the warm light.
+    albedoTint: [0.245, 0.265, 0.30],
+    // 0.35. The masonry scan is warm dry limestone and the cold tint alone
+    // could not move it — a multiply preserves channel ratios, so the wall came
+    // out dark *and still cream*, and it was the only warm mass in a frame
+    // whose whole palette rule is that the fire is the only warm thing. Pulled
+    // most of the way to grey first, the cold tint finally has authority over
+    // the hue. Not to zero: mortar has to stay separable from stone.
+    albedoSaturation: 0.35,
     roughnessRange: [0.32, 0.88],
     metalness: 0,
     reflectance: 0.05,
@@ -310,6 +348,10 @@ export const ARCHETYPE_SPECS: Readonly<Record<MaterialArchetype, SurfaceSpec>> =
     proceduralFallback: 'bark',
     useProceduralBase: false,
     albedoTint: [0.62, 0.60, 0.56],
+    // Bark keeps a little more of its own colour than the masonry does — dead
+    // wood is genuinely brown and reading it as grey stone would cost the frame
+    // one of its few legitimate hue separations.
+    albedoSaturation: 0.5,
     roughnessRange: [0.6, 0.97],
     metalness: 0,
     reflectance: 0.038,

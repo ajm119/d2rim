@@ -335,6 +335,23 @@ export interface SkyOptions {
    * model with no per-material work. Default true.
    */
   installFog?: boolean;
+  /**
+   * Something else owns the near-ground mist layer — normally a froxel
+   * volume — so this model must not also integrate it. Default false.
+   *
+   * `TimeOfDayMood.mistDensity` and the froxel volume's density describe the
+   * *same* metre-scale water in the air, so with both live the first few tens
+   * of metres are fogged twice. This is the explicit handoff. It has to be a
+   * flag on the owner rather than a one-time `mood.mistDensity = 0` poke by
+   * the integrator, because `TimeOfDay.applyPreset` does `Object.assign` over
+   * the whole mood object and would silently restore it on any time-of-day
+   * change — a regression whose only symptom is that the fog gets thicker
+   * hours later.
+   *
+   * Haze, the kilometre-scale term, is unaffected: no froxel volume reaches
+   * far enough to own it.
+   */
+  nearMistExternal?: boolean;
   /** Draw a procedural star field at night. Default true. */
   stars?: boolean;
   /** Cloud tiling scale: kilometres per texture repeat. Default 9. */
@@ -444,8 +461,18 @@ export function cloudSlabTransmittance(tau: number, channel: 0 | 1 | 2): number 
  * {@link CelestialLightState} in addition to the unscattered beam. It does
  * knowingly overlap with the IBL by that amount; set it to 0 for a strictly
  * energy-exact split and accept a completely shadowless overcast.
+ *
+ * 0.55, raised from 0.25. At 0.25 a thick stratus deck put the key at a few
+ * percent of the sky fill, which is a *formless* image: terrain hills lost
+ * their shading gradient, nothing cast a shadow, and every object read as
+ * pasted on. That is not what an overcast day looks like. Under real stratus
+ * you can still see where the sun is and objects still ground themselves; a
+ * strongly forward-scattering deck (`g = 0.85`) preserves far more directional
+ * memory than an isotropic split admits, and 0.55 is the value that lands the
+ * key within about a stop of the fill — the ratio RDR2 and Cyberpunk both hold
+ * for overcast.
  */
-const CLOUD_FORWARD_MEMORY = 0.25;
+const CLOUD_FORWARD_MEMORY = 0.55;
 
 /**
  * Upper bound on sun-disc radiance in render units.
@@ -643,6 +670,7 @@ export class Sky implements GameModule {
       installBackground: options.installBackground ?? true,
       installEnvironment: options.installEnvironment ?? true,
       installFog: options.installFog ?? true,
+      nearMistExternal: options.nearMistExternal ?? false,
       stars: options.stars ?? true,
       cloudTileKm: options.cloudTileKm ?? 9,
       cloudWind: options.cloudWind ?? [0.01, 0.004],
@@ -782,6 +810,20 @@ export class Sky implements GameModule {
   /* ---------------------------------------------------------------------- */
   /* Public API                                                             */
   /* ---------------------------------------------------------------------- */
+
+  /**
+   * True when something else — normally the froxel volume — owns the
+   * near-ground mist, so this model integrates only haze.
+   *
+   * Exposed because it is a *contract between two modules*, and the frame
+   * graph's wiring test has to be able to assert it before either module is
+   * initialised. Reading it off the atmosphere instead would only prove the
+   * handoff after a full boot, which is exactly when a regression here is
+   * hardest to see.
+   */
+  get nearMistExternal(): boolean {
+    return this.#options.nearMistExternal;
+  }
 
   /** The scattering model. Also available as `services.get(AtmosphereKey)`. */
   get atmosphere(): AtmosphereService {
@@ -943,7 +985,7 @@ export class Sky implements GameModule {
     if (atmosphere === null) return;
     const clock = this.timeOfDay;
     atmosphere.aerial.hazeDensity = clock.mood.hazeDensity;
-    atmosphere.aerial.mistDensity = clock.mood.mistDensity;
+    atmosphere.aerial.mistDensity = this.#options.nearMistExternal ? 0 : clock.mood.mistDensity;
     atmosphere.setSunDirection(clock.sun.direction);
 
     // Moonlight, expressed as a fraction of the solar irradiance the scattering

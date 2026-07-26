@@ -69,7 +69,15 @@ describe('frame graph assembly', () => {
     expect(graph.volumetrics.params.volumeDistance).toBe(handoffDistance);
     // ...and the atmosphere's near-ground mist term must be off, or the first
     // `handoffDistance` metres are fogged by both models at once.
-    expect(graph.timeOfDay.mood.mistDensity).toBe(0);
+    //
+    // Asserted on the *atmosphere*, not on the mood. The handoff is owned by
+    // `Sky`'s `nearMistExternal` flag now, precisely so that it survives
+    // `TimeOfDay.applyPreset`, which `Object.assign`s the whole mood object and
+    // would silently restore a zeroed `mood.mistDensity` on any time-of-day
+    // change. The mood therefore still carries the preset's authored value —
+    // what must be zero is what reaches the aerial-perspective LUT.
+    expect(graph.sky.nearMistExternal).toBe(true);
+    expect(graph.timeOfDay.mood.mistDensity).toBeGreaterThan(0);
   });
 });
 

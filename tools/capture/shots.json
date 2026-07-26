@@ -32,9 +32,15 @@
     "  campfire at (3.1, ground, -5.2) - the focal point, and the only warm light",
     "  Barbarian at (1.1, ground, 0.4), facing the fire",
     "  ruined masonry wall centred near (-5.6, -11.4), running at 24 deg",
-    "  rock escarpment along x ~ -13, treed ridge beyond z ~ -18",
+    "  rock escarpment along x ~ -13, dead-tree ridge line peaking near z ~ -36",
+    "  three oversized framing dead trees at (-7.6, 5.4), (13.4, 2.4) and (9.4, -14.6)",
+    "  a worn mud track written into the ground material, (14.6, 17.5) -> the fire",
     "  broken fence runs (13.5, 15.5) -> (8.9, -12.8): the leading line",
-    "  time of day: bloodMoor preset at 12.15 h, lat 51, day 305, full overcast"
+    "  time of day: bloodMoor preset at 12.15 h, lat 51, day 305, full overcast",
+    "  exposure is LOCKED (autoExposure off, exposure 1.35). Every shot, every",
+    "  backend and every quality tier must therefore share one tonal response -",
+    "  if two shots of this scene disagree on brightness, that is a bug, not a",
+    "  framing difference."
   ],
 
   "defaults": {
