@@ -22,6 +22,16 @@
 import type { RendererBackend } from './types';
 
 /**
+ * The stages a session passes through before the first frame.
+ *
+ * Ordered by when they happen, and each is separately worth naming because each
+ * can be the one that stalls: `renderer` blocks on WebGPU device acquisition,
+ * `modules` covers asset download and shader compilation, and `zone` is terrain
+ * and collider construction.
+ */
+export type BootPhase = 'renderer' | 'modules' | 'zone' | 'ready';
+
+/**
  * The event catalogue: event name -> payload type.
  *
  * Names are namespaced `domain:verb`. Only genuinely engine-level events belong
@@ -29,6 +39,21 @@ import type { RendererBackend } from './types';
  * merging so this file never becomes a dependency hub.
  */
 export interface GameEvents {
+  /**
+   * Boot progress, for the loading screen.
+   *
+   * `completed`/`total` are 0 for phases with no meaningful item count, in which
+   * case only `label` is worth showing.
+   */
+  'boot:phase': {
+    phase: BootPhase;
+    /** Human-readable description of what is happening right now. */
+    label: string;
+    completed: number;
+    total: number;
+  };
+  /** Boot failed unrecoverably. The loading screen shows this instead of hanging. */
+  'boot:failed': { phase: BootPhase; message: string };
   /** Fired once, after the renderer exists and every module has initialised. */
   'engine:ready': { backend: RendererBackend };
   /** Fired on every accepted resize, after the renderer has been resized. */

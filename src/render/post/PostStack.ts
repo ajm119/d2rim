@@ -115,6 +115,8 @@
  */
 
 import * as THREE from 'three/webgpu';
+
+import { trackRenderTarget } from '../MemoryReport';
 import { texture as textureNodeFactory } from 'three/tsl';
 
 import { serviceKey } from '../../core/ServiceLocator';
@@ -373,6 +375,7 @@ export class RenderTargetPool {
       samples: 0,
     });
     target.texture.name = `post.pool.${domain}.${this.#all.length}`;
+    trackRenderTarget(target);
     target.texture.wrapS = THREE.ClampToEdgeWrapping;
     target.texture.wrapT = THREE.ClampToEdgeWrapping;
 
@@ -1215,6 +1218,8 @@ export class PostStack implements GameModule {
       samples: 0,
       count: wantVelocity ? 2 : 1,
     });
+
+    trackRenderTarget(target, 'post.scene');
 
     // `MRTNode` binds outputs to attachments by *name*, so these must match the
     // keys used in `mrt({ output, velocity })`.

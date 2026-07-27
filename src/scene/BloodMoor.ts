@@ -127,6 +127,7 @@ import {
 import { BLOOD_MOOR_SPAWNS } from '../ai/EnemyDirector';
 import type { GameContext } from '../core/types';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
+import { disposeZoneTree } from '../world/Zone';
 import type { PortalSpec, Zone, ZoneEntryPoint } from '../world/Zone';
 import { SCATTER_SEED, auditServices } from '../render/FrameGraph';
 import { IBLKey, type IBLService } from '../render/IBL';
@@ -2633,5 +2634,21 @@ function countRenderables(root: THREE.Object3D): number {
  * Anything owned is tracked in `#disposables` instead; this only unlinks.
  */
 function disposeTree(root: THREE.Object3D): void {
+  // Was `root.clear()` alone, which detached every child *without releasing
+  // anything*. That is a leak on its own, and it was worse than it looks:
+  // `ZoneManager.#unload` calls `zone.dispose()` and only then walks the tree
+  // with `disposeZoneTree`, so by the time the manager looked there was nothing
+  // left to find and it reported `disposed: 0` for the moor on every unload. The
+  // zone's two directional lights, their targets and every non-shared material
+  // under the root survived each visit, and a camp -> moor -> den -> camp lap
+  // accumulated another set.
+  //
+  // `disposeZoneTree` is the right tool and always was: it honours the
+  // `userData.shared` marker that `PropKit` stamps onto cached geometry and
+  // textures, so the cache-corruption hazard this function's comment was
+  // guarding against does not arise. Calling it here keeps the standalone path
+  // (capture harnesses, tests) correct too, and the manager's second walk over
+  // an emptied root is a harmless no-op.
+  disposeZoneTree(root);
   root.clear();
 }

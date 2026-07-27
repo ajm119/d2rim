@@ -89,6 +89,8 @@
  */
 
 import * as THREE from 'three/webgpu';
+
+import { trackRenderTarget } from '../MemoryReport';
 import {
   float,
   ivec2,
@@ -399,6 +401,7 @@ export class TAAPass implements PostPass {
         samples: 0,
       });
       target.texture.name = `post.taa.history.${i}`;
+      trackRenderTarget(target);
       target.texture.wrapS = THREE.ClampToEdgeWrapping;
       target.texture.wrapT = THREE.ClampToEdgeWrapping;
       this.#history.push(target);

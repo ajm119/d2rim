@@ -63,6 +63,8 @@
  */
 
 import * as THREE from 'three/webgpu';
+
+import { trackRenderTarget } from '../MemoryReport';
 import { float, texture as textureNode, uniform, uv, vec2, vec3, vec4 } from 'three/tsl';
 
 import type { PostCapabilities, PostFrame, PostPass, QualityTier } from './PostStack';
@@ -336,6 +338,7 @@ export class BloomPass implements PostPass {
       samples: 0,
     });
     target.texture.name = `post.bloom.mip${index}`;
+    trackRenderTarget(target);
     target.texture.wrapS = THREE.ClampToEdgeWrapping;
     target.texture.wrapT = THREE.ClampToEdgeWrapping;
 

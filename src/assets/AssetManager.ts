@@ -44,6 +44,8 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
 import { serviceKey } from '../core/ServiceLocator';
 import type { GameContext, GameModule, RendererHandle } from '../core/types';
+import { textureBytes } from '../render/MemoryReport';
+import { KTX2_VARIANTS } from './ktx2.generated';
 import {
   GENERATED_ASSETS,
   type GeneratedAssetEntry,
@@ -163,15 +165,11 @@ function extensionOf(path: string): string {
  * things in the right order. The 4/3 factor accounts for the mip chain.
  */
 function estimateTextureBytes(texture: THREE.Texture): number {
-  const image = texture.image as { width?: number; height?: number } | null;
-  const width = image?.width ?? 0;
-  const height = image?.height ?? 0;
-  if (width === 0 || height === 0) return 0;
-
-  const bytesPerChannel =
-    texture.type === THREE.FloatType ? 4 : texture.type === THREE.HalfFloatType ? 2 : 1;
-  const mipFactor = texture.generateMipmaps ? 4 / 3 : 1;
-  return Math.round(width * height * 4 * bytesPerChannel * mipFactor);
+  // Shared with the runtime memory report, so the cache budget and the
+  // diagnostics can never disagree about what a texture costs — and so a
+  // KTX2 texture is billed for its transcoded blocks rather than for the RGBA8
+  // it is emphatically not.
+  return textureBytes(texture);
 }
 
 /**
@@ -319,6 +317,18 @@ export class AssetManager implements GameModule {
    */
   ktx2TranscoderPath: string | null = null;
 
+  /**
+   * Whether to prefer the KTX2/Basis sibling of a texture over its source JPEG.
+   *
+   * On by default, and it should stay on: see {@link #loadCompressedVariant}
+   * for the eight-fold memory difference this decides. `?ktx2=0` turns it off
+   * for A/B comparison.
+   */
+  preferCompressedTextures = true;
+
+  #compressedLoads = 0;
+  #compressedWarned = false;
+
   constructor(options: AssetManagerOptions = {}) {
     this.#options = {
       baseUrl: options.baseUrl ?? import.meta.env.BASE_URL,
@@ -345,10 +355,16 @@ export class AssetManager implements GameModule {
 
     this.#gltfLoader = new GLTFLoader();
 
+    if (typeof window !== 'undefined') {
+      const flag = new URLSearchParams(window.location.search).get('ktx2');
+      if (flag === '0' || flag === 'off') this.preferCompressedTextures = false;
+    }
+
     console.info(
       `[AssetManager] ready — ${Object.keys(GENERATED_ASSETS).length} registered assets, ` +
         `anisotropy ${this.#options.anisotropy}, ` +
-        `cache budget ${(this.#options.cacheBudgetBytes / (1024 * 1024)).toFixed(0)} MB`,
+        `cache budget ${(this.#options.cacheBudgetBytes / (1024 * 1024)).toFixed(0)} MB, ` +
+        `compressed textures ${this.preferCompressedTextures ? 'on' : 'OFF'}`,
     );
   }
 
@@ -720,9 +736,32 @@ export class AssetManager implements GameModule {
     this.#cache.set(key, entry);
   }
 
-  /** Drop least-recently-used unpinned entries until back under budget. */
+  /**
+   * Drop least-recently-used unpinned entries until back under budget.
+   *
+   * Eviction here is a *last resort with teeth*, and it warns because reaching
+   * it means something upstream is wrong. The cache has no idea whether an
+   * entry is still bound into a live material — and for this project it usually
+   * is, because `MaterialLibrary` binds textures through TSL nodes that hold the
+   * `THREE.Texture` directly. Disposing one of those does not unbind it; it
+   * frees the GPU handle and leaves three to re-upload the image on the next
+   * frame that samples it, then evict it again. The result is a per-frame upload
+   * storm that looks exactly like "very laggy and slow" while steadily climbing
+   * toward the out-of-memory kill it was supposed to prevent.
+   *
+   * With the compressed texture set the whole preloaded catalogue fits inside
+   * the budget several times over, so this should never fire. If it does, the
+   * fix is to load less, not to raise the ceiling.
+   */
   #evictToBudget(): void {
     if (this.#cacheBytes <= this.#options.cacheBudgetBytes) return;
+    console.warn(
+      `[AssetManager] cache over budget ` +
+        `(${(this.#cacheBytes / (1024 * 1024)).toFixed(0)} MB > ` +
+        `${(this.#options.cacheBudgetBytes / (1024 * 1024)).toFixed(0)} MB) — evicting. ` +
+        `Evicted textures that are still bound into live materials will be re-uploaded ` +
+        `every frame; load fewer assets rather than raising the budget.`,
+    );
     for (const [key, entry] of this.#cache) {
       if (this.#cacheBytes <= this.#options.cacheBudgetBytes) break;
       if (entry.pinned) continue;
@@ -733,8 +772,16 @@ export class AssetManager implements GameModule {
     }
   }
 
-  /** Pick a loader by extension and load the image. */
+  /**
+   * Pick a loader by extension and load the image.
+   *
+   * Before falling back to the manifest path, this checks for a KTX2 sibling.
+   * See {@link #loadCompressedVariant} for why that matters so much.
+   */
   async #loadTextureFile(key: AssetKey): Promise<THREE.Texture> {
+    const compressed = await this.#loadCompressedVariant(key);
+    if (compressed !== null) return compressed;
+
     const url = this.url(key);
     const extension = extensionOf(this.entry(key).path);
 
@@ -748,6 +795,69 @@ export class AssetManager implements GameModule {
       return this.#loadWithProgress(this.#rgbeLoader, url, key);
     }
     return this.#loadWithProgress(this.#textureLoader, url, key);
+  }
+
+  /**
+   * Load the KTX2/Basis sibling of a manifest texture, if there is one.
+   *
+   * ### Why this is the single most important method in the file
+   *
+   * A JPEG is small on disk and enormous in VRAM: it decodes to RGBA8, so each
+   * 2048x2048 plate costs 22.4 MB on the GPU once mips exist. The project
+   * preloads 32 of them, which is ~716 MB of texture memory before a model, an
+   * environment map or a single render target is allocated. That is what was
+   * crashing the deployed build with Chromium's "Error code: 5" — an
+   * out-of-memory renderer kill, which reads to a player as "very laggy, then
+   * it died".
+   *
+   * ETC1S transcodes to BC1 on desktop and *stays compressed in VRAM*: 2.8 MB
+   * for the same plate. Same 32 textures, ~90 MB. It is also smaller on the
+   * wire (26.7 MB against 34.7 MB for the whole set), so there is no
+   * download-versus-memory trade to weigh here.
+   *
+   * ### Failure is not fatal
+   *
+   * The JPEGs remain in the manifest and on disk, and they remain the licensed
+   * source of truth. If the GPU exposes no compressed format the loader can
+   * target, or the `.ktx2` is missing, or the transcoder WASM fails to fetch,
+   * this returns `null` and the caller loads the JPEG exactly as before. The
+   * consequence of that path is high memory use, which is the status quo ante —
+   * not a broken image.
+   *
+   * `?ktx2=0` forces the JPEG path, for comparing the two by eye.
+   */
+  async #loadCompressedVariant(key: AssetKey): Promise<THREE.Texture | null> {
+    if (!this.preferCompressedTextures) return null;
+
+    const variant = KTX2_VARIANTS[this.entry(key).path];
+    if (variant === undefined) return null;
+
+    const base = this.#options.baseUrl;
+    const url = `${base.endsWith('/') ? base : `${base}/`}${variant}`;
+
+    try {
+      const texture = await this.#loadWithProgress(this.#ktx2(), url, key);
+      this.#compressedLoads++;
+      return texture;
+    } catch (error) {
+      // Warn once per session rather than once per texture: if the transcoder
+      // is unavailable, all 32 fail identically and 32 identical warnings bury
+      // whatever else the console had to say.
+      if (!this.#compressedWarned) {
+        this.#compressedWarned = true;
+        console.warn(
+          `[AssetManager] KTX2 transcode unavailable (${
+            error instanceof Error ? error.message : String(error)
+          }). Falling back to source JPEGs — expect roughly 8x the texture memory.`,
+        );
+      }
+      return null;
+    }
+  }
+
+  /** How many textures this session served from the compressed set. */
+  get compressedLoadCount(): number {
+    return this.#compressedLoads;
   }
 
   /**
@@ -820,10 +930,29 @@ export class AssetManager implements GameModule {
     texture.anisotropy = options.anisotropy ?? this.#options.anisotropy;
     texture.wrapS = options.wrap ?? THREE.RepeatWrapping;
     texture.wrapT = options.wrap ?? THREE.RepeatWrapping;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
-    texture.generateMipmaps = true;
-    if (options.flipY !== undefined) texture.flipY = options.flipY;
+
+    // A compressed texture carries its mip chain inside the file, and there is
+    // no way to generate mips for a block-compressed format at runtime — asking
+    // three to do it produces a warning and an incomplete chain that samples
+    // black at distance. The KTX2s are encoded with `-mipmap`, so the levels are
+    // already there; the loader has populated `mipmaps` and this must not touch
+    // it. `flipY` is likewise unsettable on compressed data, which is why the
+    // encoder bakes the flip in with `-y_flip`.
+    const compressed =
+      (texture as THREE.Texture & { isCompressedTexture?: boolean }).isCompressedTexture === true;
+    if (compressed) {
+      const levels = (texture as THREE.Texture & { mipmaps?: readonly unknown[] }).mipmaps;
+      texture.minFilter =
+        levels !== undefined && levels.length > 1
+          ? THREE.LinearMipmapLinearFilter
+          : THREE.LinearFilter;
+      texture.generateMipmaps = false;
+    } else {
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.generateMipmaps = true;
+      if (options.flipY !== undefined) texture.flipY = options.flipY;
+    }
     texture.needsUpdate = true;
   }
 

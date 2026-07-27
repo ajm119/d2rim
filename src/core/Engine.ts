@@ -29,7 +29,7 @@
 
 import * as THREE from 'three/webgpu';
 
-import { EventBus } from './EventBus';
+import { EventBus, type BootPhase } from './EventBus';
 import { Input } from './Input';
 import { ServiceLocator } from './ServiceLocator';
 import { Clock, createTimeState, FixedStepAccumulator } from './Time';
@@ -56,6 +56,16 @@ export interface EngineOptions {
   renderer?: CreateRendererOptions;
   /** Injectable monotonic clock, in milliseconds. Defaults to `performance.now`. */
   now?: () => number;
+  /**
+   * Supply the event bus rather than letting the engine create one.
+   *
+   * Boot emits its first `boot:phase` synchronously, before the constructor
+   * returns, so anything that wants to observe the *whole* of boot — the
+   * loading screen, principally — has to be subscribed before the engine
+   * exists. That is only possible if it and the engine share a bus that
+   * predates both.
+   */
+  events?: EventBus;
 }
 
 type UpdatePhase = 'fixedUpdate' | 'update' | 'lateUpdate';
@@ -73,7 +83,7 @@ export class Engine {
 
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
-  readonly events = new EventBus();
+  readonly events: EventBus;
   readonly services = new ServiceLocator();
 
   readonly #canvas: HTMLCanvasElement;
@@ -99,6 +109,7 @@ export class Engine {
   #detachDom: Array<() => void> = [];
 
   constructor(options: EngineOptions) {
+    this.events = options.events ?? new EventBus();
     this.#canvas = options.canvas;
     this.scene = options.scene ?? new THREE.Scene();
     this.camera =
@@ -303,10 +314,27 @@ export class Engine {
   // -- internals ----------------------------------------------------------
 
   async #boot(): Promise<void> {
-    this.#renderer = await createRenderer(this.#canvas, {
-      ...this.#rendererOptions,
-      pixelRatioCap: this.#rendererOptions.pixelRatioCap ?? this.#pixelRatioCap,
-    });
+    // Boot progress is emitted rather than logged because the phases have
+    // wildly different durations — device init is milliseconds, shader
+    // compilation and zone construction are seconds — and a progress bar that
+    // does not say which one it is sitting in reads as a hang. The loading
+    // screen turns these into words.
+    const phase = (name: BootPhase, label: string, completed = 0, total = 0): void => {
+      this.events.emit('boot:phase', { phase: name, label, completed, total });
+    };
+
+    try {
+      phase('renderer', 'initialising renderer');
+      this.#renderer = await createRenderer(this.#canvas, {
+        ...this.#rendererOptions,
+        pixelRatioCap: this.#rendererOptions.pixelRatioCap ?? this.#pixelRatioCap,
+      });
+      phase('renderer', `renderer ready — ${this.#renderer.backend}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.events.emit('boot:failed', { phase: 'renderer', message });
+      throw error;
+    }
     this.#input = new Input({ target: this.#canvas });
 
     this.#ctx = {
@@ -325,10 +353,15 @@ export class Engine {
 
     // Sequential, not parallel: modules routinely depend on services registered
     // by earlier modules, and registration order is the declared contract.
-    for (const record of [...this.#modules]) {
+    const queued = [...this.#modules];
+    let index = 0;
+    for (const record of queued) {
+      phase('modules', record.module.name, index++, queued.length);
       await this.#initModule(record);
     }
+    phase('modules', 'modules ready', queued.length, queued.length);
 
+    phase('ready', 'entering the world', 1, 1);
     this.events.emit('engine:ready', { backend: this.#renderer.backend });
     if (this.#autoStart) this.start();
   }

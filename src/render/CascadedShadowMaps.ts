@@ -68,6 +68,8 @@
  */
 
 import * as THREE from 'three/webgpu';
+
+import { trackRenderTarget } from './MemoryReport';
 import {
   Fn,
   If,
@@ -620,6 +622,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
       targetOptions as unknown as THREE.RenderTargetOptions,
     );
     shadowMap.texture.name = 'CSMShadowColour';
+    trackRenderTarget(shadowMap);
     shadowMap.depthTexture = depthTexture;
 
     this.#shadowMap = shadowMap;

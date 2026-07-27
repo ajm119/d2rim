@@ -7,13 +7,14 @@
 
 import * as THREE from 'three/webgpu';
 
-import { AssetManager } from './assets/AssetManager';
+import { AssetManager, AssetManagerKey } from './assets/AssetManager';
 import { CameraRig } from './character/CameraRig';
 import { FootIK } from './character/FootIK';
 import { PlayerController } from './character/PlayerController';
 import { CombatSystem } from './combat/CombatSystem';
 import { CombatFeedback } from './combat/Feedback';
 import { Engine } from './core/Engine';
+import { EventBus } from './core/EventBus';
 import type { GameContext } from './core/types';
 import { PhysicsWorld } from './physics/PhysicsWorld';
 import { DenOfEvilQuest } from './quest/DenOfEvil';
@@ -21,6 +22,7 @@ import { NpcSystem } from './quest/NPC';
 import { LootSystem } from './rpg/Loot';
 import { RpgSystem } from './rpg/RpgSystem';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
+import { collectMemoryReport, formatMemoryReport } from './render/MemoryReport';
 import { BloodMoor } from './scene/BloodMoor';
 import { DenOfEvil } from './scene/DenOfEvil';
 import { RogueEncampment } from './scene/RogueEncampment';
@@ -28,6 +30,7 @@ import { CombatHud } from './ui/CombatHud';
 import { DebugOverlay } from './ui/DebugOverlay';
 import { DialogueOverlay } from './ui/DialogueOverlay';
 import { InventoryScreen } from './ui/InventoryScreen';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { PauseMenu } from './ui/PauseMenu';
 import { RpgHud } from './ui/RpgHud';
 import { SkillTreeScreen } from './ui/SkillTreeScreen';
@@ -150,7 +153,17 @@ const enemies = params.get('enemies') !== '0';
 /** `?fade=0` removes the transition wait, which a headless harness does not want. */
 const fadeSeconds = params.get('fade') === '0' ? 0 : 0.35;
 
-const engine = new Engine({ canvas, autoStart });
+/**
+ * The bus is created here rather than by the engine so that the loading screen
+ * can subscribe *before* the engine exists. `Engine.#boot` emits its first
+ * `boot:phase` synchronously from the constructor, so a screen wired up
+ * afterwards would miss the renderer phase entirely — which is exactly the
+ * phase that stalls when WebGPU adapter acquisition goes wrong.
+ */
+const events = new EventBus();
+const loadingScreen = new LoadingScreen(events);
+
+const engine = new Engine({ canvas, autoStart, events });
 
 // Registration order *is* frame order — see `render/FrameGraph.ts`, which owns
 // the ordering constraints and the reasoning behind every one of them.
@@ -253,9 +266,55 @@ const ready = engine.ready
     document.body.classList.add('d2rim-ready');
   })
   .catch((error: unknown) => {
+    // The loading screen is already on top of the page and already styled, so
+    // it is the right surface for this. `reportFatal` stays as the backstop for
+    // a failure early enough that the screen itself never got built.
+    loadingScreen.fail(
+      'failed to start',
+      error instanceof Error ? (error.stack ?? error.message) : String(error),
+    );
     reportFatal(error);
     throw error;
   });
+
+/**
+ * `window.__d2rimMemory()` — what the GPU is actually holding, in megabytes.
+ *
+ * This is the diagnostic that did not exist when the deployed build started
+ * dying with Chromium's out-of-memory "Error code: 5", and its absence is why
+ * the cause took measurement rather than reading to find. It is deliberately
+ * callable from a plain browser console with no flags, because the machine that
+ * matters is the player's and the only instrument available there is devtools.
+ *
+ * `?mem=1` additionally dumps a report to the console shortly after the first
+ * frame, for the case where someone can reproduce a crash but cannot be talked
+ * through typing a function name.
+ */
+function memoryReport(): ReturnType<typeof collectMemoryReport> {
+  return collectMemoryReport(engine.scene, {
+    renderer: engine.context.renderer.three as unknown as {
+      info?: { render?: { drawCalls?: number; triangles?: number } };
+    },
+    // Without this the report misses the entire terrain and prop material set,
+    // which is bound through TSL nodes rather than through `material.map`.
+    assets: engine.context.services.tryGet(AssetManagerKey) ?? null,
+  });
+}
+
+declare global {
+  interface Window {
+    __d2rimMemory?: () => ReturnType<typeof collectMemoryReport>;
+  }
+}
+window.__d2rimMemory = memoryReport;
+
+if (params.get('mem') === '1') {
+  void ready.then(() => {
+    // One frame of slack so lazily-created targets (TAA history, bloom
+    // pyramid) exist before they are counted.
+    setTimeout(() => console.info(formatMemoryReport(memoryReport())), 500);
+  });
+}
 
 window.__d2rim = {
   engine,

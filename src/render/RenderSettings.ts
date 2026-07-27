@@ -200,23 +200,113 @@ export const BLOOD_MOOR_WEATHER: Readonly<WeatherState> = {
   rainIntensity: 0,
 };
 
+/** What {@link detectQuality} looked at, so the choice can be logged and tested. */
+export interface DeviceProfile {
+  /** `navigator.deviceMemory` in GB, or `null` where the browser withholds it. */
+  readonly deviceMemoryGb: number | null;
+  /** `navigator.hardwareConcurrency`, or `null`. */
+  readonly cores: number | null;
+  /** Backing-store pixels the renderer would have to fill at native ratio. */
+  readonly backingStorePixels: number;
+  /** Coarse pointer / no hover: a phone or tablet. */
+  readonly mobile: boolean;
+}
+
+/** Read a device profile from the current environment. Safe outside a browser. */
+export function readDeviceProfile(): DeviceProfile {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return { deviceMemoryGb: null, cores: null, backingStorePixels: 0, mobile: false };
+  }
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  return {
+    deviceMemoryGb: typeof nav.deviceMemory === 'number' ? nav.deviceMemory : null,
+    cores: typeof nav.hardwareConcurrency === 'number' ? nav.hardwareConcurrency : null,
+    backingStorePixels: Math.round(
+      (window.innerWidth || 1920) * (window.innerHeight || 1080) * ratio * ratio,
+    ),
+    mobile:
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches,
+  };
+}
+
 /**
- * Read `?quality=` from the current URL.
+ * Choose a starting tier from what the device is willing to admit about itself.
  *
- * Unknown values fall back to `high` *and say so*: a typo that silently
- * downgrades every capture is exactly the class of bug this whole module is
- * meant to eliminate.
+ * ### Why this never returns `high` or `ultra`
+ *
+ * It used to. The default was a hardcoded `high` — 4x2048 shadow cascades, TAA,
+ * GTAO and SSR — handed to every first-time visitor regardless of what they were
+ * running. On an unknown machine that is a guess, and the cost of guessing
+ * wrong is not a slow frame but a dead tab: the deployed build was killed by
+ * Chromium's out-of-memory handler ("Error code: 5") on a mid-range laptop.
+ *
+ * So the ladder is deliberately asymmetric. Automatic detection picks between
+ * `low` and `medium` only, and `high`/`ultra` are reachable exclusively by
+ * explicit opt-in through `?quality=`. A player who finds the game running
+ * conservatively can turn it up in one URL edit and see the result immediately.
+ * A player whose tab is killed on load cannot do anything at all — they just
+ * leave. Those two failure modes are not symmetric and the default should not
+ * pretend they are.
+ *
+ * The signals are weak individually and that is fine, because they are only
+ * being asked to separate "probably fine" from "probably not":
+ * `deviceMemory` is clamped by browsers to 8 GB and rounded to a power of two,
+ * `hardwareConcurrency` counts logical cores and says nothing about the GPU,
+ * and neither is present in every browser. Any one of them looking bad is
+ * enough to drop a tier, because the downside is a slightly softer picture.
  */
-export function qualityFromUrl(fallback: RenderQuality = 'high'): RenderQuality {
-  if (typeof window === 'undefined') return fallback;
+export function detectQuality(profile: DeviceProfile = readDeviceProfile()): RenderQuality {
+  const reasons: string[] = [];
+
+  // A phone or tablet, whatever else it reports. The thermal envelope decides
+  // this long before the numbers do.
+  if (profile.mobile) reasons.push('coarse pointer (mobile/tablet)');
+  // 4 GB is the point below which the whole tab budget is a few hundred MB.
+  if (profile.deviceMemoryGb !== null && profile.deviceMemoryGb <= 4) {
+    reasons.push(`deviceMemory ${profile.deviceMemoryGb} GB`);
+  }
+  // Four logical cores usually means two physical ones and integrated graphics.
+  if (profile.cores !== null && profile.cores <= 4) reasons.push(`${profile.cores} cores`);
+  // Above 1440p-with-DPR the render targets alone start to dominate, and a
+  // machine driving that many pixels is not necessarily equipped to shade them.
+  if (profile.backingStorePixels > 5_000_000) {
+    reasons.push(`${(profile.backingStorePixels / 1e6).toFixed(1)} Mpx backing store`);
+  }
+
+  const quality: RenderQuality = reasons.length > 0 ? 'low' : 'medium';
+  if (typeof console !== 'undefined') {
+    console.info(
+      `[RenderSettings] auto-detected quality "${quality}"` +
+        (reasons.length > 0 ? ` — ${reasons.join(', ')}` : ' — no constraints detected') +
+        `. Override with ?quality=${RENDER_QUALITIES.join('|')}.`,
+    );
+  }
+  return quality;
+}
+
+/**
+ * Read `?quality=` from the current URL, falling back to {@link detectQuality}.
+ *
+ * Unknown values fall back *and say so*: a typo that silently changes every
+ * capture is exactly the class of bug this whole module is meant to eliminate.
+ *
+ * @param fallback used when the URL says nothing. Defaults to detection rather
+ *   than to a fixed tier — see {@link detectQuality}.
+ */
+export function qualityFromUrl(fallback?: RenderQuality): RenderQuality {
+  const resolve = (): RenderQuality => fallback ?? detectQuality();
+  if (typeof window === 'undefined') return fallback ?? 'medium';
   const raw = new URLSearchParams(window.location.search).get('quality');
-  if (raw === null) return fallback;
+  if (raw === null) return resolve();
   if ((RENDER_QUALITIES as readonly string[]).includes(raw)) return raw as RenderQuality;
+  const chosen = resolve();
   console.warn(
     `[RenderSettings] unknown ?quality=${raw}; expected one of ` +
-      `${RENDER_QUALITIES.join(' | ')}. Falling back to "${fallback}".`,
+      `${RENDER_QUALITIES.join(' | ')}. Falling back to "${chosen}".`,
   );
-  return fallback;
+  return chosen;
 }
 
 export interface RenderSettingsOptions {

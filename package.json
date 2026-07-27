@@ -17,7 +17,8 @@
     "assets:verify": "node tools/assets/fetch-assets.mjs --verify",
     "shots": "node tools/capture/capture.mjs",
     "contact-sheet": "node tools/capture/contact-sheet.mjs",
-    "guard": "node tools/capture/frame-guard.mjs"
+    "guard": "node tools/capture/frame-guard.mjs",
+    "assets:ktx2": "node tools/assets/encode-ktx2.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/three": "^0.185.0",
+    "basis_universal": "^1.16.4-1",
     "playwright": "^1.56.0",
     "sharp": "^0.35.3",
     "typescript": "^5.9.0",

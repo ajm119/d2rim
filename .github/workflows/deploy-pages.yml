@@ -54,6 +54,28 @@ jobs:
       - name: Fetch assets
         run: npm run assets
 
+      # Transcode the fetched JPEGs to KTX2/Basis. This is not optional polish:
+      # a JPEG decodes to RGBA8 and costs 21.3 MiB of VRAM per 2048x2048 plate,
+      # and the 32 plates the game preloads came to ~682 MB of texture demand
+      # against a 256 MB cache budget. The result was constant eviction of
+      # textures that live materials were still sampling, and eventually
+      # Chromium's out-of-memory renderer kill ("Error code: 5") on the
+      # deployed build. ETC1S transcodes to BC1/ETC2 and stays compressed on
+      # the GPU: 2.67 MiB per plate, 89 MB for the set, zero evictions.
+      #
+      # If this step is ever removed the game still runs — the AssetManager
+      # falls back to the source JPEGs — but it falls straight back into the
+      # crash. The `assets:ktx2` cache key includes the fetch manifest because
+      # the encode input is whatever `npm run assets` just produced.
+      - name: Cache compressed textures
+        uses: actions/cache@v4
+        with:
+          path: public/assets/textures-ktx2
+          key: ktx2-${{ hashFiles('tools/assets/manifest.json', 'tools/assets/encode-ktx2.mjs') }}
+
+      - name: Transcode textures to KTX2
+        run: npm run assets:ktx2
+
       # Guard the deploy: a red build or a failing suite should not ship.
       - run: npm test
 
