@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    /* Language & emit ------------------------------------------------------ */
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "useDefineForClassFields": true,
+
+    /* Strictness ----------------------------------------------------------- */
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Resolution ----------------------------------------------------------- */
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  /*
+   * Browser code only. Node-side tooling (vite.config.ts) is checked by
+   * tsconfig.node.json so that Node globals are not visible to game code.
+   */
+  "include": ["src", "tests"]
+}

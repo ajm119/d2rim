@@ -1,0 +1,54 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.local
+
+# Throwaway GPU capability probe (see README architecture notes)
+.probe/
+
+# Fetched third-party asset binaries. Reproducible byte-for-byte from
+# tools/assets/manifest.json + assets.lock.json via `npm run assets`, so they
+# are not worth carrying in git history.
+#
+# Deliberately NOT ignored, because they are the licence record and must be
+# reviewable in the repo: public/ATTRIBUTIONS.md, public/ATTRIBUTIONS.json,
+# public/assets/licenses/ (the licence text archived from each source).
+public/assets/*
+!public/assets/licenses/
+
+# Headless capture output
+captures/
+test-results/
+playwright-report/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Agent scratch test output
+tests/tmp/
+
+# Agent probe/debug scratch
+probe-*.html
+probe-*.ts
+probe-*.mjs
+sky-check.html
+sky-shot.mjs
+dev-server.sh
+src/render/__*.ts
+postcheck.html
+postcheck.ts
+postshot.mjs
+probe.html
+__*.mjs
+src/render/**/__*.ts
+tests/_*.test.ts
+tools/_diag.mjs
+tools/_zoneprobe.mjs
+_pagecheck.*

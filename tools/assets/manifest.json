@@ -1,0 +1,2711 @@
+{
+  "version": 1,
+  "comment": [
+    "Declarative asset manifest for d2rim. `tools/assets/fetch-assets.mjs` is the only",
+    "thing that reads it; nothing else in the project may hardcode an asset URL.",
+    "",
+    "NETWORK REALITY (re-measured 2026-07-26; the earlier note here was partly wrong).",
+    "REACHABLE: registry.npmjs.org, raw.githubusercontent.com, and -- contrary to the previous",
+    "note -- cdn.jsdelivr.net, data.jsdelivr.com, unpkg.com and gitlab.com raw. BLOCKED (403 at",
+    "CONNECT): Poly Haven, ambientCG, Kenney.nl, Quaternius, Mixamo, Freesound, OpenGameArt,",
+    "Sketchfab, poly.pizza, the CMU mocap library, threejs.org, github.com, api.github.com and",
+    "codeload.github.com.",
+    "",
+    "The jsDelivr correction is what unlocked the KayKit packs. codeload is still blocked, so we",
+    "cannot download a repo tarball and we get no listing from the GitHub API -- but",
+    "data.jsdelivr.com/v1/packages/gh/<owner>/<repo>@<ref>?structure=flat returns a FULL FILE TREE",
+    "for any public GitHub repo. That is the directory listing this pipeline previously lacked.",
+    "Discovery therefore goes through data.jsdelivr.com; the actual bytes are still fetched from",
+    "raw.githubusercontent.com, so every `path` below remains an exact, verified path.",
+    "",
+    "npm is the other listing channel: an npm tarball is its own directory listing, which is how",
+    "aframe-enviropacks (90 MB of vendored Poly Haven + ambientCG art) was found.",
+    "",
+    "LICENSING RULE. An asset is only in the `core` tier if its licence is documented at",
+    "source in a file we can fetch and archive. `licenseEvidence` names that file, and the",
+    "fetcher downloads it alongside the asset so the claim is auditable offline. Anything",
+    "whose licence we cannot prove lives in the `review-required` tier and is NOT downloaded",
+    "unless the operator passes --include-review-required."
+  ],
+  "outputDir": "public/assets",
+  "cacheDir": "node_modules/.cache/d2rim-assets",
+  "generated": {
+    "registry": "src/assets/registry.generated.ts",
+    "attributionsJson": "public/ATTRIBUTIONS.json",
+    "attributionsMd": "public/ATTRIBUTIONS.md"
+  },
+  "licenses": {
+    "CC0-1.0": {
+      "name": "Creative Commons Zero v1.0 Universal (public domain dedication)",
+      "url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+      "requiresAttribution": false,
+      "requiresShareAlike": false,
+      "permitsCommercial": true,
+      "redistributable": true
+    },
+    "CC-BY-4.0": {
+      "name": "Creative Commons Attribution 4.0 International",
+      "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+      "requiresAttribution": true,
+      "requiresShareAlike": false,
+      "permitsCommercial": true,
+      "redistributable": true
+    },
+    "LicenseRef-Mixamo-Unclear": {
+      "name": "Mixamo-derived, redistribution rights unresolved",
+      "url": "https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html",
+      "requiresAttribution": true,
+      "requiresShareAlike": false,
+      "permitsCommercial": false,
+      "redistributable": false,
+      "notes": "Adobe's terms permit use of Mixamo content inside a project but restrict standalone redistribution. The hosting repositories publish no per-asset grant that we can verify (three.js's MIT LICENSE covers the library, not the example art; BabylonJS blanket-relabels its mixamo/ subtree CC BY 4.0, which is a claim it is not obviously entitled to make). Prototype-only pending a human legal decision."
+    }
+  },
+  "sources": {
+    "pmndrs-assets": {
+      "kind": "npm",
+      "package": "@pmndrs/assets",
+      "version": "1.7.0",
+      "homepage": "https://github.com/pmndrs/assets",
+      "comment": "Self-hosted on npm, so it is immune to the CDN egress block. This is our stand-in for Poly Haven: the HDRIs ship as base64 data-URI JS modules that the `data-uri-module` transform decodes back into real .exr binaries."
+    },
+    "three-examples": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/mrdoob/three.js/r185/examples/",
+      "homepage": "https://github.com/mrdoob/three.js",
+      "comment": "Pinned to tag r185 (matching our three dependency) rather than the moving `dev` branch, so a re-fetch a year from now returns identical bytes. NOTE: three.js publishes per-asset licences for only a handful of examples. We take exactly one asset from here -- the one with an explicit CC0 README."
+    },
+    "khronos-samples": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/",
+      "homepage": "https://github.com/KhronosGroup/glTF-Sample-Assets",
+      "comment": "Licences are per-model and stated in each Models/<name>/README.md. There is no repo-wide grant, so every asset taken from here names its README as licenceEvidence."
+    },
+    "kaykit-adventurers": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/",
+      "homepage": "https://kaylousberg.itch.io/kaykit-adventurers",
+      "comment": "Kay Lousberg's Adventurers pack, mirrored by the author to GitHub (org KayKit-Game-Assets), which is how it reaches us at all -- kaylousberg.itch.io is 403 at CONNECT. Repo-root LICENSE.txt states CC0 1.0 in full prose, so this is licence evidence in the strong sense: an asset-specific grant written by the author, not an npm `license` field describing code. Untagged, so pinned to `main` like khronos-samples; the lock's sha256 is what actually detects drift."
+    },
+    "kaykit-skeletons": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/main/",
+      "homepage": "https://kaylousberg.itch.io/kaykit-skeletons",
+      "comment": "Same author, same licence file, same 41-joint rig as the Adventurers pack -- which is the whole reason it is here. Skeletons are literal Act I enemies (Den of Evil, Burial Grounds, Cathedral) and sharing a skeleton with the Barbarian means one retarget path covers player and enemy alike."
+    },
+    "kaykit-dungeon": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/main/",
+      "homepage": "https://kaylousberg.itch.io/kaykit-dungeon-remastered",
+      "comment": "Modular dungeon kit, 204 self-contained .glb props (buffers AND textures embedded -- verified, no sidecar .bin/.png to chase). Supplies the encampment/cave set dressing: barrels, crates, torches, rubble, walls, floors, stairs."
+    },
+    "aframe-enviropacks": {
+      "kind": "npm",
+      "package": "aframe-enviropacks",
+      "version": "0.10.0",
+      "homepage": "https://gitlab.com/zach-geek/aframe-enviropacks",
+      "comment": "The single most valuable thing on npm for this project: a 90 MB tarball that vendors real Poly Haven (then 'HDRI Haven'/'Texture Haven') and ambientCG (then 'CC0 Textures') PBR sets at 2K, plus Poly Haven HDRIs. Those two sites are 403 for us, so this package is the ONLY route to genuine photoscanned PBR art in this container. Its Readme.md attributes each asset class to its upstream and states CC0 for HDRIs and textures explicitly -- that sentence is the licence evidence we archive. NOTE: the same Readme does NOT make a clean CC0 claim for its bundled .glb models, so we take zero models from here."
+    },
+    "kenney-rpg-audio": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/iwenzhou/kenney/master/Audio%20(295%20files)/RPG%20sounds%20(50%20sounds)/",
+      "homepage": "https://kenney.nl/assets/rpg-audio",
+      "comment": "Kenney's RPG Audio pack. kenney.nl is 403 for us, so the bytes come from a third-party GitHub mirror of the Kenney donation bundle -- but we deliberately do NOT rely on that mirror's own licence claim. The `licenseEvidence` for every file here points at Kenney's OWN pack-specific License.txt, which we fetch from the `excalibur` npm package (see the `excalibur` source). Bytes from the mirror, grant from the author."
+    },
+    "excalibur": {
+      "kind": "npm",
+      "package": "excalibur",
+      "version": "0.32.0",
+      "homepage": "https://excaliburjs.com",
+      "comment": "Present ONLY as a licence-evidence carrier. The Excalibur game engine vendors one file of Kenney's RPG Audio pack together with Kenney's verbatim License.txt ('RPG Audio by Kenney Vleugels (Kenney.nl) / License (Creative Commons Zero, CC0)'). That file is a first-party, pack-specific CC0 grant for exactly the audio we take from the mirror above, which is a far stronger claim than a mirror repo's blanket LICENSE.md. No Excalibur bytes ship in the game."
+    },
+    "uisfx": {
+      "kind": "npm",
+      "package": "uisfx",
+      "version": "0.4.0",
+      "homepage": "https://www.npmjs.com/package/uisfx",
+      "comment": "936 synthesised interface sounds in 12 timbre families, each as both .mp3 and .ogg. Notable for getting the licensing right: the package ships a SEPARATE `LICENSE-AUDIO` file dedicating the `sounds/` tree to CC0-1.0, distinct from the MIT `LICENSE` covering its code. That is exactly the art-specific statement this pipeline requires. We take the `organic` family, which is the least synthetic-sounding of the twelve."
+    },
+    "kaykit-hexagon": {
+      "kind": "http",
+      "baseUrl": "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/main/",
+      "homepage": "https://kaylousberg.itch.io/kaykit-medieval-hexagon-pack",
+      "comment": "Same author and same CC0 LICENSE.txt as the other KayKit packs. Unlike them it ships .gltf + .bin + a SHARED hexagons_medieval.png atlas rather than self-contained .glb, so each model is three manifest entries' worth of files that must land in one directory: the .gltf references `<name>.bin` and `hexagons_medieval.png` as plain sibling URIs. Everything from this source therefore lands in models/hexkit/ together, and the atlas is fetched exactly once and shared by all of them. We take only the tent/fence/nature/prop pieces -- the hex tiles themselves are useless to a continuous-world game."
+    }
+  },
+  "assets": [
+    {
+      "key": "env.overcast",
+      "tier": "core",
+      "role": "hdri",
+      "source": "pmndrs-assets",
+      "member": "hdri/forest.exr.js",
+      "transform": "data-uri-module",
+      "out": "hdri/overcast.exr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "forest (equirectangular HDRI)",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Blood Moor / overcast exteriors.",
+      "selectionRationale": "Chosen on measured radiance, not on filename. Decoded and analysed: mean luminance 0.699, blue/red ratio 1.80 (cool), peak/mean 57. That low peak/mean is the important number -- it means there is no hard sun disc, i.e. genuinely diffuse overcast light, which is exactly the cold flat key Act I wants. `park` and `sky` were rejected for peak/mean of 3958 and 29613 (harsh direct sun)."
+    },
+    {
+      "key": "env.dusk",
+      "tier": "core",
+      "role": "hdri",
+      "source": "pmndrs-assets",
+      "member": "hdri/sunset.exr.js",
+      "transform": "data-uri-module",
+      "out": "hdri/dusk.exr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "sunset (equirectangular HDRI)",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Rogue Encampment at dusk; the hub's default mood.",
+      "selectionRationale": "Mean luminance 0.409 (dim), blue/red 1.37 (cool-leaning rather than a warm tropical sunset), peak/mean 600 (a low sun disc is present and will read as a real light source). Cold dusk, not golden hour."
+    },
+    {
+      "key": "env.cave",
+      "tier": "core",
+      "role": "hdri",
+      "source": "pmndrs-assets",
+      "member": "hdri/night.exr.js",
+      "transform": "data-uri-module",
+      "out": "hdri/cave.exr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "night (equirectangular HDRI)",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Den of Evil and all cave interiors.",
+      "selectionRationale": "Mean luminance 0.066 -- roughly 10x darker than the overcast plate -- and upper-hemisphere luminance 0.009, i.e. effectively black overhead. That near-zero ambient is the point: it lets torches and spell light dominate the interior instead of competing with an IBL floor."
+    },
+    {
+      "key": "detail.normal.coarse",
+      "tier": "core",
+      "role": "normal",
+      "source": "pmndrs-assets",
+      "member": "normals/0015.webp.js",
+      "transform": "data-uri-module",
+      "out": "normals/detail-coarse.webp",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "tiling normal map 0015",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "High-frequency detail normal layered over procedural rock and cliff materials.",
+      "selectionRationale": "512x512 and tiling. Verified as a real WebP (VP8 chunk, 512x512) by decoding the data URI."
+    },
+    {
+      "key": "detail.normal.fine",
+      "tier": "core",
+      "role": "normal",
+      "source": "pmndrs-assets",
+      "member": "normals/0019.webp.js",
+      "transform": "data-uri-module",
+      "out": "normals/detail-fine.webp",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "tiling normal map 0019",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Fine grain over mud, wet stone and worn wood.",
+      "selectionRationale": "512x512 and tiling; finer grain than 0015, so the two layer without moire."
+    },
+    {
+      "key": "detail.normal.organic",
+      "tier": "core",
+      "role": "normal",
+      "source": "pmndrs-assets",
+      "member": "normals/0003.webp.js",
+      "transform": "data-uri-module",
+      "out": "normals/detail-organic.webp",
+      "license": "CC0-1.0",
+      "licenseEvidence": "pmndrs-assets:LICENSE",
+      "credit": {
+        "title": "tiling normal map 0003",
+        "author": "Antoine Bernier (bbbn19)",
+        "sourceUrl": "https://github.com/pmndrs/assets"
+      },
+      "usage": "Bark and organic surfaces.",
+      "selectionRationale": "512x512 and tiling; irregular organic pattern rather than a machined one."
+    },
+    {
+      "key": "character.robot",
+      "tier": "core",
+      "role": "gltf",
+      "source": "three-examples",
+      "path": "models/gltf/RobotExpressive/RobotExpressive.glb",
+      "out": "models/RobotExpressive.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "three-examples:models/gltf/RobotExpressive/README.md",
+      "credit": {
+        "title": "RobotExpressive",
+        "author": "Tomas Laulhe (Quaternius), modified by Don McCurdy",
+        "sourceUrl": "https://github.com/mrdoob/three.js/tree/r185/examples/models/gltf/RobotExpressive",
+        "supportUrl": "https://www.patreon.com/quaternius"
+      },
+      "usage": "The clean-licence rigged humanoid. Placeholder Barbarian body and the reference target for the procedural combat-clip system.",
+      "selectionRationale": "The ONLY rigged, animated, humanoid-ish GLB reachable from this container whose licence is explicitly documented at source ('CC0 1.0.' in its README). 43 joints, 14 clips including Punch (0.83s), Death (0.96s), Idle, Walking, Running. Its combat clips are sparse (Punch is 15 channels over 13 nodes) so they are timing reference rather than shippable motion -- but the rig itself is unambiguously ours to use."
+    },
+    {
+      "key": "creature.fox",
+      "tier": "core",
+      "role": "gltf",
+      "source": "khronos-samples",
+      "path": "Fox/glTF-Binary/Fox.glb",
+      "out": "models/Fox.glb",
+      "license": "CC-BY-4.0",
+      "licenseEvidence": "khronos-samples:Fox/README.md",
+      "credit": {
+        "title": "Fox",
+        "author": "PixelMannen (model, CC0); tomkranis (rigging and animation, CC BY 4.0); @AsoboStudio and @scurest (glTF conversion, CC BY 4.0)",
+        "sourceUrl": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox"
+      },
+      "usage": "Blood Moor wildlife; also the test case that proves the attribution generator handles a licence that actually requires attribution.",
+      "selectionRationale": "Cleanly documented per-model licence, 24 bones, three clips (Survey/Walk/Run), only 162 KB. Effective licence is CC BY 4.0 because the rig and animation -- the parts we use -- are CC BY even though the base mesh is CC0."
+    },
+    {
+      "key": "character.bigvegas",
+      "tier": "review-required",
+      "role": "gltf",
+      "source": "http",
+      "url": "https://raw.githubusercontent.com/BabylonJS/Assets/master/meshes/mixamo/Characters/Big%20Vegas.glb",
+      "out": "models/review/BigVegas.glb",
+      "license": "LicenseRef-Mixamo-Unclear",
+      "credit": {
+        "title": "Big Vegas",
+        "author": "Adobe Mixamo (via BabylonJS/Assets)",
+        "sourceUrl": "https://github.com/BabylonJS/Assets"
+      },
+      "usage": "NOT FETCHED BY DEFAULT. The best Barbarian silhouette reachable anywhere: 86 mixamorig joints, large muscular male with cape/pec/belly/collar secondary bones that a spring pass can drive for free production value.",
+      "selectionRationale": "Held out of the core tier purely on licence, not on quality. Requires a human decision before it can ship. Pass --include-review-required to fetch it for prototype evaluation."
+    },
+    {
+      "key": "animation.xbot",
+      "tier": "review-required",
+      "role": "gltf",
+      "source": "three-examples",
+      "path": "models/gltf/Xbot.glb",
+      "out": "models/review/Xbot.glb",
+      "license": "LicenseRef-Mixamo-Unclear",
+      "credit": {
+        "title": "Xbot",
+        "author": "Adobe Mixamo (via mrdoob/three.js examples)",
+        "sourceUrl": "https://github.com/mrdoob/three.js/tree/r185/examples/models/gltf"
+      },
+      "usage": "NOT FETCHED BY DEFAULT. Locomotion donor: 67 mixamorig joints, dense 201-channel clips (idle, walk, run) that are a strict superset of every other reachable mixamorig skeleton.",
+      "selectionRationale": "three.js ships no licence file for this asset and it is visibly Mixamo-derived (mixamorig:* bone namespace). Prototype-only."
+    },
+    {
+      "key": "character.barbarian",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-adventurers",
+      "path": "addons/kaykit_character_pack_adventures/Characters/gltf/Barbarian.glb",
+      "out": "models/characters/Barbarian.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Adventurers \u2014 Barbarian",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "THE PLAYER. Act I protagonist body and the animation source of truth for the locomotion and combat state machines.",
+      "selectionRationale": "This is the asset that closes the project's single biggest gap. Verified by parsing the GLB: 41 joints, 1 skin, 76 animation clips, one 1024 gradient atlas material (so it batches trivially). The clip set is not a stub -- it contains Idle, Walking_A/B/C, Walking_Backwards, Running_A/B, Running_Strafe_Left/Right, Hit_A/B, Death_A/B (+ settled death poses), Block/Blocking/Block_Hit, four 1H melee attacks, five 2H melee attacks, three dualwield attacks, dodges in four directions, PickUp, Interact and Use_Item. Every clip the brief asked for (idle/walk/run/attack/hit/death) ships authored; nothing needs to be faked. Licence is unambiguous CC0 prose from the author, so unlike Xbot and Big Vegas this one can actually ship."
+    },
+    {
+      "key": "character.rogue",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-adventurers",
+      "path": "addons/kaykit_character_pack_adventures/Characters/gltf/Rogue_Hooded.glb",
+      "out": "models/characters/RogueHooded.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Adventurers \u2014 Rogue (hooded)",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Rogue Encampment NPCs \u2014 Kashya and the rogue guard line. The hood reads correctly for Act I sisterhood silhouettes.",
+      "selectionRationale": "Hooded variant chosen over the bare Rogue specifically because the silhouette matches the Act I rogues. Same 41-joint rig and same clip set as the Barbarian, so NPC idle/gesture logic is shared code."
+    },
+    {
+      "key": "character.knight",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-adventurers",
+      "path": "addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb",
+      "out": "models/characters/Knight.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Adventurers \u2014 Knight",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Armoured NPCs: encampment guards, and the body donor for Act I unique/champion humanoids.",
+      "selectionRationale": "Heaviest armoured silhouette in the pack, which gives visual separation from the Barbarian at distance. Same rig."
+    },
+    {
+      "key": "character.mage",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-adventurers",
+      "path": "addons/kaykit_character_pack_adventures/Characters/gltf/Mage.glb",
+      "out": "models/characters/Mage.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-adventurers:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Adventurers \u2014 Mage",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Robed NPCs: Akara, Deckard Cain. Also the caster body for any spellcasting enemy.",
+      "selectionRationale": "The only robed silhouette available, and it carries the Spellcast_Long / Spellcast_Raise / Spellcast_Shoot / Spellcasting clips that the melee bodies also share."
+    },
+    {
+      "key": "enemy.skeleton.warrior",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-skeletons",
+      "path": "addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Warrior.glb",
+      "out": "models/enemies/SkeletonWarrior.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Skeletons \u2014 Warrior",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Primary Act I undead melee enemy.",
+      "selectionRationale": "Verified: 41 joints (bit-for-bit the same joint count as the Barbarian) and 95 clips. Beyond the usual set it carries Spawn_Ground_Skeletons, Death_C_Skeletons and Death_C_Skeletons_Resurrect -- i.e. authored rise-from-the-ground and resurrect motions, which is exactly the Diablo skeleton/Blood Raven behaviour and would be expensive to fake."
+    },
+    {
+      "key": "enemy.skeleton.minion",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-skeletons",
+      "path": "addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Minion.glb",
+      "out": "models/enemies/SkeletonMinion.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Skeletons \u2014 Minion",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Weak swarm enemy; the Fallen/trash-mob slot that fills out packs.",
+      "selectionRationale": "Smallest of the four skeletons, so it reads as a lesser enemy next to the Warrior without any scale hacking. Same rig and clip set."
+    },
+    {
+      "key": "enemy.skeleton.rogue",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-skeletons",
+      "path": "addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Rogue.glb",
+      "out": "models/enemies/SkeletonRogue.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Skeletons \u2014 Rogue",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Ranged undead \u2014 the corrupted rogue archers of Act I.",
+      "selectionRationale": "Carries the 1H_Ranged_* and 2H_Ranged_* clips, giving a genuine ranged attack cycle rather than a reskinned melee swing."
+    },
+    {
+      "key": "enemy.skeleton.mage",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-skeletons",
+      "path": "addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Mage.glb",
+      "out": "models/enemies/SkeletonMage.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-skeletons:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Skeletons \u2014 Mage",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Caster undead; shaman/summoner archetype.",
+      "selectionRationale": "Robed undead silhouette with the shared Spellcast_* clips. Rounds out the enemy roster to melee/swarm/ranged/caster."
+    },
+    {
+      "key": "prop.barrel.large",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/barrel_large.gltf.glb",
+      "out": "models/props/BarrelLarge.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 BarrelLarge",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment and cave set dressing; destructible container.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.barrel.small",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/barrel_small.gltf.glb",
+      "out": "models/props/BarrelSmall.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 BarrelSmall",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Clutter pass around tents and cave walls.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.barrel.stack",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/barrel_small_stack.gltf.glb",
+      "out": "models/props/BarrelStack.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 BarrelStack",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Pre-stacked cluster; cheap way to fill a supply corner.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.crate.large",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/box_large.gltf.glb",
+      "out": "models/props/CrateLarge.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 CrateLarge",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Destructible crate; the classic Diablo loot container.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.crate.small",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/box_small.gltf.glb",
+      "out": "models/props/CrateSmall.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 CrateSmall",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Small destructible crate.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.crate.stack",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/box_stacked.gltf.glb",
+      "out": "models/props/CrateStack.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 CrateStack",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Pre-stacked crates for encampment supply dumps.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.keg",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/keg.gltf.glb",
+      "out": "models/props/Keg.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Keg",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment tavern/supply dressing.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.chest",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/chest.glb",
+      "out": "models/props/Chest.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Chest",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Lootable container.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.chest.gold",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/chest_gold.glb",
+      "out": "models/props/ChestGold.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 ChestGold",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Rare/unique loot container.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.torch",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/torch.gltf.glb",
+      "out": "models/props/Torch.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Torch",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Unlit torch; wall and ground placement.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.torch.lit",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/torch_lit.gltf.glb",
+      "out": "models/props/TorchLit.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 TorchLit",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Lit torch \u2014 the primary practical light source for cave interiors, paired with a point light and fire particle.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.torch.mounted",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/torch_mounted.gltf.glb",
+      "out": "models/props/TorchMounted.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 TorchMounted",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Wall-mounted torch for corridors and the Den of Evil.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.candle.lit",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/candle_lit.gltf.glb",
+      "out": "models/props/CandleLit.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 CandleLit",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Small warm light source for interiors and shrines.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.rubble.large",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/rubble_large.gltf.glb",
+      "out": "models/props/RubbleLarge.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 RubbleLarge",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Cave floor and ruined-wall debris.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.rubble.half",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/rubble_half.gltf.glb",
+      "out": "models/props/RubbleHalf.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 RubbleHalf",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Smaller debris for scatter passes.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.pillar",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/pillar.gltf.glb",
+      "out": "models/props/Pillar.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Pillar",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Cathedral and crypt structure.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.banner",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/banner_red.gltf.glb",
+      "out": "models/props/BannerRed.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 BannerRed",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment banners; vertical colour accent.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.table",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/table_long.gltf.glb",
+      "out": "models/props/TableLong.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 TableLong",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment interior dressing.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.stool",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/stool.gltf.glb",
+      "out": "models/props/Stool.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Stool",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment interior dressing.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.swordshield",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/sword_shield.gltf.glb",
+      "out": "models/props/SwordShield.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 SwordShield",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Weapon rack dressing and a stand-in pickup mesh.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.barrier",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/barrier.gltf.glb",
+      "out": "models/props/Barrier.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Barrier",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment palisade / fence segment.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "prop.barrier.corner",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/barrier_corner.gltf.glb",
+      "out": "models/props/BarrierCorner.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 BarrierCorner",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Palisade corner piece.",
+      "selectionRationale": "Self-contained GLB: buffers and textures are both embedded (verified by parsing the container -- no external .bin or .png URIs), so a prop is exactly one file with no sidecar dependencies."
+    },
+    {
+      "key": "kit.wall",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/wall.gltf.glb",
+      "out": "models/kit/Wall.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Wall",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Straight dungeon wall span.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.wall.corner",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/wall_corner.gltf.glb",
+      "out": "models/kit/WallCorner.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 WallCorner",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Wall corner.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.wall.doorway",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/wall_doorway.glb",
+      "out": "models/kit/WallDoorway.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 WallDoorway",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Doorway / room transition.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.wall.broken",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/wall_broken.gltf.glb",
+      "out": "models/kit/WallBroken.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 WallBroken",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Ruined wall \u2014 Den of Evil and the Cathedral ruins.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.wall.cracked",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/wall_cracked.gltf.glb",
+      "out": "models/kit/WallCracked.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 WallCracked",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Damaged wall variant for visual break-up.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.floor.dirt",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/floor_dirt_large.gltf.glb",
+      "out": "models/kit/FloorDirt.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 FloorDirt",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Cave and Den of Evil floor tile.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.floor.dirt.rocky",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/floor_dirt_large_rocky.gltf.glb",
+      "out": "models/kit/FloorDirtRocky.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 FloorDirtRocky",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Rocky cave floor variant.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.floor.tile",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/floor_tile_large.gltf.glb",
+      "out": "models/kit/FloorTile.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 FloorTile",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Cathedral / crypt masonry floor.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.floor.wood",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/floor_wood_large.gltf.glb",
+      "out": "models/kit/FloorWood.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 FloorWood",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment interior floor.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "kit.stairs",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-dungeon",
+      "path": "addons/kaykit_dungeon_remastered/Assets/gltf/stairs.gltf.glb",
+      "out": "models/kit/Stairs.glb",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-dungeon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Dungeon Remastered \u2014 Stairs",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Level transitions between cave depths.",
+      "selectionRationale": "Grid-aligned modular piece from a single coherent kit, so pieces snap without seam authoring. Self-contained GLB."
+    },
+    {
+      "key": "terrain.mud.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_diff_2k.jpg",
+      "out": "textures/terrain-mud-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Forest ground 03 (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "The Blood Moor and every wet-earth exterior; the default ground material.",
+      "selectionRationale": "Photoscanned wet forest floor: dark, broken, organic, with leaf litter rather than clean soil. That is the Blood Moor read almost exactly, and it beats any procedural noise-based mud because the albedo carries real large-scale blotching that noise cannot fake at grazing angles."
+    },
+    {
+      "key": "terrain.mud.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_nor_2k.jpg",
+      "out": "textures/terrain-mud-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Forest ground 03 (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "The Blood Moor and every wet-earth exterior; the default ground material.",
+      "selectionRationale": "Photoscanned wet forest floor: dark, broken, organic, with leaf litter rather than clean soil. That is the Blood Moor read almost exactly, and it beats any procedural noise-based mud because the albedo carries real large-scale blotching that noise cannot fake at grazing angles."
+    },
+    {
+      "key": "terrain.mud.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_rough_2k.jpg",
+      "out": "textures/terrain-mud-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Forest ground 03 (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "The Blood Moor and every wet-earth exterior; the default ground material.",
+      "selectionRationale": "Photoscanned wet forest floor: dark, broken, organic, with leaf litter rather than clean soil. That is the Blood Moor read almost exactly, and it beats any procedural noise-based mud because the albedo carries real large-scale blotching that noise cannot fake at grazing angles."
+    },
+    {
+      "key": "terrain.mud.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/forrest_ground_03_2k_jpg/forrest_ground_03_AO_2k.jpg",
+      "out": "textures/terrain-mud-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Forest ground 03 (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "The Blood Moor and every wet-earth exterior; the default ground material.",
+      "selectionRationale": "Photoscanned wet forest floor: dark, broken, organic, with leaf litter rather than clean soil. That is the Blood Moor read almost exactly, and it beats any procedural noise-based mud because the albedo carries real large-scale blotching that noise cannot fake at grazing angles."
+    },
+    {
+      "key": "terrain.grass.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_diff_2k.jpg",
+      "out": "textures/terrain-grass-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Aerial grass rock (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
+      "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
+    },
+    {
+      "key": "terrain.grass.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_nor_2k.jpg",
+      "out": "textures/terrain-grass-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Aerial grass rock (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
+      "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
+    },
+    {
+      "key": "terrain.grass.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_rough_2k.jpg",
+      "out": "textures/terrain-grass-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Aerial grass rock (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
+      "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
+    },
+    {
+      "key": "terrain.grass.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/aerial_grass_rock_2k_jpg/aerial_grass_rock_ao_2k.jpg",
+      "out": "textures/terrain-grass-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Aerial grass rock (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Dead/patchy grass over rock \u2014 the transition band between the moor and the cliffs.",
+      "selectionRationale": "Aerial (top-down) capture, so it tiles as terrain without the perspective smearing that eye-level grass scans have. Grass is already sparse and rock-broken, which desaturates toward \"dead\" convincingly with a colour grade instead of needing a different scan."
+    },
+    {
+      "key": "rock.cliff.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/rock_05_2k_jpg/rock_05_diff_2k.jpg",
+      "out": "textures/rock-cliff-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Rock 05 (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cliff faces, cave walls, boulders.",
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+    },
+    {
+      "key": "rock.cliff.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/rock_05_2k_jpg/rock_05_nor_2k.jpg",
+      "out": "textures/rock-cliff-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Rock 05 (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cliff faces, cave walls, boulders.",
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+    },
+    {
+      "key": "rock.cliff.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/rock_05_2k_jpg/rock_05_rough_2k.jpg",
+      "out": "textures/rock-cliff-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Rock 05 (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cliff faces, cave walls, boulders.",
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+    },
+    {
+      "key": "rock.cliff.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/rock_05_2k_jpg/rock_05_ao_2k.jpg",
+      "out": "textures/rock-cliff-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Rock 05 (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cliff faces, cave walls, boulders.",
+      "selectionRationale": "Hard angular stone with deep crevices \u2014 the normal map has enough amplitude to hold up on large cliff geometry where a flatter scan would read as painted-on."
+    },
+    {
+      "key": "rock.mossy.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/mossy_rock_2k_jpg/mossy_rock_diff_2k.jpg",
+      "out": "textures/rock-mossy-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Mossy rock (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.",
+      "selectionRationale": "Gives a second rock identity so cliffs and cave walls do not read as the same surface. The moss breaks up silhouette repetition in enclosed spaces."
+    },
+    {
+      "key": "rock.mossy.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/mossy_rock_2k_jpg/mossy_rock_nor_2k.jpg",
+      "out": "textures/rock-mossy-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Mossy rock (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.",
+      "selectionRationale": "Gives a second rock identity so cliffs and cave walls do not read as the same surface. The moss breaks up silhouette repetition in enclosed spaces."
+    },
+    {
+      "key": "rock.mossy.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/mossy_rock_2k_jpg/mossy_rock_rough_2k.jpg",
+      "out": "textures/rock-mossy-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Mossy rock (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.",
+      "selectionRationale": "Gives a second rock identity so cliffs and cave walls do not read as the same surface. The moss breaks up silhouette repetition in enclosed spaces."
+    },
+    {
+      "key": "rock.mossy.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/mossy_rock_2k_jpg/mossy_rock_ao_2k.jpg",
+      "out": "textures/rock-mossy-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Mossy rock (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Damp cave interiors and shaded north-facing rock; the wet counterpart to rock.cliff.",
+      "selectionRationale": "Gives a second rock identity so cliffs and cave walls do not read as the same surface. The moss breaks up silhouette repetition in enclosed spaces."
+    },
+    {
+      "key": "stone.masonry.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_diff_2k.jpg",
+      "out": "textures/stone-masonry-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Sandstone cracks (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cathedral, crypt and tower masonry.",
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+    },
+    {
+      "key": "stone.masonry.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_nor_2k.jpg",
+      "out": "textures/stone-masonry-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Sandstone cracks (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cathedral, crypt and tower masonry.",
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+    },
+    {
+      "key": "stone.masonry.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_rough_2k.jpg",
+      "out": "textures/stone-masonry-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Sandstone cracks (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cathedral, crypt and tower masonry.",
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+    },
+    {
+      "key": "stone.masonry.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/sandstone_cracks_2k_jpg/sandstone_cracks_AO_2k.jpg",
+      "out": "textures/stone-masonry-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Sandstone cracks (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Cathedral, crypt and tower masonry.",
+      "selectionRationale": "Cracked dressed sandstone \u2014 the closest thing in the pack to worked (rather than natural) stone, which is what separates built structures from cliffs."
+    },
+    {
+      "key": "wood.plank.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_diff_2k.jpg",
+      "out": "textures/wood-plank-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Brown planks 04 (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Palisades, cart and wagon boards, shack walls, crate faces.",
+      "selectionRationale": "Rough weathered planking with visible gaps; the AO map carries the plank seams, so the material still reads as separate boards on flat geometry."
+    },
+    {
+      "key": "wood.plank.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_nor_2k.jpg",
+      "out": "textures/wood-plank-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Brown planks 04 (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Palisades, cart and wagon boards, shack walls, crate faces.",
+      "selectionRationale": "Rough weathered planking with visible gaps; the AO map carries the plank seams, so the material still reads as separate boards on flat geometry."
+    },
+    {
+      "key": "wood.plank.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_rough_2k.jpg",
+      "out": "textures/wood-plank-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Brown planks 04 (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Palisades, cart and wagon boards, shack walls, crate faces.",
+      "selectionRationale": "Rough weathered planking with visible gaps; the AO map carries the plank seams, so the material still reads as separate boards on flat geometry."
+    },
+    {
+      "key": "wood.plank.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/brown_planks_04_2k_jpg/brown_planks_04_ao_2k.jpg",
+      "out": "textures/wood-plank-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Brown planks 04 (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Palisades, cart and wagon boards, shack walls, crate faces.",
+      "selectionRationale": "Rough weathered planking with visible gaps; the AO map carries the plank seams, so the material still reads as separate boards on flat geometry."
+    },
+    {
+      "key": "wood.floor.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Color.jpg",
+      "out": "textures/wood-floor-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "WoodFloor041 (albedo)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Encampment interior flooring and decking.",
+      "selectionRationale": "Tighter, flatter board pattern than wood.plank, so interiors do not reuse the palisade material."
+    },
+    {
+      "key": "wood.floor.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Normal.jpg",
+      "out": "textures/wood-floor-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "WoodFloor041 (normal)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Encampment interior flooring and decking.",
+      "selectionRationale": "Tighter, flatter board pattern than wood.plank, so interiors do not reuse the palisade material."
+    },
+    {
+      "key": "wood.floor.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_Roughness.jpg",
+      "out": "textures/wood-floor-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "WoodFloor041 (roughness)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Encampment interior flooring and decking.",
+      "selectionRationale": "Tighter, flatter board pattern than wood.plank, so interiors do not reuse the palisade material."
+    },
+    {
+      "key": "wood.floor.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/WoodFloor041_2K-JPG/WoodFloor041_2K_AmbientOcclusion.jpg",
+      "out": "textures/wood-floor-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "WoodFloor041 (ao)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Encampment interior flooring and decking.",
+      "selectionRationale": "Tighter, flatter board pattern than wood.plank, so interiors do not reuse the palisade material."
+    },
+    {
+      "key": "wood.bark.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_diff_2k.jpg",
+      "out": "textures/wood-bark-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Bark brown 02 (albedo)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Tree trunks across the Blood Moor and Dark Wood.",
+      "selectionRationale": "Deep vertical bark relief. Pairs with the existing procedural detail.normal.organic for close-up trunks."
+    },
+    {
+      "key": "wood.bark.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_nor_2k.jpg",
+      "out": "textures/wood-bark-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Bark brown 02 (normal)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Tree trunks across the Blood Moor and Dark Wood.",
+      "selectionRationale": "Deep vertical bark relief. Pairs with the existing procedural detail.normal.organic for close-up trunks."
+    },
+    {
+      "key": "wood.bark.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_rough_2k.jpg",
+      "out": "textures/wood-bark-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Bark brown 02 (roughness)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Tree trunks across the Blood Moor and Dark Wood.",
+      "selectionRationale": "Deep vertical bark relief. Pairs with the existing procedural detail.normal.organic for close-up trunks."
+    },
+    {
+      "key": "wood.bark.ao",
+      "tier": "core",
+      "role": "ao",
+      "source": "aframe-enviropacks",
+      "member": "asset/bark_brown_02_2k_jpg/bark_brown_02_ao_2k.jpg",
+      "out": "textures/wood-bark-ao.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Bark brown 02 (ao)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Tree trunks across the Blood Moor and Dark Wood.",
+      "selectionRationale": "Deep vertical bark relief. Pairs with the existing procedural detail.normal.organic for close-up trunks."
+    },
+    {
+      "key": "metal.iron.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/Metal009_2K-JPG/Metal009_2K_Color.jpg",
+      "out": "textures/metal-iron-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Metal009 (albedo)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Weapons, armour, cage bars, gates, banded barrels.",
+      "selectionRationale": "Worn dark iron rather than clean steel. Ships a real metalness map, so this is the one set that drives the metallic channel from data instead of a constant. NOTE: no AO map upstream -- consumers should treat metal.iron.ao as absent, not missing."
+    },
+    {
+      "key": "metal.iron.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/Metal009_2K-JPG/Metal009_2K_Normal.jpg",
+      "out": "textures/metal-iron-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Metal009 (normal)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Weapons, armour, cage bars, gates, banded barrels.",
+      "selectionRationale": "Worn dark iron rather than clean steel. Ships a real metalness map, so this is the one set that drives the metallic channel from data instead of a constant. NOTE: no AO map upstream -- consumers should treat metal.iron.ao as absent, not missing."
+    },
+    {
+      "key": "metal.iron.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/Metal009_2K-JPG/Metal009_2K_Roughness.jpg",
+      "out": "textures/metal-iron-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Metal009 (roughness)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Weapons, armour, cage bars, gates, banded barrels.",
+      "selectionRationale": "Worn dark iron rather than clean steel. Ships a real metalness map, so this is the one set that drives the metallic channel from data instead of a constant. NOTE: no AO map upstream -- consumers should treat metal.iron.ao as absent, not missing."
+    },
+    {
+      "key": "metal.iron.metalness",
+      "tier": "core",
+      "role": "metalness",
+      "source": "aframe-enviropacks",
+      "member": "asset/Metal009_2K-JPG/Metal009_2K_Metalness.jpg",
+      "out": "textures/metal-iron-metalness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Metal009 (metalness)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Weapons, armour, cage bars, gates, banded barrels.",
+      "selectionRationale": "Worn dark iron rather than clean steel. Ships a real metalness map, so this is the one set that drives the metallic channel from data instead of a constant. NOTE: no AO map upstream -- consumers should treat metal.iron.ao as absent, not missing."
+    },
+    {
+      "key": "cloth.albedo",
+      "tier": "core",
+      "role": "albedo",
+      "source": "aframe-enviropacks",
+      "member": "asset/Fabric026_2K-JPG/Fabric026_2K_Color.jpg",
+      "out": "textures/cloth-albedo.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Fabric026 (albedo)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Tents, banners, bedrolls, NPC clothing.",
+      "selectionRationale": "Coarse woven fabric with visible thread structure at 2K. NOTE: no AO map upstream -- cloth.ao does not exist."
+    },
+    {
+      "key": "cloth.normal",
+      "tier": "core",
+      "role": "normal",
+      "source": "aframe-enviropacks",
+      "member": "asset/Fabric026_2K-JPG/Fabric026_2K_Normal.jpg",
+      "out": "textures/cloth-normal.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Fabric026 (normal)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Tents, banners, bedrolls, NPC clothing.",
+      "selectionRationale": "Coarse woven fabric with visible thread structure at 2K. NOTE: no AO map upstream -- cloth.ao does not exist."
+    },
+    {
+      "key": "cloth.roughness",
+      "tier": "core",
+      "role": "roughness",
+      "source": "aframe-enviropacks",
+      "member": "asset/Fabric026_2K-JPG/Fabric026_2K_Roughness.jpg",
+      "out": "textures/cloth-roughness.jpg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Fabric026 (roughness)",
+        "author": "ambientCG (formerly CC0 Textures)",
+        "sourceUrl": "https://ambientcg.com"
+      },
+      "usage": "Tents, banners, bedrolls, NPC clothing.",
+      "selectionRationale": "Coarse woven fabric with visible thread structure at 2K. NOTE: no AO map upstream -- cloth.ao does not exist."
+    },
+    {
+      "key": "env.overcast.grey",
+      "tier": "core",
+      "role": "hdri",
+      "source": "aframe-enviropacks",
+      "member": "asset/hdris/winter_lake_01_2k.hdr",
+      "out": "hdri/overcast-grey.hdr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Winter Lake 01",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "The cold grey-sky key for the Blood Moor and Cold Plains \u2014 the overcast mood Act I actually wants.",
+      "selectionRationale": "The brief explicitly asked for an overcast/grey sky and the existing env.overcast (pmndrs \"forest\") is a green-tinted woodland plate, not a grey one. This is a genuine flat winter overcast: no sun disc, fully diffuse, desaturated. Taken at 2K because that is the only resolution shipped for this plate; it is the single largest asset added and is worth the 5.7 MB as the default exterior key."
+    },
+    {
+      "key": "env.cave.corridor",
+      "tier": "core",
+      "role": "hdri",
+      "source": "aframe-enviropacks",
+      "member": "asset/hdris/large_corridor_1k.hdr",
+      "out": "hdri/cave-corridor.hdr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Large Corridor",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Enclosed stone interiors: the Cathedral, the Catacombs, the Jail levels.",
+      "selectionRationale": "A real interior capture, so the IBL carries bounce off nearby walls rather than sky. That is what makes an interior read as enclosed; the existing env.cave (pmndrs \"night\") is an exterior night sky and gives the wrong occlusion cues indoors."
+    },
+    {
+      "key": "env.night.moonless",
+      "tier": "core",
+      "role": "hdri",
+      "source": "aframe-enviropacks",
+      "member": "asset/hdris/moonless_golf_1k.hdr",
+      "out": "hdri/night-moonless.hdr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Moonless Golf",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "The darkest exterior key \u2014 deep cave mouths and night surface areas where torches must dominate.",
+      "selectionRationale": "Near-zero ambient with no moon disc, so practical lights (torches, spells) carry the entire frame. Complements env.cave, which still has a faint sky term."
+    },
+    {
+      "key": "env.night.stars",
+      "tier": "core",
+      "role": "hdri",
+      "source": "aframe-enviropacks",
+      "member": "asset/hdris/dikhololo_night_edit_1k.hdr",
+      "out": "hdri/night-stars.hdr",
+      "license": "CC0-1.0",
+      "licenseEvidence": "aframe-enviropacks:Readme.md",
+      "credit": {
+        "title": "Dikhololo Night (edit)",
+        "author": "Poly Haven (formerly Texture Haven / HDRI Haven)",
+        "sourceUrl": "https://polyhaven.com"
+      },
+      "usage": "Clear starfield night exterior for the encampment after dark.",
+      "selectionRationale": "Only 434 KB and visibly starry rather than flat black, so it gives the encampment a readable sky without competing with campfire light."
+    },
+    {
+      "key": "audio.footstep.00",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep00.ogg",
+      "out": "audio/footsteps/footstep-00.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep00",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.01",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep01.ogg",
+      "out": "audio/footsteps/footstep-01.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep01",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.02",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep02.ogg",
+      "out": "audio/footsteps/footstep-02.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep02",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.03",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep03.ogg",
+      "out": "audio/footsteps/footstep-03.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep03",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.04",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep04.ogg",
+      "out": "audio/footsteps/footstep-04.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep04",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.05",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep05.ogg",
+      "out": "audio/footsteps/footstep-05.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep05",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.06",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep06.ogg",
+      "out": "audio/footsteps/footstep-06.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep06",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.footstep.07",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "footstep07.ogg",
+      "out": "audio/footsteps/footstep-07.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 footstep07",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Player and NPC footfalls; pick round-robin per step event.",
+      "selectionRationale": "Kenney ships ten takes of the same footfall specifically so a walk cycle can randomise without an audible loop. We take eight, which is past the point where repetition is perceptible. These are soft/earthy takes, so they suit mud and dirt directly; stone can be approximated by driving them through a brighter EQ and a short reverb send rather than needing a second sample set."
+    },
+    {
+      "key": "audio.combat.slice",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "knifeSlice.ogg",
+      "out": "audio/combat/slice-a.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 knifeSlice",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Sword and dagger swing connecting on flesh.",
+      "selectionRationale": "The closest thing in any reachable pack to a bladed combat impact."
+    },
+    {
+      "key": "audio.combat.slice.b",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "knifeSlice2.ogg",
+      "out": "audio/combat/slice-b.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 knifeSlice2",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Second slice variant so repeated attacks do not machine-gun one sample.",
+      "selectionRationale": "Alternate take of the same source, which is what makes round-robin work."
+    },
+    {
+      "key": "audio.combat.chop",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "chop.ogg",
+      "out": "audio/combat/chop.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 chop",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Axe and two-handed heavy impact.",
+      "selectionRationale": "Blunter and lower than the slices, so it reads as a heavier weapon class."
+    },
+    {
+      "key": "audio.combat.metal.light",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "metalClick.ogg",
+      "out": "audio/combat/metal-light.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 metalClick",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Blade-on-armour and parry tick.",
+      "selectionRationale": "Short bright metallic transient \u2014 the standard cue for a blocked or glancing hit."
+    },
+    {
+      "key": "audio.combat.metal.heavy",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "metalPot1.ogg",
+      "out": "audio/combat/metal-heavy.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 metalPot1",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Heavy metal impact; shield bash and armoured enemy hits.",
+      "selectionRationale": "Has real body and decay, unlike metalClick, so it carries a heavy blow."
+    },
+    {
+      "key": "audio.combat.draw",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "drawKnife1.ogg",
+      "out": "audio/combat/weapon-draw.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 drawKnife1",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Unsheathing a weapon on entering combat stance.",
+      "selectionRationale": "Pairs with the KayKit weapon-equip animations."
+    },
+    {
+      "key": "audio.foley.cloth",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "cloth1.ogg",
+      "out": "audio/foley/cloth.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 cloth1",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Movement foley for cloaked NPCs, dodge rolls, garment rustle.",
+      "selectionRationale": "Sells character motion cheaply; layers under the dodge clips."
+    },
+    {
+      "key": "audio.foley.leather",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "dropLeather.ogg",
+      "out": "audio/foley/leather.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 dropLeather",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Armour and pack foley; item drop.",
+      "selectionRationale": "Covers the leather material class the texture set is missing."
+    },
+    {
+      "key": "audio.world.creak",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "creak1.ogg",
+      "out": "audio/world/creak.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 creak1",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Wooden ambience: cart, gate, floorboard, gibbet.",
+      "selectionRationale": "Adds unease to the encampment and Dark Wood without needing a music bed."
+    },
+    {
+      "key": "audio.world.door.open",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "doorOpen_1.ogg",
+      "out": "audio/world/door-open.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 doorOpen_1",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Doors, gates, level transitions.",
+      "selectionRationale": "Heavy wooden door; matches kit.wall.doorway."
+    },
+    {
+      "key": "audio.world.door.close",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "doorClose_1.ogg",
+      "out": "audio/world/door-close.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 doorClose_1",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Doors, gates, level transitions.",
+      "selectionRationale": "Matched close for the same door."
+    },
+    {
+      "key": "audio.loot.coins",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "handleCoins.ogg",
+      "out": "audio/loot/coins.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 handleCoins",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Gold pickup \u2014 a Diablo signature sound.",
+      "selectionRationale": "Unmistakably coins; the single most recognisable loot cue in the pack."
+    },
+    {
+      "key": "audio.loot.item",
+      "tier": "core",
+      "role": "audio",
+      "source": "kenney-rpg-audio",
+      "path": "handleSmallLeather.ogg",
+      "out": "audio/loot/item.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "excalibur:playground/public/rpg-audio/License.txt",
+      "credit": {
+        "title": "Kenney RPG Audio \u2014 handleSmallLeather",
+        "author": "Kenney Vleugels (Kenney.nl)",
+        "sourceUrl": "https://kenney.nl/assets/rpg-audio",
+        "supportUrl": "https://support.kenney.nl"
+      },
+      "usage": "Generic item pickup into inventory.",
+      "selectionRationale": "Neutral enough to serve every non-gold pickup."
+    },
+    {
+      "key": "audio.ui.press",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/press.ogg",
+      "out": "audio/ui/press.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 press",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "audio.ui.hover",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/hover.ogg",
+      "out": "audio/ui/hover.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 hover",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "audio.ui.select",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/select.ogg",
+      "out": "audio/ui/select.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 select",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "audio.ui.error",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/error.ogg",
+      "out": "audio/ui/error.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 error",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "audio.ui.success",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/success.ogg",
+      "out": "audio/ui/success.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 success",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "audio.ui.open",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/open.ogg",
+      "out": "audio/ui/open.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 open",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "audio.ui.close",
+      "tier": "core",
+      "role": "audio",
+      "source": "uisfx",
+      "member": "sounds/organic/close.ogg",
+      "out": "audio/ui/close.ogg",
+      "license": "CC0-1.0",
+      "licenseEvidence": "uisfx:LICENSE-AUDIO",
+      "credit": {
+        "title": "uisfx organic \u2014 close",
+        "author": "Yuki Capital",
+        "sourceUrl": "https://www.npmjs.com/package/uisfx"
+      },
+      "usage": "Inventory, menu and HUD interaction feedback.",
+      "selectionRationale": "The `organic` timbre family was chosen over the other eleven because it is the least obviously synthesised -- `arcade` and `digital` would fight a grim medieval HUD. Ogg rather than mp3 because the pack ships both and Ogg is smaller at equal quality and patent-free."
+    },
+    {
+      "key": "prop.tent",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/tent.gltf",
+      "out": "models/hexkit/tent.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 tent",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "THE Rogue Encampment building block \u2014 the canvas tents the camp is made of.",
+      "selectionRationale": "The encampment gap-filler. Nothing in the dungeon pack reads as a camp; this does, and it pairs with the cloth.* texture set for any larger hero tent built from custom geometry."
+    },
+    {
+      "key": "prop.tent.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/tent.bin",
+      "out": "models/hexkit/tent.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 tent",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for tent.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.fence.wood",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight.gltf",
+      "out": "models/hexkit/fence_wood_straight.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment perimeter palisade.",
+      "selectionRationale": "Straight modular run; repeats along a spline without seam work."
+    },
+    {
+      "key": "prop.fence.wood.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight.bin",
+      "out": "models/hexkit/fence_wood_straight.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for fence_wood_straight.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.fence.wood.gate",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight_gate.gltf",
+      "out": "models/hexkit/fence_wood_straight_gate.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight_gate",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Encampment gate \u2014 the exit to the Blood Moor.",
+      "selectionRationale": "Matching gate piece for the same palisade run, so the camp has a readable entrance."
+    },
+    {
+      "key": "prop.fence.wood.gate.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/buildings/neutral/fence_wood_straight_gate.bin",
+      "out": "models/hexkit/fence_wood_straight_gate.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 fence_wood_straight_gate",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for fence_wood_straight_gate.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.weaponrack",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/weaponrack.gltf",
+      "out": "models/hexkit/weaponrack.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 weaponrack",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Charsi's forge and the training area dressing.",
+      "selectionRationale": "Immediately communicates a military camp; strong silhouette prop."
+    },
+    {
+      "key": "prop.weaponrack.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/weaponrack.bin",
+      "out": "models/hexkit/weaponrack.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 weaponrack",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for weaponrack.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.sack",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/sack.gltf",
+      "out": "models/hexkit/sack.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 sack",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Supply clutter around tents and the stash.",
+      "selectionRationale": "Soft-form clutter that contrasts the hard-edged crates and barrels."
+    },
+    {
+      "key": "prop.sack.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/sack.bin",
+      "out": "models/hexkit/sack.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 sack",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for sack.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.crate.open",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/crate_open.gltf",
+      "out": "models/hexkit/crate_open.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 crate_open",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Open supply crate; lootable or dressing.",
+      "selectionRationale": "Open variant reads as \"already searched\", useful for storytelling in cleared areas."
+    },
+    {
+      "key": "prop.crate.open.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/crate_open.bin",
+      "out": "models/hexkit/crate_open.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 crate_open",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for crate_open.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.bucket",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/bucket_water.gltf",
+      "out": "models/hexkit/bucket_water.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 bucket_water",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Well and camp dressing.",
+      "selectionRationale": "Small-scale prop that gives ground clutter a human scale reference."
+    },
+    {
+      "key": "prop.bucket.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/bucket_water.bin",
+      "out": "models/hexkit/bucket_water.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 bucket_water",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for bucket_water.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "prop.lumber",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/resource_lumber.gltf",
+      "out": "models/hexkit/resource_lumber.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 resource_lumber",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Stacked timber for the camp and palisade construction.",
+      "selectionRationale": "Explains the palisade materially; good filler against tent walls."
+    },
+    {
+      "key": "prop.lumber.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/props/resource_lumber.bin",
+      "out": "models/hexkit/resource_lumber.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 resource_lumber",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for resource_lumber.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "nature.tree.a",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_A.gltf",
+      "out": "models/hexkit/tree_single_A.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_A",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Blood Moor and Dark Wood tree scatter.",
+      "selectionRationale": "Low-poly stylised tree that matches the character art style; instanced across terrain it is nearly free."
+    },
+    {
+      "key": "nature.tree.a.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_A.bin",
+      "out": "models/hexkit/tree_single_A.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_A",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for tree_single_A.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "nature.tree.b",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_B.gltf",
+      "out": "models/hexkit/tree_single_B.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_B",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Second tree species for scatter variety.",
+      "selectionRationale": "A second silhouette so forests do not read as a cloned single asset."
+    },
+    {
+      "key": "nature.tree.b.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/tree_single_B.bin",
+      "out": "models/hexkit/tree_single_B.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 tree_single_B",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for tree_single_B.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "nature.rock.a",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_A.gltf",
+      "out": "models/hexkit/rock_single_A.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_A",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Boulder scatter and cave-mouth dressing.",
+      "selectionRationale": "Small boulder for ground scatter."
+    },
+    {
+      "key": "nature.rock.a.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_A.bin",
+      "out": "models/hexkit/rock_single_A.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_A",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for rock_single_A.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "nature.rock.c",
+      "tier": "core",
+      "role": "gltf",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_C.gltf",
+      "out": "models/hexkit/rock_single_C.gltf",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_C",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Larger boulder variant.",
+      "selectionRationale": "Bigger mass for cliff bases and stalagmite stand-ins in caves."
+    },
+    {
+      "key": "nature.rock.c.bin",
+      "tier": "core",
+      "role": "gltf-buffer",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Assets/gltf/decoration/nature/rock_single_C.bin",
+      "out": "models/hexkit/rock_single_C.bin",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 rock_single_C",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "Binary buffer for rock_single_C.gltf. Not loaded directly \u2014 the .gltf references it as a sibling URI.",
+      "selectionRationale": "Required sibling of the .gltf; must stay in the same directory or the model will not load."
+    },
+    {
+      "key": "texture.hexkit.atlas",
+      "tier": "core",
+      "role": "albedo",
+      "source": "kaykit-hexagon",
+      "path": "addons/kaykit_medieval_hexagon_pack/Textures/hexagons_medieval.png",
+      "out": "models/hexkit/hexagons_medieval.png",
+      "license": "CC0-1.0",
+      "licenseEvidence": "kaykit-hexagon:LICENSE.txt",
+      "credit": {
+        "title": "KayKit Medieval Hexagon Pack \u2014 hexagons_medieval atlas",
+        "author": "Kay Lousberg",
+        "sourceUrl": "https://www.kaylousberg.com",
+        "supportUrl": "https://patreon.com/kaylousberg"
+      },
+      "usage": "The single shared gradient atlas for EVERY model in models/hexkit/.",
+      "selectionRationale": "One 15 KB atlas textures all twelve hexkit models, because the pack uses a gradient-palette workflow rather than per-model UV maps. That is why the whole kit costs one texture and one material, and why every .gltf above must sit in the same directory as this file."
+    }
+  ]
+}

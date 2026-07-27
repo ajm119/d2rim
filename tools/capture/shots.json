@@ -1,0 +1,288 @@
+{
+  "_readme": [
+    "Declarative shot list for tools/capture/capture.mjs. See tools/capture/README.md.",
+    "",
+    "Per-shot fields:",
+    "  id           required, unique, filename-safe. Output is <out>/<id>.png.",
+    "  description  one line, shown in logs, report.json and contact-sheet labels.",
+    "  url          page path, resolved against the server origin. Query params are",
+    "               kept; the harness always forces ?autostart=0 and ?backend=<backend>.",
+    "  backend      'webgl2' (default) or 'webgpu'.",
+    "  setup        JS run after the engine is ready, BEFORE the warmup frames.",
+    "  warmupFrames deterministic frames stepped at a fixed 1/60 s delta, so temporal",
+    "               effects converge and animation reaches a known pose.",
+    "  pose         JS run AFTER the warmup, immediately before the capture render.",
+    "               Use for the camera: modules re-drive the camera every update, so a",
+    "               camera set in `setup` is overwritten during the warmup.",
+    "  mode         'readback' (default, GPU->RenderTarget->PNG, no DOM) or",
+    "               'screenshot' (page.screenshot, includes DOM/HUD layers).",
+    "  guard        per-shot blank-frame threshold overrides.",
+    "",
+    "Scripts are strings, or arrays of lines joined with newlines. They run as async",
+    "function bodies with these bindings: d2rim, engine, ctx, scene, camera, renderer,",
+    "time, services, events, THREE.",
+    "",
+    "`d2rim.render` is the assembled frame graph (settings, post, timeOfDay, sky,",
+    "lighting, gtao, ibl, ssr, materials, volumetrics, lightShafts) and `d2rim.scene`",
+    "is the BloodMoor module. `d2rim.scene.field.heightAt(x, z)` is the same terrain",
+    "height function the scene places props with, so a pose can put the camera a known",
+    "distance above the ground instead of guessing at it.",
+    "",
+    "Scene facts these shots are composed against (src/scene/BloodMoor.ts):",
+    "  campfire at (3.1, ground, -5.2) - the focal point, and the only warm light",
+    "  Barbarian at (1.1, ground, 0.4), facing the fire",
+    "  ruined masonry wall centred near (-5.6, -11.4), running at 24 deg",
+    "  rock escarpment along x ~ -13, dead-tree ridge line peaking near z ~ -36",
+    "  three oversized framing dead trees at (-7.6, 5.4), (13.4, 2.4) and (9.4, -14.6)",
+    "  a worn mud track written into the ground material, (14.6, 17.5) -> the fire",
+    "  broken fence runs (13.5, 15.5) -> (8.9, -12.8): the leading line",
+    "  time of day: bloodMoor preset at 12.15 h, lat 51, day 305, full overcast",
+    "  exposure is LOCKED (autoExposure off, exposure 1.35). Every shot, every",
+    "  backend and every quality tier must therefore share one tonal response -",
+    "  if two shots of this scene disagree on brightness, that is a bug, not a",
+    "  framing difference."
+  ],
+
+  "defaults": {
+    "url": "/",
+    "backend": "webgl2",
+    "width": 1280,
+    "height": 720,
+    "warmupFrames": 16,
+    "mode": "readback"
+  },
+
+  "shots": [
+    {
+      "id": "wide-establishing",
+      "description": "Wide establishing: the whole Blood Moor composition - foreground rubble, campfire and Barbarian in the midground, treed ridge behind, aerial perspective separating all three.",
+      "warmupFrames": 20,
+      "width": 1600,
+      "height": 900,
+      "pose": [
+        "// The authored camera. The basin, the fence line and the wall angle were",
+        "// all composed for exactly this eye position, so this is the frame the",
+        "// art direction is judged on.",
+        "const view = d2rim.scene.constructor.defaultCamera;",
+        "camera.position.copy(view.position);",
+        "camera.lookAt(view.target);",
+        "camera.fov = view.fov;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "fog-godrays",
+      "description": "Fog and god rays: low across the basin along the sun bearing, so the froxel fog pooling in the hollow sits between the lens and the shafts breaking through the ridge treeline.",
+      "warmupFrames": 22,
+      "pose": [
+        "// Shafts are a forward-scattering effect: they only exist within about",
+        "// 35 deg of the sun vector. The bearing is therefore read from the live",
+        "// sun rather than hard-coded, so this frame stays correct if the time of",
+        "// day is ever retuned.",
+        "const sun = d2rim.render.sky.atmosphere.sunDirection.clone();",
+        "const bearing = new THREE.Vector2(sun.x, sun.z).normalize();",
+        "const target = new THREE.Vector3(2.0, 0, -6.0);",
+        "target.y = d2rim.scene.field.heightAt(target.x, target.z) + 1.4;",
+        "const eye = new THREE.Vector3(target.x - bearing.x * 15.5, 0, target.z - bearing.y * 15.5);",
+        "eye.y = d2rim.scene.field.heightAt(eye.x, eye.z) + 1.6;",
+        "camera.position.copy(eye);",
+        "camera.lookAt(target);",
+        "camera.fov = 40;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "campfire-contrast",
+      "description": "Warm/cold contrast: close on the campfire with the Barbarian rimmed by it and cold overcast key on everything outside its falloff. The most diagnostic frame in the set for colour separation.",
+      "warmupFrames": 20,
+      "pose": [
+        "// Three-quarters onto the fire from 5 m, so the firelit side and the",
+        "// sky-lit side of both the figure and the ground are in frame at once. If",
+        "// the grade has crushed the image to grey mush it fails here first.",
+        "const fire = new THREE.Vector3(3.1, 0, -5.2);",
+        "fire.y = d2rim.scene.field.heightAt(fire.x, fire.z);",
+        "camera.position.set(6.4, fire.y + 1.55, -0.9);",
+        "camera.lookAt(fire.x - 0.4, fire.y + 0.75, fire.z + 0.4);",
+        "camera.fov = 36;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "material-closeup",
+      "description": "Material close-up: parallax-mapped wet masonry filling the left of frame against wet mud and dead grass, at the raking angle where parallax occlusion actually shows.",
+      "warmupFrames": 16,
+      "pose": [
+        "// A few metres off the wall and about 20 deg from its surface normal.",
+        "// Head-on, parallax occlusion mapping is nearly indistinguishable from a",
+        "// normal map; at a raking angle the stones occlude each other and the",
+        "// courses gain real depth. Low enough that the mud/grass blend line runs",
+        "// through the bottom third, so both materials read at 1:1.",
+        "const wall = new THREE.Vector3(-4.4, 0, -10.0);",
+        "wall.y = d2rim.scene.field.heightAt(wall.x, wall.z);",
+        "// The eye height must be measured at the *eye*, not at the subject.",
+        "// Reading the wall's ground height and adding to it put the camera",
+        "// inside the bank when the ground rose between the two, which is why",
+        "// this shot was photographing the inside of a hill.",
+        "const eyeX = wall.x + 3.3;",
+        "const eyeZ = wall.z + 2.4;",
+        "camera.position.set(eyeX, d2rim.scene.field.heightAt(eyeX, eyeZ) + 1.45, eyeZ);",
+        "camera.lookAt(wall.x - 0.5, wall.y + 1.0, wall.z - 0.6);",
+        "camera.fov = 30;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "shadow-contact",
+      "description": "Shadow and contact detail: raking view across the campsite clutter, for CSM softness, cascade transitions, peter-panning and GTAO contact darkening.",
+      "warmupFrames": 16,
+      "pose": [
+        "// Down the shadow bearing from 3.6 m onto the clutter cluster, where",
+        "// there are enough small objects resting on the ground that contact",
+        "// occlusion and shadow bias errors have nowhere to hide.",
+        "const sun = d2rim.render.sky.atmosphere.sunDirection.clone();",
+        "const bearing = new THREE.Vector2(sun.x, sun.z).normalize();",
+        "const target = new THREE.Vector3(1.7, 0, -7.8);",
+        "target.y = d2rim.scene.field.heightAt(target.x, target.z) + 0.3;",
+        "camera.position.set(target.x + bearing.x * 6.2, target.y + 3.6, target.z + bearing.y * 6.2);",
+        "camera.lookAt(target);",
+        "camera.fov = 32;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "backlit-silhouette",
+      "description": "Backlit silhouette: camera into the sun with the Barbarian and the ridge trees between, for rim separation, highlight rolloff and how the tone curve handles the brightest thing in the scene.",
+      "warmupFrames": 20,
+      "pose": [
+        "// On the sun bearing, past the figure, at eye height. This is where an",
+        "// over-eager bloom or a tone curve with no shoulder announces itself: the",
+        "// sun is behind a full overcast slab, so what should reach the lens is a",
+        "// broad soft glow - never a disc, and never a flare.",
+        "const sun = d2rim.render.sky.atmosphere.sunDirection.clone();",
+        "const bearing = new THREE.Vector2(sun.x, sun.z).normalize();",
+        "const hero = new THREE.Vector3(1.1, 0, 0.4);",
+        "hero.y = d2rim.scene.field.heightAt(hero.x, hero.z);",
+        "camera.position.set(hero.x - bearing.x * 6.0, hero.y + 1.62, hero.z - bearing.y * 6.0);",
+        "camera.lookAt(hero.x, hero.y + 1.15, hero.z);",
+        "camera.fov = 38;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "character-thirdperson",
+      "description": "Third-person framing: the Barbarian over-the-shoulder at the distance the game will play at, idle animation settled. Proof the 41-joint rig loads, binds and animates.",
+      "warmupFrames": 26,
+      "pose": [
+        "// The gameplay camera: 4.2 m back, 1.85 m up, 0.55 m off the spine axis,",
+        "// aimed at chest height. Deliberately the real third-person rig rather",
+        "// than a flattering portrait lens - if the character reads badly from",
+        "// here it reads badly in the game.",
+        "const hero = d2rim.scene.hero;",
+        "const base = hero ? hero.position.clone() : new THREE.Vector3(1.1, 0, 0.4);",
+        "if (!hero) base.y = d2rim.scene.field.heightAt(base.x, base.z);",
+        "const yaw = hero ? hero.rotation.y : 0;",
+        "const back = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));",
+        "const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));",
+        "camera.position.copy(base).addScaledVector(back, 4.2).addScaledVector(right, 0.55);",
+        "camera.position.y = base.y + 1.85;",
+        "camera.lookAt(base.x, base.y + 1.25, base.z);",
+        "camera.fov = 42;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "distant-aerial",
+      "description": "Distant terrain and aerial perspective: elevated view down the length of the moor. The subject is the gradient, not any object.",
+      "warmupFrames": 20,
+      "width": 1600,
+      "height": 900,
+      "pose": [
+        "// From the top of the west bank, looking north-east down the moor. Near",
+        "// ground should keep its own colour, the ridge should sit distinctly in",
+        "// front of the sky, and the transition should be smooth. Banding, a flat",
+        "// grey wash, or a ridge that vanishes into the sky are all failures.",
+        "const eye = new THREE.Vector3(-16.5, 0, 12.0);",
+        "eye.y = d2rim.scene.field.heightAt(eye.x, eye.z) + 5.5;",
+        "camera.position.copy(eye);",
+        "camera.lookAt(4.0, eye.y - 3.4, -46.0);",
+        "camera.fov = 44;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "quality-low",
+      "description": "?quality=low: FXAA, no GTAO, no SSR, two 1024 cascades, 0.75 render scale. Same framing as wide-establishing so the tier ladder compares side by side.",
+      "url": "/?quality=low",
+      "warmupFrames": 16,
+      "pose": [
+        "const view = d2rim.scene.constructor.defaultCamera;",
+        "camera.position.copy(view.position);",
+        "camera.lookAt(view.target);",
+        "camera.fov = view.fov;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "quality-ultra",
+      "description": "?quality=ultra: TAA 16 plus sharpen, full-resolution GTAO, high SSR, four 3072 cascades. The other end of the ladder from quality-low.",
+      "url": "/?quality=ultra",
+      "warmupFrames": 20,
+      "pose": [
+        "const view = d2rim.scene.constructor.defaultCamera;",
+        "camera.position.copy(view.position);",
+        "camera.lookAt(view.target);",
+        "camera.fov = view.fov;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+
+    {
+      "id": "hud-composite",
+      "description": "HUD composite (page.screenshot): the DOM overlay layered over the rendered frame, for UI legibility against a dark, low-contrast image.",
+      "mode": "screenshot",
+      "warmupFrames": 20
+    },
+
+    {
+      "id": "webgpu-backend-check",
+      "description": "WebGPU backend parity: byte-for-byte the same pose, resolution and warmup as wide-establishing, on the other backend. This IS a tonal comparison - the two frames must agree.",
+      "backend": "webgpu",
+      "width": 1600,
+      "height": 900,
+      "warmupFrames": 20,
+      "pose": [
+        "// Identical to wide-establishing in every respect except the backend.",
+        "// This shot asked for 20 warmup frames and for a long time never got",
+        "// them: the harness silently clamped WebGPU warmup to 0, because",
+        "// presenting the swapchain in this container loses the device. So it",
+        "// photographed frame 0 against a 20-frame WebGL2 reference and the",
+        "// parity gate dutifully reported the resulting 0.12 of mean luminance",
+        "// as a *backend* divergence. It was not: with no warmup TAA has no",
+        "// history,",
+        "// the froxel volume has not converged and the scene module\u0027s update()",
+        "// has never run, so the fire never flickers into existence. Comparing an",
+        "// unconverged frame against a converged one measures the harness, not",
+        "// the renderer. Captured cold at the same warmup the two backends agree",
+        "// to 0.0004 of mean luminance. The warmup now renders into the capture",
+        "// target rather than the swapchain, on both backends, via",
+        "// PostStack.setHeadlessPresentation - so the two sides really do",
+        "// converge identically and any difference left here is a real bug and",
+        "// is meant to be read as one.",
+        "const view = d2rim.scene.constructor.defaultCamera;",
+        "camera.position.copy(view.position);",
+        "camera.lookAt(view.target);",
+        "camera.fov = view.fov;",
+        "camera.updateProjectionMatrix();"
+      ]
+    }
+  ]
+}
