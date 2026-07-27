@@ -30,17 +30,40 @@
  *   more than a few times a second. Touching `textContent` every frame forces
  *   style recalculation inside the frame budget and would make the overlay a
  *   measurable part of what it is measuring.
- * - FPS is reported from an exponential moving average of frame deltas rather
- *   than an instantaneous reciprocal, which otherwise jitters so hard the
- *   number is unreadable.
  * - The memory walk is *not* per frame. It traverses the scene graph, which is
  *   far too expensive for a frame budget, so it runs on a 2 s cadence and the
  *   displayed value is up to two seconds stale. That is fine for bytes, which
  *   move slowly, and it is why draw calls and triangles are read from the
  *   renderer's own counters instead.
+ *
+ * ### It used to lie about the frame rate too, and that was worse
+ *
+ * The `fps` line was an exponential moving average of `ctx.time.delta`. That is
+ * the *clamped* delta: the fixed-step accumulator truncates it at `maxDelta`
+ * before gameplay ever sees it. On any machine slower than the clamp the
+ * average converges on the clamp and sits there — the old default of 0.25 s
+ * produced `fps 4.0 (250.0 ms)` on a 6 fps machine and on a 1 fps machine
+ * alike, and it read *identically* across two different renderer backends,
+ * which is how the saturation was finally spotted. Every performance decision
+ * taken against that number was taken against a constant.
+ *
+ * The overlay now reports from `Engine.frameStats`, which samples the raw
+ * unclamped wall-clock delta, and it shows:
+ *
+ * - `fps` — from the **median** raw frame time, not a mean and not an
+ *   instantaneous reciprocal. p95 is shown beside it, because the gap between
+ *   the two is what stutter actually is.
+ * - `cpu` — the update/render split plus GPU time from a timer query where the
+ *   device has one. Time in the frame that is in neither is the browser
+ *   blocking on the GPU, which is the diagnosis, not a rounding error.
+ * - `clamp` — how many frames in the window hit the delta clamp or dropped
+ *   simulation backlog. Shown only when non-zero, and never confused with the
+ *   frame time: it says the *world* is running behind, which is a different
+ *   fact from how long a frame took.
  */
 
 import { AssetManagerKey } from '../assets/AssetManager';
+import type { FrameStatsSnapshot } from '../core/FrameStats';
 import type { GameContext, GameModule } from '../core/types';
 import { collectMemoryReport } from '../render/MemoryReport';
 import { PostStackKey, type PostStack } from '../render/post/PostStack';
@@ -131,7 +154,10 @@ export class DebugOverlay implements GameModule {
   readonly #statsOption: boolean | undefined;
   #stats = false;
   #element: HTMLDivElement | null = null;
-  #smoothedDelta = 1 / 60;
+  #frames: FrameStatsSnapshot | null = null;
+  /** True once a GPU timer query has been asked for and refused. */
+  #gpuTimerUnavailable = false;
+  #gpuResolveInFlight = false;
   #sinceRefresh = 0;
   #sinceMemory = MEMORY_INTERVAL;
   #lastText = '';
@@ -148,6 +174,7 @@ export class DebugOverlay implements GameModule {
   // Cached memory figures, refreshed on the slow cadence.
   #textureMb = '—';
   #targetMb = '—';
+  #textureFormat: string | null = null;
 
   constructor(parent: HTMLElement = document.body, options: DebugOverlayOptions = {}) {
     this.#parent = parent;
@@ -199,12 +226,6 @@ export class DebugOverlay implements GameModule {
     const element = this.#element;
     if (element === null) return;
 
-    if (dt > 0) {
-      // EMA with a ~0.9 retention factor: responsive within a few frames,
-      // stable enough to read.
-      this.#smoothedDelta = this.#smoothedDelta * 0.9 + dt * 0.1;
-    }
-
     if (this.#stats) {
       this.#sinceMemory += dt;
       if (this.#sinceMemory >= MEMORY_INTERVAL) {
@@ -216,6 +237,11 @@ export class DebugOverlay implements GameModule {
     this.#sinceRefresh += dt;
     if (this.#sinceRefresh < REFRESH_INTERVAL) return;
     this.#sinceRefresh = 0;
+
+    // Percentiles sort the window, so this happens on the display cadence and
+    // never per frame — see `core/FrameStats`.
+    this.#frames = ctx.engine.frameStats.snapshot();
+    this.#pollGpuTime(ctx);
 
     // A resize can happen without an `engine:resize` in exotic cases (a canvas
     // resized by CSS with no observer fired). Re-reading here is a handful of
@@ -241,13 +267,19 @@ export class DebugOverlay implements GameModule {
   /* -- internals --------------------------------------------------------- */
 
   #compose(ctx: GameContext): string {
-    const fps = this.#smoothedDelta > 0 ? 1 / this.#smoothedDelta : 0;
     const { backend, capabilities } = ctx.renderer;
     const shim = getSwizzleShimState();
+    const frames = this.#frames ?? ctx.engine.frameStats.snapshot();
 
     const lines = [
       `d2rim  ${backend}${backend === 'webgpu' && shim.startsWith('patched') ? ` (${shim})` : ''}`,
-      `fps    ${fps.toFixed(1).padStart(5)}  (${(this.#smoothedDelta * 1000).toFixed(1)} ms)`,
+      // Median first, because that is the number a player means by "fps", then
+      // the p95 beside it because the difference between them is the stutter.
+      // Both come from raw wall-clock deltas: nothing on this line has been
+      // through the fixed-step clamp. See the module header.
+      `fps    ${frames.fps.toFixed(1).padStart(5)}  p50 ${frames.p50Ms.toFixed(1)} ms  ` +
+        `p95 ${frames.p95Ms.toFixed(1)} ms (${frames.fpsLow.toFixed(1)} fps)`,
+      `worst  ${frames.maxMs.toFixed(1)} ms over ${frames.samples} frames`,
       `frame  ${ctx.time.frame}`,
       // Two sizes, because only one of them costs anything.
       //
@@ -263,7 +295,36 @@ export class DebugOverlay implements GameModule {
         `@${this.#pixelRatio.toFixed(2)}x (device ${this.#deviceRatio.toFixed(2)}x) ` +
         `${((this.#width * this.#pixelRatio * this.#height * this.#pixelRatio) / 1e6).toFixed(2)} Mpx`,
       `caps   compute=${capabilities.compute ? 'yes' : 'no'} msaa=${capabilities.maxSamples}x`,
+      // Where the median frame went. `gpu` is a real timer query where the
+      // device has one; `—` means the extension is absent, which is a fact
+      // about the driver rather than a failure. Whatever is left over after
+      // update+render is the browser blocking before it grants the next
+      // animation frame, i.e. the frame is GPU-bound.
+      `time   update ${frames.updateMs.toFixed(1)} ms  render ${frames.renderMs.toFixed(1)} ms  ` +
+        `gpu ${
+          frames.gpuAvailable
+            ? `${frames.gpuMs.toFixed(1)} ms`
+            : this.#gpuTimerUnavailable
+              ? 'n/a'
+              : '—'
+        }`,
     ];
+
+    // The clamp, stated separately and only when it is doing something. This
+    // is *not* the frame time; it says simulation time is falling behind wall
+    // clock, so the world runs in slow motion. Conflating the two is the exact
+    // bug this overlay was rebuilt to remove.
+    if (frames.clampedFrames > 0 || frames.starvedFrames > 0) {
+      const clamp = ctx.engine.maxFrameDelta;
+      const p50Seconds = frames.p50Ms / 1000;
+      const worldSpeed = p50Seconds > 0 ? Math.min(1, clamp / p50Seconds) : 1;
+      lines.push(
+        `clamp  ${frames.clampedFrames}/${frames.samples} frames hit the ` +
+          `${(clamp * 1000).toFixed(0)} ms sim clamp` +
+          (frames.starvedFrames > 0 ? `, ${frames.starvedFrames} dropped backlog` : '') +
+          ` — world at ${worldSpeed.toFixed(2)}x speed`,
+      );
+    }
 
     if (!this.#stats) {
       // Errors are never hidden: a device swallowing validation errors is the
@@ -276,7 +337,9 @@ export class DebugOverlay implements GameModule {
     lines.push(
       `draws  ${this.#drawCalls}`,
       `tris   ${this.#triangles.toLocaleString('en-US')}`,
-      `tex    ${this.#textureMb} MB`,
+      `tex    ${this.#textureMb} MB${
+        this.#textureFormat === null ? '' : `  ${this.#textureFormat}`
+      }`,
       `rt     ${this.#targetMb} MB`,
     );
 
@@ -305,6 +368,43 @@ export class DebugOverlay implements GameModule {
     return lines.join('\n');
   }
 
+  /**
+   * Drain the GPU timer-query pool and hand the answer to the engine.
+   *
+   * Off the frame path deliberately: resolving is an async device round trip,
+   * and putting one inside `update` would mean the instrument stalls the thing
+   * it measures. One resolve in flight at a time, on the overlay's 4 Hz
+   * cadence, is enough to keep three's fixed-size query pool from overflowing
+   * (it warns and drops queries when it does) while costing nothing.
+   *
+   * A device without the extension answers `null` once and is then never asked
+   * again, so the overlay can say `n/a` rather than an ambiguous dash.
+   */
+  #pollGpuTime(ctx: GameContext): void {
+    if (!this.#stats || this.#gpuTimerUnavailable || this.#gpuResolveInFlight) return;
+    const resolve = ctx.renderer.resolveGpuTime;
+    if (typeof resolve !== 'function') {
+      this.#gpuTimerUnavailable = true;
+      return;
+    }
+    this.#gpuResolveInFlight = true;
+    void resolve
+      .call(ctx.renderer)
+      .then((milliseconds) => {
+        if (milliseconds === null) {
+          this.#gpuTimerUnavailable = true;
+          return;
+        }
+        ctx.engine.setGpuFrameTime(milliseconds);
+      })
+      .catch(() => {
+        this.#gpuTimerUnavailable = true;
+      })
+      .finally(() => {
+        this.#gpuResolveInFlight = false;
+      });
+  }
+
   #readSizeFromRenderer(ctx: GameContext): void {
     const probe = ctx.renderer.three as unknown as RendererSizeProbe;
     try {
@@ -327,12 +427,15 @@ export class DebugOverlay implements GameModule {
 
   #refreshMemory(ctx: GameContext): void {
     try {
-      const report = collectMemoryReport(ctx.scene, {
-        topTextures: 0,
-        assets: ctx.services.tryGet(AssetManagerKey) ?? null,
-      });
+      const assets = ctx.services.tryGet(AssetManagerKey) ?? null;
+      const report = collectMemoryReport(ctx.scene, { topTextures: 0, assets });
       this.#textureMb = mb(Math.max(report.textureBytes, report.residentAssetBytes));
       this.#targetMb = mb(report.renderTargetBytes);
+      // The format the GPU actually got, not the one the budget assumed. The
+      // difference between those two is a factor of two in resident texture
+      // memory and it went unnoticed for a whole optimisation pass, so it is
+      // now on the overlay where a player can read it back.
+      this.#textureFormat = assets?.compressedFormat?.format ?? null;
     } catch {
       // A diagnostic must never be the thing that breaks the frame.
       this.#textureMb = 'err';

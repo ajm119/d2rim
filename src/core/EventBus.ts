@@ -60,8 +60,16 @@ export interface GameEvents {
   'engine:resize': { width: number; height: number; pixelRatio: number };
   /** Fired when the loop pauses or resumes (tab visibility, manual control). */
   'engine:pause': { paused: boolean };
-  /** Fired at the end of every stepped frame, after `lateUpdate`. */
-  'engine:frame': { frame: number; dt: number };
+  /**
+   * Fired at the end of every stepped frame, after `lateUpdate`.
+   *
+   * `dt` is the clamped, time-scaled delta the frame simulated with — what
+   * gameplay saw. `rawDt` is what the wall clock actually reported, unclamped
+   * and unscaled — what the machine actually did. They differ by a factor of
+   * three on an overloaded frame, and anything reporting performance must use
+   * `rawDt`. `frameMs` is the engine's own end-to-end cost for the frame.
+   */
+  'engine:frame': { frame: number; dt: number; rawDt: number; frameMs: number };
   /** Fired when a module is registered with the engine. */
   'module:added': { name: string };
   /** Fired when a module is removed and disposed. */

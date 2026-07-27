@@ -28,7 +28,7 @@ import { BloodMoor } from './scene/BloodMoor';
 import { DenOfEvil } from './scene/DenOfEvil';
 import { RogueEncampment } from './scene/RogueEncampment';
 import { CombatHud } from './ui/CombatHud';
-import { DebugOverlay } from './ui/DebugOverlay';
+import { DebugOverlay, statsRequested } from './ui/DebugOverlay';
 import { DialogueOverlay } from './ui/DialogueOverlay';
 import { InventoryScreen } from './ui/InventoryScreen';
 import { LoadingScreen } from './ui/LoadingScreen';
@@ -179,6 +179,10 @@ const engine = new Engine({
   autoStart,
   events,
   pixelRatioCap: bootTier.pixelRatioCap,
+  // GPU timer queries only when someone is looking. They cost a query pair per
+  // render pass and, on some drivers, a pipeline flush — worth it to tell a
+  // CPU-bound frame from a GPU-bound one, not worth it by default.
+  renderer: { timestamps: statsRequested() },
 });
 
 // Registration order *is* frame order — see `render/FrameGraph.ts`, which owns

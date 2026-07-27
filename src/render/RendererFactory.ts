@@ -95,6 +95,16 @@ export interface CreateRendererOptions {
   pixelRatioCap?: number;
   /** Tone-mapping exposure. Default 1.0; the reference scene is authored for it. */
   exposure?: number;
+  /**
+   * Ask the backend for GPU timer queries. Default `false`.
+   *
+   * On WebGL2 this needs `EXT_disjoint_timer_query_webgl2`; on WebGPU it needs
+   * the `timestamp-query` feature. Where present, every render pass brackets
+   * itself with a query pair, which is cheap but not free — and on some drivers
+   * the query itself forces a pipeline flush. So it is opt-in, wired to
+   * `?stats=1`, and its absence is reported rather than treated as an error.
+   */
+  timestamps?: boolean;
 }
 
 /**
@@ -258,6 +268,7 @@ export async function createRenderer(
   const antialias = options.antialias ?? false;
   const pixelRatioCap = options.pixelRatioCap ?? 2;
   const exposure = options.exposure ?? 1.0;
+  const trackTimestamp = options.timestamps ?? false;
 
   // Must happen before any WebGPU device work: the shim wraps a prototype
   // method three.js calls during `init()`.
@@ -272,7 +283,12 @@ export async function createRenderer(
 
   if (resolved === 'webgpu') {
     try {
-      const candidate = new THREE.WebGPURenderer({ canvas, antialias, forceWebGL: false });
+      const candidate = new THREE.WebGPURenderer({
+        canvas,
+        antialias,
+        forceWebGL: false,
+        trackTimestamp,
+      });
       await candidate.init();
       if (isWebGPUBackend(candidate)) {
         renderer = candidate;
@@ -289,7 +305,12 @@ export async function createRenderer(
   }
 
   if (renderer === null) {
-    const fallback = new THREE.WebGPURenderer({ canvas, antialias, forceWebGL: true });
+    const fallback = new THREE.WebGPURenderer({
+      canvas,
+      antialias,
+      forceWebGL: true,
+      trackTimestamp,
+    });
     await fallback.init();
     renderer = fallback;
     backend = 'webgl2';
@@ -339,6 +360,35 @@ export async function createRenderer(
       // point of view; GPU completion is only ever waited on where it actually
       // matters, in `captureFrame`'s readback.
       three.render(scene, camera);
+    },
+
+    /**
+     * Drain the timestamp query pool and report the last render pass duration.
+     *
+     * Returns `null` when timestamps were never requested, when the device has
+     * no timer query, or when the resolve throws — all three are "no data", and
+     * none of them is worth taking a frame down for.
+     *
+     * Draining matters as much as reading: three's WebGL query pool holds a
+     * fixed number of queries and warns (once) when it overflows, so a caller
+     * that enables tracking and never resolves has traded a measurement for a
+     * leak. The overlay resolves on its refresh cadence, which keeps the pool
+     * shallow without putting an async round trip in the frame path.
+     */
+    async resolveGpuTime(): Promise<number | null> {
+      if (!trackTimestamp) return null;
+      try {
+        const probe = three as unknown as {
+          resolveTimestampsAsync?: (type?: string) => Promise<number | undefined>;
+          info?: { render?: { timestamp?: number } };
+        };
+        if (typeof probe.resolveTimestampsAsync !== 'function') return null;
+        await probe.resolveTimestampsAsync('render');
+        const timestamp = probe.info?.render?.timestamp;
+        return typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : null;
+      } catch {
+        return null;
+      }
     },
 
     async captureFrame(

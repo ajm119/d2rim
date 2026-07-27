@@ -1,0 +1,158 @@
+/**
+ * @module tools/capture/frame-cost
+ *
+ * Measure what a frame *costs to submit*, headlessly, with no GPU required.
+ *
+ * This container rasterises in software on four cores, so it cannot say
+ * anything true about frame time. It can, however, say exactly how many draw
+ * calls and triangles the renderer submits, how many render targets the post
+ * stack has allocated and how many bytes of texture are resident — all of which
+ * are device-independent properties of the scene and the tier, and all of which
+ * are the numbers an optimisation pass actually moves.
+ *
+ * Run it before and after a change and diff the output. That is the only honest
+ * performance claim available from here.
+ *
+ *   node tools/capture/frame-cost.mjs
+ *   node tools/capture/frame-cost.mjs --zones encampment,bloodMoor --tiers low,medium
+ *   node tools/capture/frame-cost.mjs --out captures/frame-cost.json
+ */
+
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, resolve } from 'node:path';
+
+import { chromium } from 'playwright';
+
+import {
+  buildBundle,
+  CHROMIUM_ARGS,
+  findChromium,
+  formatHelp,
+  isBuildStale,
+  parseArgs,
+  ROOT,
+  startPreviewServer,
+} from './cli.mjs';
+
+const SPEC = {
+  zones: { type: 'string', default: 'encampment,bloodMoor', help: 'comma-separated zone ids' },
+  tiers: { type: 'string', default: 'low,medium', help: 'comma-separated ?quality= values' },
+  backend: { type: 'string', default: 'webgl2', help: 'webgl2 | webgpu' },
+  width: { type: 'number', default: 1528, help: 'CSS viewport width' },
+  height: { type: 'number', default: 794, help: 'CSS viewport height' },
+  frames: { type: 'number', default: 12, help: 'deterministic frames to step before reading' },
+  port: { type: 'number', default: 4319, help: 'preview server port' },
+  out: { type: 'string', default: '', help: 'write JSON here as well as stdout' },
+  help: { type: 'boolean', default: false, help: 'show this' },
+};
+
+/**
+ * Read the counters, in the page.
+ *
+ * `renderer.info.render` is reset by `Engine` at the top of every frame and is
+ * complete only after the render has been awaited, so this runs after
+ * `stepFrames` rather than from inside a module update.
+ */
+const PROBE = `
+  const d2rim = window.__d2rim;
+  await d2rim.ready;
+  await d2rim.engine.stepFrames(FRAMES);
+
+  const three = d2rim.ctx.renderer.three;
+  const render = three.info?.render ?? {};
+  const memory = three.info?.memory ?? {};
+
+  const mod = await import('/src/render/MemoryReport.ts').catch(() => null);
+  const post = d2rim.render?.post;
+  const stats = post?.stats ?? null;
+
+  return {
+    drawCalls: render.drawCalls ?? render.calls ?? 0,
+    triangles: Math.round(render.triangles ?? 0),
+    geometries: memory.geometries ?? 0,
+    textures: memory.textures ?? 0,
+    postQuality: post?.quality ?? null,
+    postPasses: stats ? stats.active.slice() : null,
+    postDraws: stats ? stats.passDraws : null,
+    postBytes: stats ? stats.bytes : null,
+    shadowCascades: d2rim.render?.settings?.tier?.shadowCascades ?? null,
+    shadowMapSize: d2rim.render?.settings?.tier?.shadowMapSize ?? null,
+    assetBytes: d2rim.ctx.services.tryGet?.('assets')?.stats?.().bytes ?? null,
+    compressedFormat:
+      d2rim.ctx.services.tryGet?.('assets')?.compressedFormat?.format ?? null,
+    compressedLoads: d2rim.ctx.services.tryGet?.('assets')?.compressedLoadCount ?? null,
+    pixelRatio: three.getPixelRatio?.() ?? null,
+  };
+`;
+
+const mb = (bytes) => (bytes === null || bytes === undefined ? '—' : (bytes / 1048576).toFixed(1));
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2), SPEC);
+  if (args.help) {
+    console.log(formatHelp(SPEC));
+    return 0;
+  }
+
+  if (await isBuildStale()) await buildBundle();
+  const server = await startPreviewServer(args.port);
+  const executablePath = findChromium();
+  const browser = await chromium.launch({
+    args: CHROMIUM_ARGS,
+    ...(executablePath ? { executablePath } : {}),
+  });
+
+  const rows = [];
+  try {
+    const page = await browser.newPage({
+      viewport: { width: args.width, height: args.height },
+    });
+
+    for (const tier of args.tiers.split(',').filter(Boolean)) {
+      for (const zone of args.zones.split(',').filter(Boolean)) {
+        const url =
+          `${server.origin}/?autostart=0&enemies=0&fade=0&stats=1` +
+          `&backend=${args.backend}&quality=${tier}&zone=${zone}`;
+        process.stdout.write(`  ${tier.padEnd(7)} ${zone.padEnd(12)} ... `);
+        await page.goto(url, { waitUntil: 'load', timeout: 180_000 });
+        const result = await page.evaluate(
+          new Function(`return (async () => { ${PROBE.replace('FRAMES', args.frames)} })();`),
+        );
+        rows.push({ tier, zone, ...result });
+        process.stdout.write(
+          `${String(result.drawCalls).padStart(5)} draws  ` +
+            `${result.triangles.toLocaleString('en-US').padStart(9)} tris  ` +
+            `${mb(result.assetBytes).padStart(6)} MB tex  ` +
+            `${mb(result.postBytes).padStart(6)} MB post-rt\n`,
+        );
+      }
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+
+  console.log('');
+  console.log('tier    zone           draws     triangles   tex MB  post-rt MB  cascades  passes');
+  console.log('-'.repeat(88));
+  for (const r of rows) {
+    console.log(
+      `${r.tier.padEnd(7)} ${r.zone.padEnd(14)} ${String(r.drawCalls).padStart(5)}  ` +
+        `${r.triangles.toLocaleString('en-US').padStart(11)}  ${mb(r.assetBytes).padStart(6)}  ` +
+        `${mb(r.postBytes).padStart(10)}  ${String(r.shadowCascades).padStart(8)}  ` +
+        `${(r.postPasses ?? []).join(' ')}`,
+    );
+  }
+  const format = rows.find((r) => r.compressedFormat)?.compressedFormat;
+  if (format) console.log(`\ncompressed texture format: ${format}`);
+
+  if (args.out) {
+    const path = isAbsolute(args.out) ? args.out : resolve(ROOT, args.out);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `${JSON.stringify(rows, null, 2)}\n`);
+    console.log(`\nwrote ${path}`);
+  }
+  return 0;
+}
+
+process.exitCode = await main();

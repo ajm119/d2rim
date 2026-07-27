@@ -119,6 +119,22 @@ export interface RendererHandle {
     width?: number,
     height?: number,
   ): Promise<CapturedFrame>;
+
+  /**
+   * Additive extension. Resolve outstanding GPU timer queries and return the
+   * most recent render pass duration in **milliseconds**, or `null` when the
+   * device offers no timer query.
+   *
+   * Present only when timestamps were requested at construction, because the
+   * query pool is not free: WebGL2 needs `EXT_disjoint_timer_query_webgl2` and
+   * every render pass then brackets itself with `beginQuery`/`endQuery`. The
+   * game asks for it behind `?stats=1` only.
+   *
+   * This is the one measurement that separates "the CPU cannot feed the GPU"
+   * from "the GPU cannot keep up", and those two have opposite fixes. Without
+   * it, a frame-time number can only say that something is slow.
+   */
+  resolveGpuTime?(): Promise<number | null>;
 }
 
 /** Raw RGBA8 pixel readback produced by {@link RendererHandle.captureFrame}. */

@@ -16,10 +16,10 @@ describe('EventBus', () => {
 
     bus.on('engine:frame', a);
     bus.on('engine:frame', b);
-    bus.emit('engine:frame', { frame: 7, dt: 0.016 });
+    bus.emit('engine:frame', { frame: 7, dt: 0.016, rawDt: 0.016, frameMs: 0 });
 
     expect(a).toHaveBeenCalledTimes(1);
-    expect(a).toHaveBeenCalledWith({ frame: 7, dt: 0.016 });
+    expect(a).toHaveBeenCalledWith({ frame: 7, dt: 0.016, rawDt: 0.016, frameMs: 0 });
     expect(b).toHaveBeenCalledTimes(1);
   });
 
@@ -62,7 +62,7 @@ describe('EventBus', () => {
     bus.on('engine:frame', kept);
     bus.on('engine:frame', dropped);
     bus.off('engine:frame', dropped);
-    bus.emit('engine:frame', { frame: 1, dt: 0 });
+    bus.emit('engine:frame', { frame: 1, dt: 0, rawDt: 0, frameMs: 0 });
 
     expect(kept).toHaveBeenCalledTimes(1);
     expect(dropped).not.toHaveBeenCalled();
@@ -73,11 +73,11 @@ describe('EventBus', () => {
     const handler = vi.fn();
 
     bus.once('engine:frame', handler);
-    bus.emit('engine:frame', { frame: 1, dt: 0 });
-    bus.emit('engine:frame', { frame: 2, dt: 0 });
+    bus.emit('engine:frame', { frame: 1, dt: 0, rawDt: 0, frameMs: 0 });
+    bus.emit('engine:frame', { frame: 2, dt: 0, rawDt: 0, frameMs: 0 });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith({ frame: 1, dt: 0 });
+    expect(handler).toHaveBeenCalledWith({ frame: 1, dt: 0, rawDt: 0, frameMs: 0 });
     expect(bus.listenerCount('engine:frame')).toBe(0);
   });
 
@@ -91,7 +91,7 @@ describe('EventBus', () => {
     });
     bus.on('engine:frame', after);
 
-    expect(() => bus.emit('engine:frame', { frame: 1, dt: 0 })).not.toThrow();
+    expect(() => bus.emit('engine:frame', { frame: 1, dt: 0, rawDt: 0, frameMs: 0 })).not.toThrow();
     expect(after).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalled();
 
@@ -105,11 +105,11 @@ describe('EventBus', () => {
     bus.on('engine:frame', () => {
       bus.on('engine:frame', late);
     });
-    bus.emit('engine:frame', { frame: 1, dt: 0 });
+    bus.emit('engine:frame', { frame: 1, dt: 0, rawDt: 0, frameMs: 0 });
 
     expect(late).not.toHaveBeenCalled();
 
-    bus.emit('engine:frame', { frame: 2, dt: 0 });
+    bus.emit('engine:frame', { frame: 2, dt: 0, rawDt: 0, frameMs: 0 });
     expect(late).toHaveBeenCalledTimes(1);
   });
 
@@ -119,7 +119,7 @@ describe('EventBus', () => {
 
     bus.on('engine:frame', () => bus.off('engine:frame', second));
     bus.on('engine:frame', second);
-    bus.emit('engine:frame', { frame: 1, dt: 0 });
+    bus.emit('engine:frame', { frame: 1, dt: 0, rawDt: 0, frameMs: 0 });
 
     expect(second).not.toHaveBeenCalled();
   });
@@ -135,7 +135,7 @@ describe('EventBus', () => {
     });
     bus.on('engine:pause', () => order.push('pause'));
 
-    bus.emit('engine:frame', { frame: 1, dt: 0 });
+    bus.emit('engine:frame', { frame: 1, dt: 0, rawDt: 0, frameMs: 0 });
 
     expect(order).toEqual(['frame', 'pause', 'frame-after-nested']);
   });

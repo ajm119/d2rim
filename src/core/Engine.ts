@@ -30,6 +30,7 @@
 import * as THREE from 'three/webgpu';
 
 import { EventBus, type BootPhase } from './EventBus';
+import { FrameStats } from './FrameStats';
 import { Input } from './Input';
 import { ServiceLocator } from './ServiceLocator';
 import { Clock, createTimeState, FixedStepAccumulator } from './Time';
@@ -59,7 +60,26 @@ export interface EngineOptions {
   fixedHz?: number;
   /** Spiral-of-death guard: max simulation slices per frame. Default 5. */
   maxSubSteps?: number;
-  /** Largest accepted raw frame delta, in seconds. Default 0.25. */
+  /**
+   * Largest accepted raw frame delta, in seconds.
+   *
+   * Defaults to `maxSubSteps / fixedHz` — 5/60 ≈ 83 ms — rather than to the
+   * accumulator's own 0.25 s, and the coupling is the point.
+   *
+   * A clamp *larger* than the substep budget can never be honoured. Hand the
+   * accumulator 250 ms with a five-slice cap and it consumes 83 ms, discards
+   * the other 167 ms as unreachable backlog, and reports `starved`. Meanwhile
+   * `TimeState.delta` — which drives animation, camera and every
+   * presentation-rate system — was set from the same 250 ms. So the simulation
+   * advances a third as far as the presentation thinks it did, every frame,
+   * and the world visibly runs in slow motion while animations play at speed.
+   * That is exactly what a 4 fps machine was doing.
+   *
+   * Clamping to what the substeps can actually consume makes the two agree:
+   * a badly overloaded frame still runs slower than real time, but simulation
+   * and presentation run slow *together*, nothing desynchronises, and no
+   * physics body is ever integrated across a gap it did not step through.
+   */
   maxDelta?: number;
   /** Upper bound on devicePixelRatio. Default 2. */
   pixelRatioCap?: number;
@@ -104,6 +124,15 @@ export class Engine {
   readonly #accumulator: FixedStepAccumulator;
   readonly #clock: Clock;
   readonly #modules: ModuleRecord[] = [];
+  readonly #now: () => number;
+  readonly #frameStats = new FrameStats(240);
+  /**
+   * GPU time for the most recent resolved timer query, in ms. Pushed in by
+   * whoever is driving `resolveTimestampsAsync` — the engine does not poll the
+   * renderer itself, because resolving a timestamp pool is an async round trip
+   * that has no business inside the frame's critical path.
+   */
+  #gpuMs = 0;
   #pixelRatioCap: number;
   readonly #autoStart: boolean;
   readonly #rendererOptions: CreateRendererOptions;
@@ -131,11 +160,17 @@ export class Engine {
     this.#pixelRatioCap = options.pixelRatioCap ?? 2;
     this.#autoStart = options.autoStart ?? true;
     this.#rendererOptions = options.renderer ?? {};
-    this.#clock = new Clock(options.now ?? (() => performance.now()));
+    this.#now = options.now ?? (() => performance.now());
+    this.#clock = new Clock(this.#now);
+    const hz = options.fixedHz ?? 60;
+    const maxSubSteps = options.maxSubSteps ?? 5;
     this.#accumulator = new FixedStepAccumulator({
-      hz: options.fixedHz ?? 60,
-      maxSubSteps: options.maxSubSteps ?? 5,
-      maxDelta: options.maxDelta ?? 0.25,
+      hz,
+      maxSubSteps,
+      // See `EngineOptions.maxDelta`: the clamp must not exceed the simulation
+      // time the substep budget can actually consume, or presentation time and
+      // simulation time diverge on every overloaded frame.
+      maxDelta: options.maxDelta ?? maxSubSteps / hz,
     });
 
     this.ready = this.#boot();
@@ -175,6 +210,30 @@ export class Engine {
   }
 
   /**
+   * Rolling window of **raw** frame times — the honest instrument.
+   *
+   * `time.delta` is clamped and scaled and is therefore useless for measuring
+   * how fast the game is running; see `core/FrameStats` for the full argument.
+   * Anything reporting performance to a human reads this instead.
+   */
+  get frameStats(): FrameStats {
+    return this.#frameStats;
+  }
+
+  /**
+   * Supply GPU time (ms) for subsequent frames, from a timer query.
+   *
+   * Pushed rather than pulled because resolving a timestamp pool is an async
+   * device round trip: the overlay resolves it off the critical path on its own
+   * cadence and hands the answer back here, where it joins the same rolling
+   * window as everything else. Zero (the default) simply means "no timer query
+   * on this device", which is common and not an error.
+   */
+  setGpuFrameTime(milliseconds: number): void {
+    this.#gpuMs = Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : 0;
+  }
+
+  /**
    * Interpolation factor in `[0, 1)` between the last two simulation steps.
    *
    * Kept on the engine rather than in {@link TimeState} because the contract
@@ -187,6 +246,18 @@ export class Engine {
   /** Constant simulation slice, in seconds. */
   get fixedDelta(): number {
     return this.#accumulator.fixedDelta;
+  }
+
+  /**
+   * The delta clamp actually in force, in seconds.
+   *
+   * Surfaced so the overlay can say "this frame hit the clamp" *without*
+   * reporting the clamp as if it were the frame time — the failure mode that
+   * made every slow machine report the same frame rate. See
+   * {@link EngineOptions.maxDelta}.
+   */
+  get maxFrameDelta(): number {
+    return this.#accumulator.maxDelta;
   }
 
   /** Whether the rAF loop is scheduled. */
@@ -417,6 +488,7 @@ export class Engine {
     if (ctx === null || renderer === null || this.#disposed) return;
 
     this.#stepInFlight = true;
+    const frameStart = this.#now();
     try {
       const input = this.#input;
       input?.beginFrame();
@@ -438,6 +510,7 @@ export class Engine {
       // per frame.
       resetRendererInfo(renderer);
 
+      const updateStart = this.#now();
       const steps = this.#accumulator.begin(rawDelta, this.#time.scale);
       const fixedDelta = this.#accumulator.fixedDelta;
       for (let step = 0; step < steps; step++) {
@@ -448,10 +521,30 @@ export class Engine {
       this.#runPhase('lateUpdate', ctx, scaled);
 
       input?.endFrame();
+      const updateEnd = this.#now();
 
       await renderer.render(this.scene, this.camera);
+      const renderEnd = this.#now();
 
-      this.events.emit('engine:frame', { frame: this.#time.frame, dt: scaled });
+      // Recorded from the *raw* delta, never from `scaled`. This is the one
+      // number a player on hardware this project cannot buy will read back to
+      // us, and every clamp between the wall clock and the overlay is a way for
+      // it to lie. See `core/FrameStats`.
+      this.#frameStats.record({
+        rawMs: rawDelta * 1000,
+        updateMs: updateEnd - updateStart,
+        renderMs: renderEnd - updateEnd,
+        gpuMs: this.#gpuMs,
+        clamped: this.#accumulator.wasClamped,
+        starved: this.#accumulator.wasStarved,
+      });
+
+      this.events.emit('engine:frame', {
+        frame: this.#time.frame,
+        dt: scaled,
+        rawDt: rawDelta,
+        frameMs: this.#now() - frameStart,
+      });
     } finally {
       this.#stepInFlight = false;
     }

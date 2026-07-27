@@ -136,6 +136,11 @@ import {
   triplanarTangentNormals,
   withTiling,
 } from './materials/Triplanar';
+import {
+  GRIMDARK_GROUND,
+  stylizedTerrainSurface,
+  type StylizedTerrainSpec,
+} from './materials/StylizedTerrain';
 import { applyWetness, createWetnessUniforms, type WetnessUniforms } from './materials/Wetness';
 import {
   QUALITY_TIERS,
@@ -161,6 +166,8 @@ export type {
 } from './materials/types';
 export { MATERIAL_ARCHETYPES, RenderQualityKey, WeatherStateKey } from './materials/types';
 export { ARCHETYPE_SPECS } from './materials/Archetypes';
+export { GRIMDARK_GROUND } from './materials/StylizedTerrain';
+export type { StylizedTerrainSpec, TerrainLayer } from './materials/StylizedTerrain';
 
 /* ------------------------------------------------------------------------- *
  * Public service
@@ -195,6 +202,22 @@ export interface BlendedMaterialOptions {
   readonly overlayOverrides?: Partial<SurfaceSpec>;
 }
 
+/** Options for {@link MaterialLibraryService.createStylizedTerrain}. */
+export interface StylizedTerrainOptions {
+  /** Palette and blending behaviour. Defaults to {@link GRIMDARK_GROUND}. */
+  readonly spec?: StylizedTerrainSpec;
+  /**
+   * Coverage of the `cover` layer over bare `earth`, in `[0, 1]`.
+   *
+   * The scenes pass their existing masks here unchanged — the encampment's
+   * trodden-ground radial falloff, the moor's slope/height/track mask — so the
+   * art direction survives the material swap intact.
+   */
+  readonly coverage?: FloatNode;
+  /** Material name, for the debug inspector. */
+  readonly name?: string;
+}
+
 export interface MaterialLibraryStats {
   readonly quality: MaterialQuality;
   readonly wetness: number;
@@ -213,6 +236,8 @@ export interface MaterialLibraryService {
   create(archetype: MaterialArchetype, overrides?: Partial<SurfaceSpec>): SurfaceMaterial;
   /** A material that height-blends two archetypes. Caller owns it. */
   createBlended(options: BlendedMaterialOptions): SurfaceMaterial;
+  /** A stylized, texture-free terrain material. Caller owns it. */
+  createStylizedTerrain(options?: StylizedTerrainOptions): SurfaceMaterial;
   /** Resolves once the given archetypes' textures have settled. */
   ready(archetypes?: readonly MaterialArchetype[]): Promise<void>;
   /** The archetype table entry, after any library-level overrides. */
@@ -771,6 +796,47 @@ export class MaterialLibrary implements GameModule, MaterialLibraryService {
       material.clearcoatNode = mix(baseCoat, overlayCoat, w);
       material.clearcoatRoughnessNode = float(0.045);
     }
+
+    this.#owned.push(material);
+    return material;
+  }
+
+  /**
+   * A stylized terrain material: flat colour zones, crisp boundaries, **no
+   * texture fetches at all**.
+   *
+   * This is the ground path now. `createBlended` remains for surfaces that
+   * genuinely want two photographic substances interlocking — a mossy rock face
+   * against wet stone — but the 260 m ground planes are not that, and were
+   * paying 24 dependent texture reads per fragment across most of the screen
+   * for a result the report described as "a blurry maze-like smear".
+   *
+   * See `materials/StylizedTerrain` for the full diagnosis and the cost table.
+   * The material still tracks the shared wetness uniforms, so weather continues
+   * to move the ground, and it still responds to the tier through nothing at
+   * all — there is no tier-dependent branch left in it, which is the point.
+   */
+  createStylizedTerrain(options: StylizedTerrainOptions = {}): SurfaceMaterial {
+    const spec = options.spec ?? GRIMDARK_GROUND;
+    const material = new THREE.MeshPhysicalNodeMaterial();
+    material.name = options.name ?? 'd2rim.terrain.stylized';
+
+    const surface = stylizedTerrainSurface({
+      spec,
+      ...(options.coverage === undefined ? {} : { coverage: options.coverage }),
+      wetness: this.#uniforms,
+    });
+
+    material.colorNode = surface.albedo;
+    material.roughnessNode = surface.roughness;
+    material.metalnessNode = float(0);
+    material.aoNode = surface.ao;
+    material.ior = 1.5;
+    material.specularIntensityNode = surface.reflectance.div(0.04);
+    // `normalNode` is deliberately left alone. Without it three uses the
+    // interpolated geometric normal, which is exactly what a stylized surface
+    // wants: no tangent frame, no normal-map decode, no renormalise, and no
+    // 14-repeats-per-metre detail map aliasing into a lattice.
 
     this.#owned.push(material);
     return material;

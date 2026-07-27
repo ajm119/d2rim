@@ -614,37 +614,28 @@ export class RogueEncampment implements Zone {
     const geometry = this.field.buildGeometry(TERRAIN_SIZE, TERRAIN_SEGMENTS);
     this.#owned.push(geometry);
 
-    // Two archetypes, blended by distance from the fire — and the *absence* of
-    // an `albedoTint` here is the load-bearing detail.
+    // The camp's composition, unchanged; the material underneath it, replaced.
     //
-    // The first two passes tinted `wetMud` by hand and the camp came back a
-    // single warm brown from the bonfire out to the horizon. The Blood Moor's
-    // ground, which reads correctly cold, passes no tint at all: the archetype
-    // spec is already the art direction, and overriding its albedo was
-    // overwriting the one thing that had been calibrated. So the tint is gone
-    // and the archetypes are used as shipped.
+    // Two hundred people have walked the inside of this palisade to bare mud;
+    // ten metres outside it, the moor's dead grass is still there. That
+    // boundary is legible from any angle and it is the cheapest possible way to
+    // say "this ground is used". It is still exactly this mask — what changed
+    // is what the mask now selects between.
     //
-    // The blend is the camp's own idea, though. Two hundred people have walked
-    // the inside of this palisade to bare mud; ten metres outside it, the moor's
-    // dead grass is still there. That boundary is legible from any angle and it
-    // is the cheapest possible way to say "this ground is used".
+    // It used to drive a two-archetype triplanar PBR blend: 24 dependent
+    // texture fetches per fragment over the whole floor of the frame, for a
+    // result that read as a blurry lattice rather than as mud (the detail
+    // normal ran at 14 repeats per metre, and block-compressed normal maps
+    // cannot survive that). It now drives `createStylizedTerrain`, which is
+    // authored flat colour with crisp noise-broken boundaries and **no texture
+    // fetches at all**. See `render/materials/StylizedTerrain`.
     const trodden = saturate(
       smoothstep(PALISADE_RADIUS - 7, PALISADE_RADIUS + 11, positionWorld.xz.length()),
     );
 
     const material =
-      materials?.createBlended({
-        base: 'wetMud',
-        overlay: 'deadGrass',
-        weight: trodden,
-        depth: 0.16,
-        // Hex anti-tiling is wrong at this scale for the same reason it is wrong
-        // on the moor: its cells are metres wide on a 260 m plane and the blend
-        // seams show up as a honeycomb. Macro variation breaks the repeat with
-        // no cell structure to give itself away.
-        baseOverrides: { antiTile: 'macro' },
-        overlayOverrides: { antiTile: 'macro' },
-      }) ?? new THREE.MeshStandardNodeMaterial({ color: 0x2a2622, roughness: 0.95 });
+      materials?.createStylizedTerrain({ coverage: trodden, name: 'camp.ground' }) ??
+      new THREE.MeshStandardNodeMaterial({ color: 0x2a2622, roughness: 0.95 });
     material.name = 'camp.ground';
     this.#owned.push(material);
 

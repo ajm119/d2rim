@@ -738,23 +738,21 @@ export class BloodMoor implements Zone {
         .mul(oneMinus(track.mul(0.88))),
     );
 
+    // Stylized, not photographic. The mask above is unchanged — height, slope
+    // and the worn track still decide where cover grows — but it now selects
+    // between authored flat colours instead of driving a two-archetype
+    // triplanar PBR blend at 24 texture fetches per fragment.
+    //
+    // On a 260 m plane that blend was never going to work: one 2.2 m tile
+    // stretched across the whole moor, broken up by macro noise that could hide
+    // the periodicity but not the mush, with a 14-repeats-per-metre detail
+    // normal aliasing on top of it. Flat colour with a crisp, noise-broken
+    // boundary is both cheaper and more legible at this scale, and it matches
+    // the low-poly geometry it sits on instead of fighting it.
+    // See `render/materials/StylizedTerrain`.
     const material =
-      materials?.createBlended({
-        base: 'wetMud',
-        overlay: 'deadGrass',
-        weight: grassCoverage,
-        depth: 0.18,
-        // Hex anti-tiling off, macro variation on. Hex tiling breaks the
-        // repeat by sampling three rotated copies per pixel and blending them,
-        // which works beautifully on a surface a few metres across and fails
-        // loudly on a 260 m ground plane: at this scale the hex cells are
-        // eight metres wide and the blend seams between them are visible as a
-        // honeycomb across the whole moor. The macro-variation octave breaks
-        // the same repeat at a fraction of the cost and with no cell structure
-        // to give itself away.
-        baseOverrides: { antiTile: 'macro' },
-        overlayOverrides: { antiTile: 'macro' },
-      }) ?? new THREE.MeshStandardNodeMaterial({ color: 0x3a3a34, roughness: 0.9 });
+      materials?.createStylizedTerrain({ coverage: grassCoverage, name: 'moor.ground' }) ??
+      new THREE.MeshStandardNodeMaterial({ color: 0x3a3a34, roughness: 0.9 });
 
     const ground = new THREE.Mesh(geometry, material);
     ground.name = 'ground';

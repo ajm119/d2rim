@@ -414,9 +414,27 @@ export class RenderTargetPool {
 
 interface TierProfile {
   readonly antiAlias: AntiAliasMode;
+  /**
+   * Whether the scene target carries a velocity attachment.
+   *
+   * Off at `low` and `medium`. It is a second half-float attachment written by
+   * every fragment of the opaque pass — a full extra colour write across the
+   * whole screen — and at the FXAA tiers the only consumer was GTAO's temporal
+   * reprojection, which those tiers no longer run. Paying MRT bandwidth for a
+   * buffer nothing samples is the purest form of waste available.
+   */
   readonly velocity: boolean;
   readonly jitterSamples: number;
   readonly bloomMips: number;
+  /**
+   * Whether the bloom pyramid runs at all.
+   *
+   * Off at `low`. A 4-mip pyramid is four downsample passes and four upsample
+   * passes over its own chain of half-float targets; `CompositePass` already
+   * handles a disabled bloom by compositing without it, so this is a clean
+   * delete rather than a zero-intensity no-op.
+   */
+  readonly bloom: boolean;
   readonly autoExposure: boolean;
   readonly grain: boolean;
   readonly chromaticAberration: boolean;
@@ -430,6 +448,7 @@ const TIERS: Readonly<Record<QualityTier, TierProfile>> = {
     velocity: false,
     jitterSamples: 8,
     bloomMips: 4,
+    bloom: false,
     autoExposure: false,
     grain: false,
     chromaticAberration: false,
@@ -438,9 +457,10 @@ const TIERS: Readonly<Record<QualityTier, TierProfile>> = {
   },
   medium: {
     antiAlias: 'fxaa',
-    velocity: true,
+    velocity: false,
     jitterSamples: 8,
     bloomMips: 5,
+    bloom: true,
     autoExposure: true,
     grain: true,
     chromaticAberration: false,
@@ -452,6 +472,7 @@ const TIERS: Readonly<Record<QualityTier, TierProfile>> = {
     velocity: true,
     jitterSamples: 8,
     bloomMips: 6,
+    bloom: true,
     autoExposure: true,
     grain: true,
     chromaticAberration: true,
@@ -463,6 +484,7 @@ const TIERS: Readonly<Record<QualityTier, TierProfile>> = {
     velocity: true,
     jitterSamples: 16,
     bloomMips: 7,
+    bloom: true,
     autoExposure: true,
     grain: true,
     chromaticAberration: true,
@@ -1141,6 +1163,7 @@ export class PostStack implements GameModule {
     this.fxaa.enabled = mode === 'fxaa';
 
     this.bloom.setMipCount(profile.bloomMips);
+    this.bloom.enabled = profile.bloom;
     this.composite.setAutoExposureEnabled(this.#autoExposureOverride ?? profile.autoExposure);
     this.grade.setGrainEnabled(profile.grain);
     this.grade.setChromaticAberrationEnabled(profile.chromaticAberration);

@@ -21,15 +21,35 @@
  * | | low | medium | high | ultra |
  * |---|---|---|---|---|
  * | post / AA | FXAA, 0.75 scale | FXAA | TAA 8 | TAA 16 + sharpen |
- * | shadow cascades × size | 2 × 1024 | 3 × 1536 | 4 × 2048 | 4 × 3072 |
- * | GTAO | off | low (½ res) | medium (½ res) | high (full res) |
+ * | bloom | **off** | 5 mips | 6 mips | 7 mips |
+ * | shadow cascades × size | **1 × 1024** | **2 × 1280** | 4 × 2048 | 4 × 3072 |
+ * | GTAO | off | **off** | medium (½ res) | high (full res) |
  * | SSR | off | off | medium (½ res) | high (½ res) |
+ * | light shafts | **off** | **off** | on | on |
+ * | velocity buffer | off | **off** | on | on |
  * | volumetrics | low | medium | high | ultra |
  * | materials | low (no parallax) | medium | high | ultra |
+ * | DPR cap | 1 | 1.5 | 2 | 2 |
  *
  * `low` deletes work rather than shrinking it — no AO pass, no SSR pass, no
- * velocity attachment — because on a weak GPU the win comes from the render
- * targets that stop being allocated at all, not from a smaller radius.
+ * bloom pyramid, no shaft buffers, no velocity attachment — because on a weak
+ * GPU the win comes from the render targets that stop being allocated at all,
+ * not from a smaller radius.
+ *
+ * ### The medium tier was rebuilt for a fanless laptop
+ *
+ * The bold entries above are that rebuild. `medium` is what automatic
+ * detection hands an unknown machine, and it was carrying a full GTAO chain
+ * (a normal/depth guide, a half-res trace, an à-trous ping-pong and a
+ * three-buffer temporal accumulator — none of it visible to `MemoryReport`),
+ * light shafts (four more half-res half-float buffers), a velocity attachment
+ * nothing at that tier consumed, and three shadow cascades, which is three
+ * complete shadow renders of a 687-draw scene. Every one of those is now gone
+ * from `medium` and reachable with `?quality=high`.
+ *
+ * Note what did *not* change: the DPR cap, the render scale, the material
+ * quality, or anything about what is in the scene. The tier still draws the
+ * same world; it just stops paying for six full-screen effects to do it.
  *
  * ## Weather
  *
@@ -84,6 +104,23 @@ export interface RenderTier {
   /** Light-shaft buffer scale relative to the chain resolution. */
   readonly lightShaftScale: number;
   /**
+   * Whether the light-shaft pass is installed at all.
+   *
+   * **Off below `high`, and that is a memory decision as much as a fill one.**
+   * The shaft module allocates four half-resolution RGBA16F buffers — scatter,
+   * two history buffers for its temporal filter, and the radial accumulation —
+   * which at the medium tier's internal resolution is on the order of 15 MB of
+   * render target, on top of a guide buffer it shares with GTAO. It then runs a
+   * radial blur and a composite every frame.
+   *
+   * What it buys is god-rays through the fog. Under this act's fully overcast
+   * sky there is no visible sun disc for shafts to emanate from, so the effect
+   * is subtle at exactly the tier where the budget is tightest. A machine that
+   * asked for `medium` did not ask for volumetric shafts; a machine that typed
+   * `?quality=high` did.
+   */
+  readonly lightShafts: boolean;
+  /**
    * Upper bound on `devicePixelRatio` for this tier.
    *
    * ### Why this belongs to the tier and not to the Engine
@@ -133,6 +170,10 @@ export interface RenderTier {
 }
 
 export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
+  // `low` is a genuine potato mode, not a slightly cheaper `medium`. One
+  // shadow cascade, no ambient occlusion, no light shafts, no bloom, no
+  // velocity buffer, 0.75 render scale, DPR 1. What is left is: draw the world,
+  // tone-map it, antialias it, present it. It is meant to run on anything.
   low: {
     post: 'low',
     materials: 'low',
@@ -141,31 +182,56 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     ssr: 'off',
     ssrScale: 0.5,
     volumetrics: 'low',
-    shadowCascades: 2,
+    // One cascade, not two. A cascade is a *whole extra shadow render of the
+    // scene* — at 687 draw calls in the encampment, dropping a cascade drops
+    // roughly a third of them, which is the largest single draw-call lever the
+    // tier table has. One 1024 map over 70 m is coarse; it is also the
+    // difference between the game running and not running.
+    shadowCascades: 1,
     shadowMapSize: 1024,
-    shadowDistance: 90,
+    shadowDistance: 70,
     skyViewWidth: 128,
     environmentWidth: 128,
-    froxelDimensions: [96, 54, 48],
+    froxelDimensions: [80, 45, 32],
     lightShaftScale: 0.35,
+    lightShafts: false,
     pixelRatioCap: 1,
     scatterDensity: 1,
   },
   medium: {
     post: 'medium',
     materials: 'medium',
-    gtao: 'low',
+    // GTAO off at medium, and this is the single largest saving in the table.
+    //
+    // The pass is not one buffer: it is a full-resolution normal+depth guide
+    // target, a half-resolution trace target, an à-trous denoiser ping-pong
+    // pair and a three-buffer temporal accumulator — none of which
+    // `MemoryReport` can see, because they are created directly rather than
+    // registered, and all of which are half-float. At the medium tier's
+    // internal resolution that is on the order of 80-90 MB of render target
+    // and half a dozen full-screen passes, to add contact darkening under an
+    // overcast sky that is already almost entirely ambient.
+    //
+    // The terrain now carries its own slope-based cavity darkening (see
+    // `materials/StylizedTerrain`), which is where most of the visible benefit
+    // was landing anyway, for zero passes and zero bytes.
+    gtao: 'off',
     gtaoScale: 0.5,
     ssr: 'off',
     ssrScale: 0.5,
     volumetrics: 'medium',
-    shadowCascades: 3,
-    shadowMapSize: 1536,
-    shadowDistance: 130,
+    // Three cascades at 1536 was 3 x 1536^2 x 5 bytes = 35 MB of shadow map and
+    // three full shadow renders of the scene. Two at 1280 is 16 MB and two
+    // renders, over a slightly shorter distance that the fog closes down long
+    // before the player can notice the far cascade ending.
+    shadowCascades: 2,
+    shadowMapSize: 1280,
+    shadowDistance: 110,
     skyViewWidth: 192,
     environmentWidth: 192,
-    froxelDimensions: [128, 72, 64],
+    froxelDimensions: [112, 63, 48],
     lightShaftScale: 0.4,
+    lightShafts: false,
     pixelRatioCap: 1.5,
     scatterDensity: 1,
   },
@@ -184,6 +250,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 256,
     froxelDimensions: null,
     lightShaftScale: 0.5,
+    lightShafts: true,
     pixelRatioCap: 2,
     scatterDensity: 1,
   },
@@ -202,6 +269,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 384,
     froxelDimensions: null,
     lightShaftScale: 0.5,
+    lightShafts: true,
     pixelRatioCap: 2,
     scatterDensity: 1,
   },

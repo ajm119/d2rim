@@ -147,6 +147,149 @@ export interface AssetStats {
 }
 
 /* -------------------------------------------------------------------------- */
+/* KTX2 transcode target                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The compressed-format flags `KTX2Loader.detectSupport` fills in.
+ *
+ * Restated here rather than imported because three does not export the type,
+ * and because this project only ever reads these six.
+ */
+export interface Ktx2Support {
+  astcSupported: boolean;
+  etc1Supported: boolean;
+  etc2Supported: boolean;
+  dxtSupported: boolean;
+  bptcSupported: boolean;
+  pvrtcSupported: boolean;
+}
+
+/** What {@link narrowKtx2Support} decided, and why. */
+export interface CompressedFormatReport {
+  /** The flags to hand back to the loader. */
+  readonly config: Ktx2Support;
+  /** Human-readable name of the format ETC1S data will land in. */
+  readonly format: string;
+  /** VRAM cost of that format, in bytes per texel. */
+  readonly bytesPerPixel: number;
+  /** Why this format and not another. Logged at boot. */
+  readonly reason: string;
+  /** Whether this call actually changed the loader's mind. */
+  readonly overridden: boolean;
+}
+
+/**
+ * Choose the transcode target for **our** archive, overriding three's default.
+ *
+ * ### The bug this exists to fix
+ *
+ * The whole KTX2 conversion was justified — in this file's own comments — by
+ * "ETC1S transcodes to BC1 on desktop, 2.8 MB for a 2048² plate, ~90 MB for the
+ * preload set". The deployed build reports **189 MB**. That is almost exactly
+ * twice, and the factor of two is not a leak: it is the transcode target.
+ *
+ * `KTX2Loader`'s ETC1S preference order is
+ *
+ * ```
+ * etc2 (1)  >  etc1 (2)  >  bptc (3)  >  dxt (4)  >  pvrtc (5)  >  RGBA32 (100)
+ * ```
+ *
+ * and its `bptc` row targets `BC7_M5` for opaque *and* alpha data alike. BC7 is
+ * a 16-byte-per-4×4-block format — **1.0 byte per texel**. BC1 and opaque ETC2
+ * are 8-byte blocks — **0.5 bytes per texel**. So on any GPU that exposes BPTC
+ * but not ETC2 — which is most desktop ANGLE configurations — every texture in
+ * this project silently costs double what the budget was written against.
+ *
+ * And it buys nothing. BC7 is a high-quality format, but the *source* here is
+ * ETC1S: a 4-bit, chroma-subsampled, endpoint-clustered codec. Transcoding
+ * ETC1S to BC7 cannot recover detail ETC1S already discarded; it re-encodes
+ * lossy data into a container with twice the footprint. The quality ceiling was
+ * set by the encoder, not by the transcode target.
+ *
+ * ### The rule
+ *
+ * Suppress `bptcSupported` whenever some other 0.5 byte/texel target exists.
+ * This is safe for this project specifically because the entire archive is
+ * ETC1S (see `tools/assets/encode-ktx2.mjs`, which passes no `-uastc`): BPTC is
+ * only ever *preferred* for ETC1S and UASTC, and we ship no UASTC. If a future
+ * UASTC or UASTC-HDR asset appears, this function must be revisited — BC7 and
+ * BC6H are genuinely the right targets for those.
+ *
+ * Where BPTC is the only compressed format on offer it is kept: 1.0 byte/texel
+ * is still a 32× saving over the RGBA8 JPEG fallback, and a working image beats
+ * a smaller one.
+ *
+ * ### Why not just encode UASTC/ASTC as well
+ *
+ * It was considered. Apple Silicon does expose ASTC, and `KTX2Loader` will pick
+ * `ASTC_4x4` for UASTC data — but ASTC 4×4 is *also* 1.0 byte/texel, so it
+ * would land on exactly the number being complained about, and UASTC files are
+ * roughly 4× larger on the wire than ETC1S. Shipping a second archive to arrive
+ * at the same VRAM figure over a bigger download is the wrong trade for a
+ * fanless laptop. A 6×6 or 8×8 ASTC block (0.36 / 0.25 bytes/texel) would be a
+ * real win, but `KTX2Loader` never selects those. So: keep the small archive,
+ * fix the target.
+ */
+export function narrowKtx2Support(probed: Partial<Ktx2Support>): CompressedFormatReport {
+  const config: Ktx2Support = {
+    astcSupported: probed.astcSupported === true,
+    etc1Supported: probed.etc1Supported === true,
+    etc2Supported: probed.etc2Supported === true,
+    dxtSupported: probed.dxtSupported === true,
+    bptcSupported: probed.bptcSupported === true,
+    pvrtcSupported: probed.pvrtcSupported === true,
+  };
+
+  // Priority order for ETC1S, as three ranks it, restricted to the targets that
+  // cost half a byte per texel. The first of these that the device has is what
+  // the loader will pick once BPTC is out of the way.
+  const half: Array<{ flag: keyof Ktx2Support; format: string }> = [
+    { flag: 'etc2Supported', format: 'RGB_ETC2 (8-byte blocks)' },
+    { flag: 'etc1Supported', format: 'RGB_ETC1 (8-byte blocks)' },
+    { flag: 'dxtSupported', format: 'RGB_S3TC_DXT1 / BC1 (8-byte blocks)' },
+    { flag: 'pvrtcSupported', format: 'RGB_PVRTC_4BPPV1' },
+  ];
+  const cheapest = half.find((candidate) => config[candidate.flag]);
+
+  if (cheapest !== undefined) {
+    const overridden = config.bptcSupported;
+    // BPTC outranks dxt and pvrtc in three's table, so it has to go for those
+    // two to be reachable. Clearing it unconditionally when a half-rate target
+    // exists also keeps the reported format honest on etc2/etc1 devices, where
+    // it was never going to be chosen anyway.
+    config.bptcSupported = false;
+    return {
+      config,
+      format: cheapest.format,
+      bytesPerPixel: 0.5,
+      reason: overridden
+        ? 'BPTC/BC7 suppressed — it is 1.0 byte/texel and cannot improve on ETC1S source data'
+        : 'device preference, unchanged',
+      overridden,
+    };
+  }
+
+  if (config.bptcSupported) {
+    return {
+      config,
+      format: 'RGBA_BPTC / BC7 (16-byte blocks)',
+      bytesPerPixel: 1,
+      reason: 'no half-rate compressed format on this device; BC7 is still 32x better than RGBA8',
+      overridden: false,
+    };
+  }
+
+  return {
+    config,
+    format: 'RGBA8 (uncompressed fallback)',
+    bytesPerPixel: 4,
+    reason: 'this device exposes no compressed texture format the transcoder can target',
+    overridden: false,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -328,6 +471,7 @@ export class AssetManager implements GameModule {
 
   #compressedLoads = 0;
   #compressedWarned = false;
+  #compressedFormat: CompressedFormatReport | null = null;
 
   constructor(options: AssetManagerOptions = {}) {
     this.#options = {
@@ -797,6 +941,11 @@ export class AssetManager implements GameModule {
     return this.#loadWithProgress(this.#textureLoader, url, key);
   }
 
+  /** What the transcoder will actually produce on this device. `null` until asked. */
+  get compressedFormat(): CompressedFormatReport | null {
+    return this.#compressedFormat;
+  }
+
   /**
    * Load the KTX2/Basis sibling of a manifest texture, if there is one.
    *
@@ -882,6 +1031,25 @@ export class AssetManager implements GameModule {
     // `detectSupport` takes the concrete renderer; the handle's union type is
     // wider than its signature, so this is a genuine boundary cast.
     loader.detectSupport(ctx.renderer.three as unknown as THREE.WebGPURenderer);
+
+    // Then override what it decided. See `narrowKtx2Support` — three's default
+    // preference costs exactly twice the VRAM on a large class of desktop GPUs,
+    // this one included, for data that cannot benefit from it.
+    const probed = (loader as unknown as { workerConfig?: Partial<Ktx2Support> }).workerConfig;
+    if (probed !== undefined) {
+      const decision = narrowKtx2Support(probed);
+      Object.assign(probed, decision.config);
+      this.#compressedFormat = decision;
+      console.info(
+        `[AssetManager] KTX2/ETC1S will transcode to ${decision.format} ` +
+          `(${decision.bytesPerPixel} bytes/px, ${(
+            (decision.bytesPerPixel * 2048 * 2048 * 4) /
+            3 /
+            (1024 * 1024)
+          ).toFixed(2)} MB per 2048² plate with mips) — ${decision.reason}`,
+      );
+    }
+
     this.#ktx2Loader = loader;
     return loader;
   }

@@ -553,8 +553,14 @@ class RenderBridges implements GameModule {
       this.#post.addPass(pass, { before: 'post.taa' });
       this.#ssrPass = pass;
     }
-    this.#post.addPass(this.#lightShafts.pass, { before: 'post.taa' });
-    this.#installedShafts = true;
+    // Light shafts are a `high`+ effect now. Not installing the pass is
+    // materially better than installing it disabled: the module's four
+    // half-resolution half-float buffers are allocated on first render, so a
+    // pass that never runs never allocates them. See `RenderTier.lightShafts`.
+    if (this.#tier.lightShafts) {
+      this.#post.addPass(this.#lightShafts.pass, { before: 'post.taa' });
+      this.#installedShafts = true;
+    }
   }
 
   /**
