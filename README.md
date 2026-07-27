@@ -49,15 +49,42 @@ npm run build && node tools/verify-kill.mjs
 
 | Parameter                                | Default        | Effect                                                        |
 | ---------------------------------------- | -------------- | ------------------------------------------------------------- |
-| `?backend=webgpu` \| `webgl2`            | auto-probe     | Force a renderer backend instead of probing for WebGPU         |
-| `?quality=low` \| `medium` \| `high` \| `ultra` | `high`  | The whole render ladder at once — see `src/render/RenderSettings.ts` |
+| `?backend=webgpu` \| `webgl2`            | `webgl2`       | Force a renderer backend. **WebGPU is opt-in and known broken** — see below |
+| `?quality=low` \| `medium` \| `high` \| `ultra` | auto (`low`/`medium`) | The whole render ladder at once — see `src/render/RenderSettings.ts` |
+| `?exposure=<stops>`                      | saved setting  | Brightness trim, in stops, on top of the authored key. Not persisted |
+| `?stats=1` (or `?mem=1`)                 | off            | Expand the debug overlay: draw calls, triangles, texture and render-target MB, active post passes, GPU errors |
 | `?zone=encampment` \| `bloodMoor` \| `denOfEvil` | `encampment` | Boot straight into a zone                                |
 | `?autostart=0`                           | on             | Boot without starting the rAF loop; the caller steps frames    |
 | `?enemies=0`                             | on             | Boot zones unpopulated                                         |
 | `?fade=0`                                | `0.35` s       | Disable the zone-transition fade                               |
 
-An unrecognised `?quality=` logs a warning and falls back to `high` rather than
-failing quietly.
+An unrecognised `?quality=` logs a warning and falls back to auto-detection
+rather than failing quietly.
+
+#### Why the default backend is WebGL2
+
+three.js r185 uploads a `Data3DTexture` as separate 2D slices on its WebGPU
+backend and then binds it through a 2D texture view. Dawn rejects that bind
+group; a rejected bind group poisons the command encoder; the whole frame's
+command buffer is dropped at submit. The observable result is a black viewport
+with a live DOM HUD on top of it, at a few frames a second, on every frame —
+which is exactly what the deployed build did on a real WebGPU machine.
+
+The fog's detail-noise volume is the texture in question, and it is inlined into
+*both* fog paths, so falling back from the froxel compute path to the ray march
+does not escape it. On WebGPU the volume is therefore not bound at all
+(`VolumetricsOptions.detailNoise`), and the backend itself is opt-in until the
+upload is genuinely fixed. `AUTO_BACKEND` in `src/render/RendererFactory.ts` is
+the single line to flip when it is.
+
+### Brightness
+
+The pause menu (Escape) has a brightness slider, in stops, persisted to local
+storage. It writes through `CompositePass.setExposureCompensation` rather than
+`setExposure`, because the latter is the art direction's locked key and is
+re-applied on every zone transition by `ZoneManager`'s per-zone grade trim — a
+player setting written there would silently evaporate at the first portal. See
+`src/render/DisplaySettings.ts`.
 
 ### Controls
 
