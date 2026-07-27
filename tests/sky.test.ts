@@ -555,5 +555,11 @@ describe('Sky module', () => {
       }
       sky.dispose();
     }
-  });
+    // 20s, not the 5s default. This walks every texel of the environment map
+    // for several sky states and converts each from half-float in JS, which
+    // takes ~7s on an unloaded 4-core box and longer when vitest is running
+    // other files in parallel. It passed alone and timed out in full runs,
+    // twice, which read as flakiness but is purely a time budget: the
+    // assertions below are unchanged and have never failed.
+  }, 20_000);
 });

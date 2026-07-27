@@ -1066,7 +1066,20 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
   const materials = new MaterialLibrary({
     quality: tier.materials,
     anisotropy: 8,
-    preload: ['wetMud', 'deadGrass', 'rock', 'mossyRock', 'wetStone', 'bark', 'plank', 'ironRusted'],
+    // `wetMud` and `deadGrass` are gone from this list, and that is 8 of the
+    // 32 KTX2 plates the session used to hold resident — a straight 25% cut in
+    // texture memory. They existed for exactly one thing: the ground, which is
+    // now `createStylizedTerrain` and samples no texture at all. Nothing else
+    // in any of the three zones references either archetype.
+    //
+    // What remains is the union of what the three zones actually ask for:
+    // encampment {rock, bark, plank, wetStone, ironRusted}, moor {rock,
+    // mossyRock, wetStone, bark}, den {rock, bark}. Preloading the union rather
+    // than per-zone still over-fetches for the Den, but every set here is one a
+    // player reaches within a minute, and the library already loads anything
+    // absent lazily and hot-swaps it in — so per-zone streaming is a change to
+    // *this list*, not to the material system.
+    preload: ['rock', 'mossyRock', 'wetStone', 'bark', 'plank', 'ironRusted'],
   });
 
   const volumetrics = new VolumetricsModule({

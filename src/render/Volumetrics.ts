@@ -1124,8 +1124,17 @@ export const WORKGROUP_SIZE = 64;
 
 export const VOLUMETRIC_TIERS: Readonly<Record<Exclude<VolumetricsQuality, 'off'>, TierConfig>> = {
   //           froxels         steps  lights
-  low: { froxels: [96, 54, 32], marchSteps: 16, lights: 2 },
-  medium: { froxels: [128, 72, 48], marchSteps: 24, lights: 3 },
+  //
+  // The step counts at `low` and `medium` were cut in half. On the WebGL2 path
+  // there is no compute shader, so the fog is a per-pixel ray march in the
+  // composite: the step count multiplies *every fog pixel*, and the fog covers
+  // the whole frame. 16 steps at `low` was the single largest per-pixel loop in
+  // the frame after the terrain shader. The analytic slice integral (see the
+  // module header) is what makes 8 steps viable — each step integrates a slab
+  // in closed form rather than point-sampling it, so halving the count softens
+  // the fog's *shape* rather than banding it.
+  low: { froxels: [96, 54, 32], marchSteps: 8, lights: 2 },
+  medium: { froxels: [128, 72, 48], marchSteps: 14, lights: 3 },
   high: { froxels: [160, 90, 64], marchSteps: 32, lights: 4 },
   ultra: { froxels: [192, 108, 80], marchSteps: 48, lights: 6 },
 };

@@ -304,9 +304,11 @@ export class DebugOverlay implements GameModule {
         `gpu ${
           frames.gpuAvailable
             ? `${frames.gpuMs.toFixed(1)} ms`
-            : this.#gpuTimerUnavailable
-              ? 'n/a'
-              : '—'
+            : !this.#stats
+              ? 'off (?stats=1)'
+              : this.#gpuTimerUnavailable
+                ? 'n/a'
+                : '…'
         }`,
     ];
 

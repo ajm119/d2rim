@@ -650,10 +650,14 @@ function applySurface(material: SurfaceMaterial, surface: SurfaceNodes, spec: Su
  * The module
  * ------------------------------------------------------------------------- */
 
-/** Archetypes the Blood Moor opening actually needs on screen at boot. */
+/**
+ * Archetypes the zones actually need on screen at boot.
+ *
+ * `wetMud` and `deadGrass` were the first two entries and are no longer here:
+ * the ground is `createStylizedTerrain` now and samples nothing. Removing them
+ * drops 8 of 32 resident 2048² plates.
+ */
 const DEFAULT_PRELOAD: readonly MaterialArchetype[] = [
-  'wetMud',
-  'deadGrass',
   'rock',
   'mossyRock',
   'wetStone',

@@ -62,7 +62,7 @@ const PROBE = `
   const render = three.info?.render ?? {};
   const memory = three.info?.memory ?? {};
 
-  const mod = await import('/src/render/MemoryReport.ts').catch(() => null);
+  const assets = d2rim.ctx.services.tryGet('assets');
   const post = d2rim.render?.post;
   const stats = post?.stats ?? null;
 
@@ -77,10 +77,9 @@ const PROBE = `
     postBytes: stats ? stats.bytes : null,
     shadowCascades: d2rim.render?.settings?.tier?.shadowCascades ?? null,
     shadowMapSize: d2rim.render?.settings?.tier?.shadowMapSize ?? null,
-    assetBytes: d2rim.ctx.services.tryGet?.('assets')?.stats?.().bytes ?? null,
-    compressedFormat:
-      d2rim.ctx.services.tryGet?.('assets')?.compressedFormat?.format ?? null,
-    compressedLoads: d2rim.ctx.services.tryGet?.('assets')?.compressedLoadCount ?? null,
+    assetBytes: assets?.stats?.().bytes ?? null,
+    compressedFormat: assets?.compressedFormat?.format ?? null,
+    compressedLoads: assets?.compressedLoadCount ?? null,
     pixelRatio: three.getPixelRatio?.() ?? null,
   };
 `;
@@ -88,7 +87,7 @@ const PROBE = `
 const mb = (bytes) => (bytes === null || bytes === undefined ? '—' : (bytes / 1048576).toFixed(1));
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2), SPEC);
+  const { options: args } = parseArgs(process.argv.slice(2), SPEC);
   if (args.help) {
     console.log(formatHelp(SPEC));
     return 0;
@@ -111,7 +110,7 @@ async function main() {
     for (const tier of args.tiers.split(',').filter(Boolean)) {
       for (const zone of args.zones.split(',').filter(Boolean)) {
         const url =
-          `${server.origin}/?autostart=0&enemies=0&fade=0&stats=1` +
+          `${server.url}/?autostart=0&enemies=0&fade=0&stats=1` +
           `&backend=${args.backend}&quality=${tier}&zone=${zone}`;
         process.stdout.write(`  ${tier.padEnd(7)} ${zone.padEnd(12)} ... `);
         await page.goto(url, { waitUntil: 'load', timeout: 180_000 });
@@ -129,7 +128,7 @@ async function main() {
     }
   } finally {
     await browser.close();
-    await server.close();
+    server.stop();
   }
 
   console.log('');
