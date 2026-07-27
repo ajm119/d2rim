@@ -729,43 +729,69 @@ export class RogueEncampment implements Zone {
 
     const half = Math.sin(GATE_HALF_ARC) * PALISADE_RADIUS + 0.55;
     const postHeight = 4.4;
-    const parts: THREE.BufferGeometry[] = [];
 
-    for (const side of [-1, 1]) {
+    /**
+     * One mesh per timber, not one mesh for the gate.
+     *
+     * The whole gate used to be merged into a single `Mesh`, and the collider
+     * pass fits a mesh's *bounding box*: the box around two uprights, a lintel
+     * spanning them and the returns behind is an 11 × 4.4 × 3 m slab filling the
+     * opening. The gate — the only way out of the camp on foot — was welded
+     * shut with an invisible wall, and the same box is what the camera arm
+     * collided with on the approach. Each timber is its own mesh so its collider
+     * is its own shape, and the gap between them stays a gap.
+     */
+    const emit = (geometry: THREE.BufferGeometry, name: string, at: THREE.Vector3): void => {
+      geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      this.#owned.push(geometry);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = name;
+      mesh.position.copy(at);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.#root.add(mesh);
+    };
+
+    for (const [i, side] of [-1, 1].entries()) {
       const x = side * half;
       const z = PALISADE_RADIUS;
       const post = new THREE.BoxGeometry(0.46, postHeight, 0.46);
-      post.translate(x, this.field.heightAt(x, z) + postHeight / 2 - 0.3, z);
-      parts.push(post);
+      post.translate(0, postHeight / 2, 0);
+      emit(
+        post,
+        `camp.gate.post.${i}`,
+        new THREE.Vector3(x, this.field.heightAt(x, z) - 0.3, z),
+      );
     }
+
     const lintel = new THREE.BoxGeometry(half * 2 + 0.9, 0.46, 0.4);
-    lintel.translate(0, this.field.heightAt(0, PALISADE_RADIUS) + postHeight - 0.55, PALISADE_RADIUS);
-    parts.push(lintel);
+    emit(
+      lintel,
+      'camp.gate.lintel',
+      new THREE.Vector3(
+        0,
+        this.field.heightAt(0, PALISADE_RADIUS) + postHeight - 0.55,
+        PALISADE_RADIUS,
+      ),
+    );
 
     // A short palisade return on each side of the opening, angled inward, so
     // the gate is a short passage rather than a hole in a circle. This is the
     // difference between "a wall with a gap" and "a gate".
+    let index = 0;
     for (const side of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
         const x = side * (half + 0.2);
         const z = PALISADE_RADIUS - 0.9 - i * 0.95;
         const log = new THREE.CylinderGeometry(0.15, 0.17, 2.9, 6);
-        log.translate(x, this.field.heightAt(x, z) + 1.3, z);
-        parts.push(log);
+        emit(
+          log,
+          `camp.gate.return.${index++}`,
+          new THREE.Vector3(x, this.field.heightAt(x, z) + 1.3, z),
+        );
       }
     }
-
-    const merged = mergeGeometries(parts, false);
-    for (const part of parts) part.dispose();
-    if (merged === null) return;
-    merged.computeVertexNormals();
-    this.#owned.push(merged);
-
-    const gate = new THREE.Mesh(merged, material);
-    gate.name = 'camp.gate';
-    gate.castShadow = true;
-    gate.receiveShadow = true;
-    this.#root.add(gate);
   }
 
   /* -- bonfire ------------------------------------------------------------ */
@@ -1015,6 +1041,25 @@ export class RogueEncampment implements Zone {
    * because they put a floor under the light level everywhere between the muster
    * ground and the wall. Phase-offset so the ring does not pulse in unison,
    * which is the tell that gives away a shared flicker curve.
+   *
+   * ### One mesh per post, and why that is not a draw-call oversight
+   *
+   * The six posts used to be welded into a single `Mesh` with world-space
+   * geometry. That is a perfectly good rendering decision and it was a serious
+   * physics bug: `PhysicsWorld.buildSceneColliders` derives a collider from a
+   * mesh's *bounding box*, and the bounding box of six posts on a 17.5 m ring is
+   * a 35 m square. The camp therefore had one invisible 35 × 2.9 × 35 m box
+   * sitting over the whole enclosure at chest height. Nothing looked wrong; the
+   * symptom was that the third-person camera arm sphere-cast began every frame
+   * already inside a solid, reported a contact at zero distance, and collapsed
+   * the camera onto the back of the Barbarian's head on the game's opening
+   * frame.
+   *
+   * Merging is safe when the merged parts are one object. It is not safe when
+   * they are six objects that happen to share a material, because a bounding box
+   * cannot tell the difference — so each post is now its own mesh with
+   * *local* geometry, and the collider pass fits each one an upright cylinder,
+   * which is what a post is.
    */
   #buildTorchPosts(): void {
     const materials = this.#materials;
@@ -1026,11 +1071,27 @@ export class RogueEncampment implements Zone {
     bark.name = 'camp.torchpost';
     this.#owned.push(bark);
 
-    const parts: THREE.BufferGeometry[] = [];
     const positions: { x: number; z: number; y: number }[] = [];
     const count = 6;
     const postHeight = 2.55;
     const ringRadius = 17.5;
+
+    // Post and basket, authored about the post's own base. Shared by all six:
+    // they are identical, so the geometry is built once and only the mesh
+    // transform differs — which is also what keeps the bounding box tight.
+    const post = new THREE.CylinderGeometry(0.09, 0.12, postHeight, 7);
+    post.translate(0, postHeight / 2, 0);
+    // The iron basket the fuel sits in, as a short open cylinder.
+    const basket = new THREE.CylinderGeometry(0.24, 0.16, 0.34, 8, 1, true);
+    basket.translate(0, postHeight + 0.12, 0);
+    const postGeometry = mergeGeometries([post, basket], false);
+    post.dispose();
+    basket.dispose();
+    if (postGeometry !== null) {
+      postGeometry.computeVertexNormals();
+      postGeometry.computeBoundingBox();
+      this.#owned.push(postGeometry);
+    }
 
     for (let i = 0; i < count; i++) {
       // Offset half a step so no post stands in the gate's throat.
@@ -1040,25 +1101,13 @@ export class RogueEncampment implements Zone {
       const y = this.field.heightAt(x, z);
       positions.push({ x, y, z });
 
-      const post = new THREE.CylinderGeometry(0.09, 0.12, postHeight, 7);
-      post.translate(x, y + postHeight / 2, z);
-      parts.push(post);
-      // The iron basket the fuel sits in, as a short open cylinder.
-      const basket = new THREE.CylinderGeometry(0.24, 0.16, 0.34, 8, 1, true);
-      basket.translate(x, y + postHeight + 0.12, z);
-      parts.push(basket);
-    }
-
-    const merged = mergeGeometries(parts, false);
-    for (const part of parts) part.dispose();
-    if (merged !== null) {
-      merged.computeVertexNormals();
-      this.#owned.push(merged);
-      const posts = new THREE.Mesh(merged, bark);
-      posts.name = 'camp.torchposts';
-      posts.castShadow = true;
-      posts.receiveShadow = true;
-      this.#root.add(posts);
+      if (postGeometry === null) continue;
+      const mesh = new THREE.Mesh(postGeometry, bark);
+      mesh.name = `camp.torchpost.${i}`;
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.#root.add(mesh);
     }
 
     for (const [i, point] of positions.entries()) {

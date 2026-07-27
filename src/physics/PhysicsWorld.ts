@@ -162,6 +162,18 @@ const DEFAULT_SCENE_COLLIDERS: Required<SceneColliderOptions> = {
   trunkRadiusFactor: 0.34,
 };
 
+/**
+ * When a derived box collider is suspicious enough to say so out loud.
+ *
+ * Two conditions, because either one alone has honest counter-examples: a
+ * lintel really is 11 m long, and a doorstep really is 2 m square. What is
+ * almost never a real prop is something *large in both horizontal axes* — that
+ * is the signature of several separate objects merged into one mesh, whose
+ * bounding box has swallowed the gaps between them. See `buildSceneColliders`.
+ */
+export const OVERSIZE_BOX_AREA = 25;
+export const OVERSIZE_BOX_MIN_SIDE = 1.5;
+
 /** Result summary from a collider build pass, for logging and tests. */
 export interface SceneColliderReport {
   readonly boxes: number;
@@ -484,6 +496,30 @@ export class PhysicsWorld implements GameModule {
         .setCollisionGroups(COLLISION_GROUPS.prop)
         .setFriction(0.8)
         .setRestitution(0);
+
+      // A box this big in both horizontal axes is almost never a prop; it is
+      // several props merged into one mesh, whose bounding box now spans the
+      // gaps between them. The camp shipped with six torch posts on a 17.5 m
+      // ring welded into a single `Mesh`, which derived one invisible 35 m box
+      // over the whole enclosure at chest height — the player stood inside it,
+      // the camera arm sphere-cast started inside it, and nothing about the
+      // picture said so.
+      //
+      // This warns rather than skips on purpose. A legitimately huge collider
+      // (a cliff face, a bridge span) does exist, and silently dropping one
+      // would put the player through the world; a line in the console is enough
+      // to make the mistake findable, which is the whole thing it was missing.
+      if (
+        kind === 'box' &&
+        hx * hz * 4 > OVERSIZE_BOX_AREA &&
+        Math.min(hx, hz) * 2 > OVERSIZE_BOX_MIN_SIDE
+      ) {
+        console.warn(
+          `[PhysicsWorld] "${label}" derives a ${(hx * 2).toFixed(1)} x ${(hz * 2).toFixed(1)} m ` +
+            'box collider. If that is several objects merged into one mesh, split them: ' +
+            'a bounding box cannot tell them apart, and the gap between them becomes solid.',
+        );
+      }
 
       this.addCollider(desc, { kind: 'prop', label, source: mesh });
     };
