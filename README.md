@@ -362,21 +362,51 @@ is moving, retreating and fighting back. One run each:
 | variant | pool | swings | landed | mean blow | time to kill | player HP left |
 | ------- | ---- | ------ | ------ | --------- | ------------ | -------------- |
 | minion  | 46   | 2      | 2      | 29.0      | **1.00 s**   | 120 / 120      |
-| warrior | 68   | 8      | 4      | 19.5      | **4.60 s**   | 89 / 120       |
-| rogue   | 58   | 4      | 3      | 20.7      | **2.93 s**   | 112 / 120      |
-| mage    | 52   | 11     | 3      | 23.0      | **5.27 s**   | 76 / 120       |
+| warrior | 68   | 17     | 5      | 16.6      | **10.07 s**  | 53 / 120       |
+| rogue   | 58   | 12     | 4      | 28.8      | **7.10 s**   | 85 / 120       |
+| mage    | 52   | 8      | 3      | 17.3      | **5.47 s**   | 102 / 120      |
+
+He kills all four. Across runs the warrior lands between 4.6 s and 10.1 s and
+the minion between 1.0 s and 3.4 s; the scatter is real and comes from how the
+skeleton chooses to reposition, not from the harness. Every skeleton takes
+between two and five connecting blows, which is the number the balance is
+actually built on and the one the harness asserts.
 
 `swings` counts every press the combo machine accepted; `landed` counts the ones
 that connected *and* passed the to-hit roll. The gap between them is the fight:
-a mashing player whiffs while the skeleton repositions. The mage is the hardest
-of the four because it moves the most — it is the only variant where the 8 rad/s
-aim cap ever binds (mean residual aim error 4.3°, zero for the other three).
+a mashing player whiffs while the skeleton repositions.
+
+The harness reports its own residual aim error so that a bad result can be told
+apart from a badly aimed one. It is **0.0°** for almost every duel — the 8 rad/s
+turn cap simply never binds at duelling range. The one exception observed is the
+mage, which moves the most: 4.3° of mean residual in one run, 0.0° in another.
+Nothing here was measured by a Barbarian swinging at where a skeleton used to
+be.
 
 **Incoming**, measured separately by `tools/verify-balance.mjs`: one skeleton
 kills a passive, non-blocking, non-moving player in **12.30 s**; three kill him
 in **5.20 s**.
 
-<!-- PACK -->
+**A three-skeleton pack is winnable, and it is close.** Fought for real in both
+directions, by a level-1 Barbarian in the starting kit who is given exactly one
+rule of footwork — back off when two of them are on you *and* you are hurt:
+
+> **won in 16.80 s** — all three killed, 32 swings, 10 landed, 79 damage taken,
+> **49.3 / 120 health remaining**, 52% of frames spent giving ground.
+
+That is the shape this encounter wanted: a fight the player finishes on under
+half health, where standing still and mashing would have killed him (three
+skeletons put a passive player down in 5.2 s) and where the footwork is what
+makes the difference. The Blood Moor's arc of six skeletons is therefore a
+fight rather than a queue.
+
+**Gear.** Equipping a rolled weapon moves `CombatSystem.playerOffense()` — the
+object the swing resolves against, not the character screen — and the harness
+asserts it. Worth saying plainly, though: at character level 1 the Blood Moor
+drop table does **not** reliably produce a weapon better than the starting Hand
+Axe. The best magic weapon in one 600-drop search was a Sharp Club at 8–20
+against the axe's 10–19: a higher maximum and a *lower* mean. The plumbing
+works; the level-1 loot curve is flat.
 
 ---
 
@@ -434,6 +464,16 @@ foot the lock *is* holding is genuinely still — hundredths of a metre per seco
 — but at a run the slower foot still moves at 0.56–0.60 of body speed. Walking
 looks right. Running slides. Closing that gap is real remaining work.
 
+### The level-1 loot curve is flat
+
+Six hundred drops rolled off the Blood Moor table, filtered to magic-or-better
+weapons the character can actually use, and the best of them was a Sharp Club at
+8–20 physical against the starting Hand Axe's 10–19 — a higher maximum and a
+lower mean. Affixes, generation, equipping and the path from an item to the
+damage the swing carries are all verified and all work; what is missing is a
+reason to care about a drop in the first area. The base-item and affix weights
+want retuning against what the player starts holding.
+
 ### No item icons
 
 There is no item art in this project. Every inventory item is drawn as a
@@ -489,7 +529,7 @@ software rasterisation.
 
 | Harness                     | What it proves                                                                                                                                 |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `verify-kill.mjs`           | **The player can win.** Time-to-kill, swings and landed hits for a Barbarian against each skeleton variant that is moving and fighting back, with and without a magic weapon, plus a three-skeleton pack fight. Asserts a budget. |
+| `verify-kill.mjs`           | **The player can win.** Time-to-kill, swings and landed hits for a Barbarian against each skeleton variant that is moving and fighting back, the same four fights with the best weapon 600 drops will yield, and a three-skeleton pack fight. Three independently booted phases; asserts a budget on all of it. |
 | `verify-balance.mjs`        | The other direction: how long a passive player survives one skeleton and three, and that `rpg.offense`/`rpg.defense` are load-bearing.          |
 | `verify-player-damage.mjs`  | The two-sided regression guard — a skeleton left alone takes health off the player, a player who refuses to fight dies, and a dead player respawns alive at full health. |
 | `verify-combat-loop.mjs`    | The walk a player walks: boot at the camp with no flags, travel camp → moor → den, and prove each zone places its declared spawn table and that skeletons perceive, close, damage and die. |
