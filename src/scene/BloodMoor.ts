@@ -416,6 +416,34 @@ export class BloodMoor implements Zone {
   readonly zoneId = 'bloodMoor';
   readonly displayName = 'The Blood Moor';
 
+  /**
+   * The moor's trim on the frame. See `ZoneGrade`.
+   *
+   * The smallest of the three, because the base look in `buildFrameGraph` was
+   * authored *on* this zone and is very nearly right for it: the honest capture
+   * came back cold, overcast and bleak, which is the brief. What it also came
+   * back was bimodal — luma p25 **0.090**, p50 0.188, p75 **0.618**, with the
+   * band between 0.25 and 0.60 essentially unpopulated. The sky owns the top of
+   * the histogram, the ground owns the bottom, and there is nothing in between,
+   * so the near ground on the shaded side of the frame goes to unreadable
+   * black while the overcast deck sits five stops above it.
+   *
+   * A third of a stop plus a blue shadow lift moves the ground population up
+   * into the 0.13-0.20 band without touching the sky, and dropping the contrast
+   * pivot to the moor's real midtone stops the contrast operator from pushing
+   * that same population further down. The result should still be bleak — it
+   * has to be — but a player has to be able to see a skeleton standing in it.
+   */
+  readonly grade = {
+    stops: 0.35,
+    grade: {
+      lift: [-0.002, 0.008, 0.056] as const,
+      gamma: [1.0, 1.0, 1.035] as const,
+      contrast: 1.06,
+      contrastPivot: 0.2,
+    },
+  };
+
   readonly field = new TerrainField();
 
   /** The moor's encounter table, owned by `ai/EnemyDirector`. */

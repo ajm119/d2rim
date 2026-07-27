@@ -333,6 +333,59 @@ export class RogueEncampment implements Zone {
   readonly zoneId = 'encampment';
   readonly displayName = 'Rogue Encampment';
 
+  /**
+   * The camp's trim on the frame. See `ZoneGrade`.
+   *
+   * ### What the honest capture showed
+   *
+   * Measured off `captures/zones-before/encampment.png`, the frame's first
+   * three quartiles sat between luma **0.103 and 0.125** — seventy-two percent
+   * of the picture inside a band two hundredths wide. That is not a dark frame,
+   * it is a *flat* one: there is no tonal structure in it at all. Worse, the
+   * **coldest** decile measured −0.025 on the blue-minus-red axis, meaning the
+   * single coldest tenth of the camp was still warm. The brief asks for "a warm
+   * pool against a cold surround" and the capture had no cold in it anywhere.
+   *
+   * ### What this does about it
+   *
+   * - `stops: +0.8` lifts that 0.12 plateau to about 0.21, which is where a
+   *   grade has something to work with. It is deliberately less than the two
+   *   stops that would "fix" the mean, because the camp is a night scene and a
+   *   correctly exposed night scene is still dark.
+   * - `contrastPivot: 0.19` with `contrast: 1.24` puts the plateau on both
+   *   sides of the pivot instead of entirely below it, which is what turns one
+   *   value into a range.
+   * - The lift and gain are the actual answer to the monochrome. Blue is lifted
+   *   hard and red pulled *down* in the shadows, so everything the bonfire does
+   *   not reach falls toward blue-grey; the gain keeps red high and blue low so
+   *   everything the bonfire does reach stays amber. That is the separation —
+   *   it is manufactured in the grade because the scene's own light is
+   *   overwhelmingly firelight and no amount of exposure will invent a cold
+   *   source that is not there.
+   * - `temperature: -1250` cools the white point well past the base look's
+   *   −520, and `gamma [1.0, 1.02, 1.12]` brightens the blue channel through
+   *   the midtones (above 1 brightens — see `ColorGradeSettings`), which is the
+   *   term that actually turns the un-lit half of the camp blue-grey rather
+   *   than merely less brown.
+   * - `saturation: 0.84`: the capture's mean saturation was 0.498, nearly all
+   *   of it one hue. Chroma this high in a single hue reads as a colour cast,
+   *   not as colour.
+   */
+  readonly grade = {
+    stops: 0.8,
+    grade: {
+      temperature: -1250,
+      tint: -0.02,
+      lift: [-0.016, 0.0, 0.062] as const,
+      gamma: [1.0, 1.02, 1.12] as const,
+      gain: [1.09, 1.0, 0.9] as const,
+      saturation: 0.84,
+      contrast: 1.24,
+      contrastPivot: 0.19,
+      vignette: 0.2,
+    },
+  };
+
   /** Shared with the physics heightfield and every prop placement. */
   readonly field = new CampGround();
   readonly npcAnchors = CAMP_NPC_ANCHORS;
@@ -419,6 +472,28 @@ export class RogueEncampment implements Zone {
     // number of frames as fast as it can.
     await this.#materials?.ready();
 
+    // The one thing in the camp that is not firelight.
+    //
+    // Measured off `captures/zones-before/encampment.png`: the *coldest* decile
+    // of the frame scored −0.025 on the blue-minus-red axis, i.e. the coldest
+    // tenth of the picture was still warm, and the first three quartiles all
+    // sat inside a 0.02-wide luma band. The camp was lit by eight fires and
+    // nothing else, so every surface in it — the palisade behind the tents, the
+    // mud at the gate, the far side of the muster ground — was the same hue at
+    // the same value. No exposure or grade can separate two populations that
+    // are one population, and a warm pool needs something cold to be a pool in.
+    //
+    // A hemisphere fill is the right shape for it: the sky half is the cold
+    // night above the palisade and the ground half is the mud bouncing a little
+    // of the fire back up, which is physically what a camp on open ground at
+    // night does. Kept well under the bonfire's own contribution so the fire
+    // stays the reason to stand in the middle — this is a fill, not a key.
+    this.#lighting?.setAmbient({
+      skyColor: 0x5d7392,
+      groundColor: 0x2b2620,
+      intensity: 0.62,
+    });
+
     this.#buildGround();
     this.#buildPalisade();
     this.#buildBonfire();
@@ -448,6 +523,11 @@ export class RogueEncampment implements Zone {
   }
 
   dispose(): void {
+    // Hand the fill back. `LightingService` outlives every zone, so an ambient
+    // set here and not cleared here would light the Blood Moor with the camp's
+    // night sky — the same class of leak `ZoneManager` reverts the exposure
+    // trim for, and one the manager cannot see.
+    this.#lighting?.setAmbient({ intensity: 0 });
     for (const entry of this.#lights) entry.handle?.release();
     this.#lights.length = 0;
     for (const fire of this.#fires) fire.dispose();

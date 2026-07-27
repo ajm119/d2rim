@@ -55,6 +55,8 @@ import type { GameContext, GameModule } from '../core/types';
 import { PhysicsWorldKey, type ColliderRecord, type PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerKey, type PlayerController } from '../character/PlayerController';
 import { buildPortalColliders } from './Portal';
+import type { ColorGradeSettings } from '../render/post/ColorGrade';
+import { PostStackKey, type PostStack } from '../render/post/PostStack';
 import {
   disposeZoneTree,
   measureZone,
@@ -140,6 +142,15 @@ export class ZoneManager implements GameModule {
   /** Resolves when the active zone's encounter is placed. See `enemiesReady`. */
   #enemiesReady: Promise<void> = Promise.resolve();
   #resolveEnemies: (() => void) | null = null;
+  /**
+   * The frame's look before the active zone trimmed it.
+   *
+   * Captured at the moment of application rather than at boot, so that the
+   * baseline is whatever the frame graph actually shipped with — including any
+   * later art pass — and a zone's trim is always relative to it. `null` when no
+   * trim is in effect, which is what makes {@link #restoreGrade} idempotent.
+   */
+  #gradeBaseline: { exposure: number; grade: Partial<ColorGradeSettings> } | null = null;
 
   constructor(options: ZoneManagerOptions = {}) {
     this.#options = {
@@ -397,6 +408,12 @@ export class ZoneManager implements GameModule {
 
     progress('place', 0.85);
 
+    /* -- look ------------------------------------------------------------ */
+
+    // Before the player is placed, so the first frame of a new zone is already
+    // graded for it rather than showing one frame of the previous area's key.
+    this.#applyGrade(zone);
+
     /* -- player ---------------------------------------------------------- */
 
     const entry = resolveEntryPoint(zone, entryPointId);
@@ -472,6 +489,12 @@ export class ZoneManager implements GameModule {
 
     ctx.events.emit('zone:unloading', { zoneId: zone.zoneId });
 
+    // Put the frame back first. A zone's exposure trim is the one resource that
+    // is *not* reclaimed by disposing its subtree — it lives on the post stack,
+    // which outlives every zone — so leaving it set would light the next area
+    // with the last one's key.
+    this.#restoreGrade();
+
     // Enemies first: they hold Rapier bodies and combat-target registrations,
     // and disposing the physics colliders underneath a live enemy is the kind of
     // teardown order that produces a WASM trap rather than an exception.
@@ -505,6 +528,53 @@ export class ZoneManager implements GameModule {
       collidersRemoved: removed,
       disposed,
     });
+  }
+
+  /* -- per-zone look ------------------------------------------------------- */
+
+  /**
+   * Apply a zone's exposure and grade trim, remembering what it replaced.
+   *
+   * Deliberately a *trim* and not a preset: `stops` multiplies the locked key
+   * rather than replacing it, and the grade patch is merged over the shipping
+   * look rather than substituted for it. So the project keeps one place where
+   * the frame's character is decided, and a zone only says how its own set
+   * departs from it. Tuning the base look still moves all three areas together,
+   * which is the property a per-zone *preset* would quietly destroy.
+   */
+  #applyGrade(zone: Zone): void {
+    const post = this.#ctx?.services.tryGet<PostStack>(PostStackKey);
+    const trim = zone.grade;
+    if (post === undefined || trim === undefined) return;
+    // A previous zone's trim must never become this one's baseline.
+    this.#restoreGrade();
+
+    const composite = post.composite;
+    const grade = post.grade;
+    const baseExposure = composite.exposure;
+    const patch = trim.grade ?? {};
+    const current = grade.settings;
+    const baseline: Partial<ColorGradeSettings> = {};
+    for (const key of Object.keys(patch) as (keyof ColorGradeSettings)[]) {
+      Object.assign(baseline, { [key]: current[key] });
+    }
+    this.#gradeBaseline = { exposure: baseExposure, grade: baseline };
+
+    if (trim.stops !== undefined && trim.stops !== 0) {
+      composite.setExposure(baseExposure * 2 ** trim.stops);
+    }
+    if (Object.keys(patch).length > 0) grade.set(patch);
+  }
+
+  /** Undo {@link #applyGrade}. Safe to call when nothing is applied. */
+  #restoreGrade(): void {
+    const baseline = this.#gradeBaseline;
+    if (baseline === null) return;
+    this.#gradeBaseline = null;
+    const post = this.#ctx?.services.tryGet<PostStack>(PostStackKey);
+    if (post === undefined) return;
+    post.composite.setExposure(baseline.exposure);
+    if (Object.keys(baseline.grade).length > 0) post.grade.set(baseline.grade);
   }
 
   /* -- helpers ------------------------------------------------------------ */

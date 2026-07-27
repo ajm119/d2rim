@@ -32,6 +32,7 @@ import * as THREE from 'three/webgpu';
 import type { GameContext, GameModule } from '../core/types';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { SpawnPoint } from '../ai/EnemyDirector';
+import type { ColorGradeSettings } from '../render/post/ColorGrade';
 
 /**
  * A named arrival point.
@@ -97,6 +98,35 @@ export interface PortalSpec {
 }
 
 /**
+ * A zone's trim on the frame's single exposure and colour grade.
+ *
+ * ### Why this exists at all
+ *
+ * `buildFrameGraph` deliberately holds *one* exposure authority — a metered
+ * exposure that changes when the camera turns is not an art direction, and the
+ * project has the three-different-pictures-of-one-scene scars to prove it. But
+ * one locked key across three areas with a two-and-a-half stop spread between
+ * them is the opposite failure: the key was set on the Blood Moor's open
+ * overcast sky, and the same key applied to a cave lit by four torches gives a
+ * frame the player genuinely cannot navigate.
+ *
+ * A per-zone trim is not a meter. It is a *decision*, authored per area,
+ * applied on load and reverted on unload by {@link ZoneManager} so a zone
+ * cannot leak its look into the next one. It is the difference between a
+ * cinematographer choosing a stop for a set and a camera choosing one for
+ * itself.
+ *
+ * `stops` is photographic: `+1` doubles scene radiance. Everything else is a
+ * partial {@link ColorGradeSettings} patch, applied over the shipping look.
+ */
+export interface ZoneGrade {
+  /** Exposure trim in stops, applied on top of the locked key. */
+  readonly stops?: number;
+  /** Partial colour-grade overrides, merged over the base look. */
+  readonly grade?: Partial<ColorGradeSettings>;
+}
+
+/**
  * A playable area.
  *
  * Zones are hosted by {@link ZoneManager}, not by the {@link Engine}: the manager
@@ -117,6 +147,13 @@ export interface Zone extends GameModule {
   readonly npcAnchors?: readonly NpcAnchor[];
   /** Enemy encounter table. Omit or leave empty for a safe zone. */
   readonly enemySpawns?: readonly SpawnPoint[];
+  /**
+   * This area's trim on the frame's exposure and grade. See {@link ZoneGrade}.
+   *
+   * Applied by {@link ZoneManager} on load and reverted on unload, so a zone
+   * that declares one cannot forget to put the frame back.
+   */
+  readonly grade?: ZoneGrade;
   /**
    * Build this zone's static physics.
    *

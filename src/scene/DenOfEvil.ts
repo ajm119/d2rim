@@ -238,6 +238,64 @@ export class DenOfEvil implements Zone {
   readonly displayName = 'The Den of Evil';
 
   /**
+   * The cave's trim on the frame. The largest of the three, and it has to be.
+   *
+   * ### What the honest capture showed
+   *
+   * `captures/zones-before/denOfEvil.png`: **55.45% of the frame below luma
+   * 0.02**. Over half the picture was not dark, it was *absent* — no detail, no
+   * hue, nothing for the eye to navigate by. Median luma 0.016, third quartile
+   * 0.046, and a mean saturation of 0.835 because the only thing left in the
+   * frame was the orange of a torch on black. A player cannot fight twenty
+   * skeletons in that.
+   *
+   * ### Why exposure alone is the wrong instrument
+   *
+   * The torch pool already peaks near 0.57 and the fire itself is above that.
+   * The two-plus stops needed to drag the median to a navigable 0.08 would put
+   * the torches into hard clipping, and a clipped highlight in a dark frame is
+   * the one artefact that reads worse than the darkness did. So the lift comes
+   * mostly from `gamma`, which is a *power* on the midtones and shadows and
+   * leaves the top of the range where it is:
+   *
+   * - `gamma [1.60, 1.52, 1.42]` — above 1 brightens, see `ColorGradeSettings`
+   *   — raises 0.016 to roughly 0.076 and 0.046 to about 0.15, while the torch
+   *   pool's 0.57 moves only to about 0.70, so nothing near the flame goes near
+   *   clipping. Red is lifted *most* and blue least, which sounds backwards and
+   *   is not: the recovered population is rock lit by nothing, and pulling its
+   *   red up furthest is what keeps the torch pools reading as the warm places
+   *   rather than as the only lit ones.
+   * - `lift` puts a small coloured floor under the blacks. Grimdark shadows
+   *   have to retain hue; a shadow with nothing in it has no hue to retain, and
+   *   this is the term that guarantees the darkest part of the cave is a cold
+   *   blue-grey rather than a hole in the screen.
+   * - `stops: +0.45` on top, which is as far as the torches will take.
+   * - `contrast: 0.94` about a pivot at **0.10** — the cave's actual midtone
+   *   after the gamma. Any contrast above 1 here re-crushes exactly the
+   *   population this whole trim exists to recover.
+   * - `saturation: 0.8` against a measured 0.835: the orange has to stop being
+   *   the only colour in the room.
+   *
+   * The cave must stay oppressive. The target is not a lit room — it is a frame
+   * where the darkness is *legible*, with the torch pools still clearly the
+   * safe places and the rock between them readable enough to fight in.
+   */
+  readonly grade = {
+    stops: 0.45,
+    grade: {
+      temperature: -900,
+      tint: -0.01,
+      lift: [0.006, 0.009, 0.018] as const,
+      gamma: [1.6, 1.52, 1.42] as const,
+      gain: [1.02, 0.99, 0.96] as const,
+      saturation: 0.8,
+      contrast: 0.94,
+      contrastPivot: 0.1,
+      vignette: 0.24,
+    },
+  };
+
+  /**
    * The generated layout.
    *
    * Public and readonly because phase 5's quest system needs it: the objective

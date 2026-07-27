@@ -255,15 +255,24 @@ export class InventoryScreen implements GameModule, UiScreen {
       );
     }
 
+    // Read through the *providers*, not off `derived`, because those are the
+    // objects `CombatSystem` resolves a swing and an incoming blow with. The
+    // sheet alone omits everything the class contributes and no item grants —
+    // see `BARBARIAN_ARMS` — and a character screen that prints a smaller
+    // attack rating than the one the game rolls is the exact failure mode this
+    // panel exists to make impossible.
+    const offense = rpg.offense();
+    const guard = rpg.defense();
+    const physical = offense.damage.physical ?? { min: 0, max: 0 };
     const rows: readonly [string, string][] = [
       ['Life', `${derived.maxLife}`],
       ['Mana', `${derived.maxMana}`],
       ['Stamina', `${derived.maxStamina}`],
-      ['Attack Rating', `${derived.attackRating}`],
-      ['Damage', `${derived.damage.min} – ${derived.damage.max}`],
+      ['Attack Rating', `${offense.attackRating}`],
+      ['Damage', `${physical.min} – ${physical.max}`],
       ['Defense', `${derived.defense}`],
-      ['Deadly Strike', `${Math.round(derived.criticalChance * 100)}%`],
-      ['Block', `${Math.round((character.equipment.blockChance() + derived.blockChance) * 100)}%`],
+      ['Deadly Strike', `${Math.round(offense.criticalChance * 100)}%`],
+      ['Block', `${Math.round((guard.blockChance ?? 0) * 100)}%`],
       ['Gold', `${character.gold}`],
     ];
     const table = el('div', `margin-top:10px;border-top:1px solid ${UI.border};padding-top:10px;`);

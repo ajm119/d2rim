@@ -19,7 +19,7 @@ import { PLAYER_OFFENSE } from '../src/combat/CombatSystem';
 import { mulberry32, resolveAttack, type DefenseStats, type DamageSpread } from '../src/combat/DamageModel';
 import { Character } from '../src/rpg/Character';
 import { generateItem } from '../src/rpg/ItemGenerator';
-import { differenceSpread, scaleSpread } from '../src/rpg/RpgSystem';
+import { BARBARIAN_ARMS, addToPhysical, differenceSpread, scaleSpread } from '../src/rpg/RpgSystem';
 
 const SKELETON: DefenseStats = {
   level: 3,
@@ -177,5 +177,85 @@ describe('gear changes a real combat number', () => {
     const weak = resolveAttack({ ...before, alwaysHits: true }, SKELETON, mulberry32(9));
     const strong = resolveAttack({ ...after, alwaysHits: true }, SKELETON, mulberry32(9));
     expect(strong.total).toBeGreaterThan(weak.total);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The class combat floor                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The regression these guard is not "the arithmetic is wrong". It is the much
+ * quieter one that shipped: `CombatSystem` adopted `rpg.offense` / `rpg.defense`
+ * as the authority, which replaced every tuned combat constant with a level-1
+ * character sheet, and **not one of 1370 tests noticed** — because every test
+ * either exercised `deriveStats` (correct in isolation) or `CombatSystem` with
+ * no RPG layer registered (also correct in isolation). The seam between them
+ * was the only place the defect lived.
+ *
+ * So these assert the composed value, and they assert it against the constants
+ * the encounter was actually balanced against, which is the property that has
+ * to hold for the fight to feel the way it was tuned to feel.
+ */
+describe('BARBARIAN_ARMS, the class combat floor', () => {
+  /** The offence a level-1 Barbarian swings with, exactly as `RpgSystem` builds it. */
+  const composed = (character: Character) => {
+    const base = character.offense(PLAYER_OFFENSE.criticalChance);
+    return {
+      attackRating: base.attackRating + BARBARIAN_ARMS.attackRating,
+      damage: addToPhysical(base.damage, BARBARIAN_ARMS.damage).physical,
+    };
+  };
+
+  const withStartingKit = (): Character => {
+    const character = new Character();
+    const axe = generateItem({ seed: 0x1a2b3c, itemLevel: 1, baseId: 'hand-axe', quality: 'normal' });
+    character.acquire(axe);
+    character.equip(axe);
+    return character;
+  };
+
+  it('reproduces exactly the constants the encounter was tuned against', () => {
+    const swing = composed(withStartingKit());
+    expect(swing.attackRating).toBe(PLAYER_OFFENSE.attackRating);
+    expect(swing.damage).toEqual(PLAYER_OFFENSE.damage.physical);
+  });
+
+  it('is a floor and not a replacement: better gear still beats it', () => {
+    const kit = withStartingKit();
+    const bare = composed(kit);
+
+    const better = withStartingKit();
+    const ring = generateItem({ seed: 0x515abc, itemLevel: 12, baseId: 'ring', quality: 'magic' });
+    better.acquire(ring);
+    better.equip(ring);
+
+    // Whatever the ring rolled, the floor is unchanged and the sheet is added
+    // to it — so the composed rating can only move the way the ring moved it.
+    const geared = composed(better);
+    expect(geared.attackRating - bare.attackRating).toBe(
+      better.derived.attackRating - kit.derived.attackRating,
+    );
+  });
+
+  it('leaves the D2 formulas in `deriveStats` alone', () => {
+    // The floor lives in the provider precisely so that the sheet stays a
+    // faithful D2 sheet. If this ever fails, the floor has leaked downwards.
+    expect(withStartingKit().derived.attackRating).toBe(65);
+  });
+
+  it('adds physical damage without inventing an elemental type', () => {
+    const spread = addToPhysical({ physical: { min: 3, max: 6 }, fire: { min: 1, max: 2 } }, {
+      min: 7,
+      max: 13,
+    });
+    expect(spread.physical).toEqual({ min: 10, max: 19 });
+    expect(spread.fire).toEqual({ min: 1, max: 2 });
+    expect(spread.cold).toBeUndefined();
+  });
+
+  it('adds physical damage to a character carrying no weapon at all', () => {
+    const spread = addToPhysical({}, { min: 7, max: 13 });
+    expect(spread.physical).toEqual({ min: 7, max: 13 });
   });
 });

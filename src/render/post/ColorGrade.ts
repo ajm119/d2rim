@@ -108,7 +108,17 @@ export interface ColorGradeSettings {
 
   /** Additive shadow offset, per channel. Small values: `[-0.05, 0.05]`. */
   lift: readonly [number, number, number];
-  /** Midtone power, per channel. 1 is neutral; below 1 brightens. */
+  /**
+   * Midtone power, per channel. 1 is neutral.
+   *
+   * **Above 1 brightens; below 1 darkens.** The uniform is uploaded as
+   * `1 / gamma` and applied as `pow(colour, 1 / gamma)`, i.e. the display-gamma
+   * convention a colourist expects from a "gamma" slider, not the exponent
+   * itself. This doc comment previously claimed the opposite and cost a full
+   * capture round: a Den of Evil grade authored at `gamma 0.6` to rescue a
+   * frame that was 55% pure black darkened it further and the measurement came
+   * back with the mean *down*.
+   */
   gamma: readonly [number, number, number];
   /** Multiplicative highlight scale, per channel. 1 is neutral. */
   gain: readonly [number, number, number];

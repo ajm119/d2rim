@@ -45,7 +45,12 @@
 import * as THREE from 'three/webgpu';
 
 import { CombatantsKey, type Combatant, type CombatantRegistry, type IncomingHit } from '../combat/Combatant';
-import { CombatKey, PLAYER_OFFENSE, type CombatSystem } from '../combat/CombatSystem';
+import {
+  CombatKey,
+  PLAYER_DEFENSE_BASE,
+  PLAYER_OFFENSE,
+  type CombatSystem,
+} from '../combat/CombatSystem';
 import type { DamageRange, DamageSpread, DefenseStats, OffenseStats } from '../combat/DamageModel';
 import { DAMAGE_TYPES } from '../combat/DamageModel';
 import { serviceKey } from '../core/ServiceLocator';
@@ -112,6 +117,61 @@ export const OffenseProviderKey = serviceKey<{ offense(): OffenseStats }>('rpg.o
 
 /** The player's live defensive statistics. Same rationale as above. */
 export const DefenseProviderKey = serviceKey<{ defense(): DefenseStats }>('rpg.defense');
+
+/**
+ * What the class itself brings to a fight, before a single item.
+ *
+ * ### The bug this exists to close
+ *
+ * `CombatSystem` used to resolve every player swing against `PLAYER_OFFENSE`
+ * and every incoming blow against `PLAYER_DEFENSE_BASE`, and the whole encounter
+ * — skeleton health pools, damage, attack ratings, the stand-off distance — was
+ * tuned against those two constants. Adopting the providers made the *character
+ * sheet* the authority, which was the right move and which silently replaced
+ * every one of those tuned numbers with an untuned one:
+ *
+ * | statistic        | tuned constant | level-1 sheet, starting kit | measured effect |
+ * |------------------|----------------|-----------------------------|-----------------|
+ * | attack rating    | 150            | 65 (`dex * 5 - 35`)         | 66% -> 44% to hit a minion |
+ * | physical damage  | 10-19          | 3-6 (a Hand Axe)            | 3.2x fewer points per landed hit |
+ * | block chance     | 42%            | 0% (no shield equipped)     | guarding did nothing |
+ * | damage reduction | 5% + 1 flat    | 0% + 0                      | every blow landed in full |
+ *
+ * Between them that is roughly a *tenfold* increase in the number of swings a
+ * Barbarian needs for one skeleton, and it arrived with no test failing and no
+ * number on any screen looking wrong — the sheet was right, the fight was not.
+ *
+ * ### Why a floor rather than a rewrite
+ *
+ * The alternative was to change `deriveStats`, and that is the wrong place:
+ * `deriveStats` implements Diablo II's published formulas (`AR = dex * 5 - 35`,
+ * `defence = floor(dex / 4)`) and `tests/rpg.stats.test.ts` holds it to them. It
+ * is not wrong. What is missing is everything a *class* contributes that no item
+ * grants — arms training, a Barbarian's guard, the callus of a man who fights
+ * for a living. D2 folds those into monster tables balanced for a naked level-1
+ * character; this game's skeletons are 1.8 m armoured warriors with 46-68 point
+ * pools, so it has to state the term explicitly.
+ *
+ * The floor is *additive*, which is the property that matters: a +40 attack
+ * rating ring still adds 40, a War Axe still replaces the Hand Axe's 3-6, and a
+ * shield's block still stacks on the class guard. Gear is never diluted, it is
+ * offset. And the numbers are chosen so that a level-1 Barbarian holding the
+ * starting kit reproduces `PLAYER_OFFENSE` and `PLAYER_DEFENSE_BASE` exactly:
+ *
+ *   attack rating: 65 (sheet) + 85 (floor) = 150 = `PLAYER_OFFENSE.attackRating`
+ *   damage:      3-6 (axe)  + 7-13 (floor) = 10-19 = `PLAYER_OFFENSE.damage`
+ *
+ * so the encounter tuning that was measured against those constants is once
+ * again the tuning the player actually feels.
+ */
+export const BARBARIAN_ARMS = {
+  attackRating: 85,
+  damage: { min: 7, max: 13 },
+  /** The parry a Barbarian has with or without a shield. Shields stack on top. */
+  blockChance: PLAYER_DEFENSE_BASE.blockChance,
+  physicalReduction: PLAYER_DEFENSE_BASE.physicalReduction,
+  flatReduction: PLAYER_DEFENSE_BASE.flatReduction,
+} as const;
 
 /* -------------------------------------------------------------------------- */
 /* Options                                                                     */
@@ -226,21 +286,47 @@ export class RpgSystem implements GameModule, LootReceiver {
 
   /* -- public surface ------------------------------------------------------ */
 
-  /** The character's live offensive statistics, skill included. */
+  /**
+   * The character's live offensive statistics: gear, attributes, the class
+   * floor and the armed skill, in that order.
+   *
+   * This is the exact object `CombatSystem` resolves the player's swing with,
+   * and it is also what the character screen prints — see the note on
+   * {@link BARBARIAN_ARMS}. One number, one place, or the sheet starts lying
+   * about the fight again.
+   */
   offense(): OffenseStats {
     const base = this.character.offense(PLAYER_OFFENSE.criticalChance);
     const effect = this.character.skills.activeEffect();
+    // The floor lands *before* the skill multiplier, because a skill that says
+    // "+80% damage" means eighty percent of what the Barbarian actually swings
+    // for, not eighty percent of his axe's stamped rating.
+    const armed = addToPhysical(base.damage, BARBARIAN_ARMS.damage);
     return {
       ...base,
-      attackRating: base.attackRating + effect.attackRatingBonus,
+      attackRating: base.attackRating + BARBARIAN_ARMS.attackRating + effect.attackRatingBonus,
       criticalChance: Math.min(1, base.criticalChance + effect.criticalBonus),
-      damage: scaleSpread(base.damage, effect.damageScale),
+      damage: scaleSpread(armed, effect.damageScale),
     };
   }
 
-  /** The character's live defensive statistics. */
+  /**
+   * The character's live defensive statistics.
+   *
+   * Same composition rule as {@link offense}: the sheet supplies armour,
+   * resistances and a shield's block, and the class floor supplies the guard
+   * and the flat toughness that `CombatSystem` was tuned against and that no
+   * item in the game grants at level 1.
+   */
   defense(): DefenseStats {
-    return this.character.defense({ poise: 3 });
+    const sheet = this.character.defense({ poise: 3 });
+    return {
+      ...sheet,
+      // Capped at D2's 75%: a class floor must not be a route around the cap.
+      blockChance: Math.min(0.75, (sheet.blockChance ?? 0) + BARBARIAN_ARMS.blockChance),
+      physicalReduction: (sheet.physicalReduction ?? 0) + BARBARIAN_ARMS.physicalReduction,
+      flatReduction: (sheet.flatReduction ?? 0) + BARBARIAN_ARMS.flatReduction,
+    };
   }
 
   /** Seconds of play, for the save's header. */
@@ -621,6 +707,21 @@ export class RpgSystem implements GameModule, LootReceiver {
 
 /** Howl's token damage. It exists so the hit registers; it is not the point. */
 const HOWL_DAMAGE: DamageSpread = { physical: { min: 1, max: 2 } };
+
+/**
+ * Add a flat physical range on top of a spread, leaving every other type alone.
+ *
+ * Additive rather than a replacement, so the weapon in the Barbarian's hand is
+ * still the thing that changes when he picks up a better one — see
+ * {@link BARBARIAN_ARMS}.
+ */
+export function addToPhysical(spread: DamageSpread, add: DamageRange): DamageSpread {
+  const physical = spread.physical ?? { min: 0, max: 0 };
+  return {
+    ...spread,
+    physical: { min: physical.min + add.min, max: physical.max + add.max },
+  };
+}
 
 /** Multiply every range in a spread. Used to apply a skill's `damageScale`. */
 export function scaleSpread(spread: DamageSpread, scale: number): DamageSpread {
