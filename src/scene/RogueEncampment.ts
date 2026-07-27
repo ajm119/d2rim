@@ -346,43 +346,54 @@ export class RogueEncampment implements Zone {
    * single coldest tenth of the camp was still warm. The brief asks for "a warm
    * pool against a cold surround" and the capture had no cold in it anywhere.
    *
-   * ### What this does about it
+   * ### What the grade could and could not do about it
    *
-   * - `stops: +0.8` lifts that 0.12 plateau to about 0.21, which is where a
-   *   grade has something to work with. It is deliberately less than the two
-   *   stops that would "fix" the mean, because the camp is a night scene and a
-   *   correctly exposed night scene is still dark.
-   * - `contrastPivot: 0.19` with `contrast: 1.24` puts the plateau on both
-   *   sides of the pivot instead of entirely below it, which is what turns one
-   *   value into a range.
-   * - The lift and gain are the actual answer to the monochrome. Blue is lifted
-   *   hard and red pulled *down* in the shadows, so everything the bonfire does
-   *   not reach falls toward blue-grey; the gain keeps red high and blue low so
-   *   everything the bonfire does reach stays amber. That is the separation —
-   *   it is manufactured in the grade because the scene's own light is
-   *   overwhelmingly firelight and no amount of exposure will invent a cold
-   *   source that is not there.
-   * - `temperature: -1250` cools the white point well past the base look's
-   *   −520, and `gamma [1.0, 1.02, 1.12]` brightens the blue channel through
-   *   the midtones (above 1 brightens — see `ColorGradeSettings`), which is the
-   *   term that actually turns the un-lit half of the camp blue-grey rather
-   *   than merely less brown.
-   * - `saturation: 0.84`: the capture's mean saturation was 0.498, nearly all
-   *   of it one hue. Chroma this high in a single hue reads as a colour cast,
-   *   not as colour.
+   * Two rounds of this were measured, and the first one is worth recording
+   * because it is the more instructive:
+   *
+   * | round | change | plateau | warm/cold separation |
+   * |-------|--------|---------|----------------------|
+   * | before | — | 0.103-0.125 | 0.101, both ends warm |
+   * | 1 | +0.8 stop, hard blue lift, cool white point | 0.177-0.211 | **0.086** |
+   * | 2 | as 1, plus a cold hemisphere fill in the scene | 0.190-0.230 | 0.074 |
+   *
+   * Round 1 exposed the frame correctly and made the separation *worse*. That
+   * is the whole lesson: a colour grade is a function of the pixel, so it can
+   * move every hue in the frame together but it cannot pull two populations
+   * apart that are one population. Every surface in the camp was lit by fire
+   * and only by fire, so brightening it produced a brighter monochrome and
+   * cooling it produced a cooler monochrome. The separation had to come from a
+   * second *light* — see the hemisphere fill in `init` — and the grade's job
+   * afterwards is only to keep out of its way.
+   *
+   * So this is deliberately restrained where the first attempt was not:
+   *
+   * - `stops: +0.55`, not +0.8. A correctly exposed night camp is still dark,
+   *   and round 1's extra quarter-stop bought a washed grey field.
+   * - `temperature: -700`, barely past the base look's −520. Round 1's −1250
+   *   cooled the *firelight* as hard as it cooled the ambient, which is exactly
+   *   backwards: it took the amber out of the one warm thing in the picture.
+   * - `gain` neutral. The colour in this frame now comes from two real light
+   *   sources with two real colours; a per-channel gain would flatten them back
+   *   toward each other.
+   * - `saturation: 1.0` rather than a cut. The original 0.498 mean saturation
+   *   was a *cast*, not chroma, and it went away when the fill arrived; cutting
+   *   saturation on top of that only removes the fire's amber.
+   * - The lift keeps a cold pedestal under the shadows so the darkest corners
+   *   of the palisade stay blue-grey rather than going neutral.
    */
   readonly grade = {
-    stops: 0.8,
+    stops: 0.55,
     grade: {
-      temperature: -1250,
-      tint: -0.02,
-      lift: [-0.016, 0.0, 0.062] as const,
-      gamma: [1.0, 1.02, 1.12] as const,
-      gain: [1.09, 1.0, 0.9] as const,
-      saturation: 0.84,
-      contrast: 1.24,
-      contrastPivot: 0.19,
-      vignette: 0.2,
+      temperature: -700,
+      tint: -0.01,
+      lift: [-0.010, 0.0, 0.040] as const,
+      gamma: [1.0, 1.0, 1.04] as const,
+      gain: [1.0, 1.0, 1.0] as const,
+      saturation: 1.0,
+      contrast: 1.18,
+      contrastPivot: 0.17,
+      vignette: 0.22,
     },
   };
 
@@ -489,9 +500,9 @@ export class RogueEncampment implements Zone {
     // night does. Kept well under the bonfire's own contribution so the fire
     // stays the reason to stand in the middle — this is a fill, not a key.
     this.#lighting?.setAmbient({
-      skyColor: 0x5d7392,
+      skyColor: 0x3f5f9c,
       groundColor: 0x2b2620,
-      intensity: 0.62,
+      intensity: 0.85,
     });
 
     this.#buildGround();

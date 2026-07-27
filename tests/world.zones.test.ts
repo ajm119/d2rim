@@ -648,3 +648,152 @@ describe('fireFlicker', () => {
     expect(apart).toBeGreaterThan(300);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Per-zone exposure and grade                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A stand-in for the two objects on `PostStack` a zone trim touches.
+ *
+ * Faked rather than constructed, because a real `PostStack` needs a GPU. What
+ * is *not* faked is the thing under test: the manager's bookkeeping of what it
+ * replaced and its obligation to put it back. The one property that matters is
+ * that the post stack outlives every zone, so any trim a zone leaves behind
+ * becomes the next zone's baseline — which is a bug that would show up as "the
+ * Blood Moor is lit like a cave" three transitions later and be untraceable.
+ */
+function makePost(): {
+  service: unknown;
+  exposure: () => number;
+  settings: () => Record<string, unknown>;
+} {
+  let exposure = 1.72;
+  const settings: Record<string, unknown> = {
+    contrast: 1.12,
+    contrastPivot: 0.235,
+    saturation: 0.94,
+    temperature: -520,
+  };
+  return {
+    service: {
+      composite: {
+        get exposure() {
+          return exposure;
+        },
+        setExposure(value: number) {
+          exposure = value;
+        },
+      },
+      grade: {
+        get settings() {
+          return settings;
+        },
+        set(changes: Record<string, unknown>) {
+          Object.assign(settings, changes);
+        },
+      },
+    },
+    exposure: () => exposure,
+    settings: () => ({ ...settings }),
+  };
+}
+
+describe('ZoneManager per-zone grade', () => {
+  const gradedZone = (id: string, stops: number, grade: Record<string, unknown>): Zone => ({
+    ...makeZone(id),
+    grade: { stops, grade } as NonNullable<Zone['grade']>,
+  });
+
+  it('applies a zone trim as stops on top of the shipping key, not as a replacement', async () => {
+    const ctx = makeContext();
+    const post = makePost();
+    ctx.services.register('render.post', post.service);
+    const manager = new ZoneManager({ startZone: 'cave', fadeSeconds: 0 });
+    manager.register('cave', () => gradedZone('cave', 1, { contrast: 0.94 }));
+    await manager.init(ctx);
+
+    // +1 stop doubles. An implementation that *set* the exposure rather than
+    // scaling it would agree with a correct one only at a baseline of 1.0,
+    // which is exactly the value the shipping frame graph does not use.
+    expect(post.exposure()).toBeCloseTo(3.44, 5);
+    expect(post.settings().contrast).toBe(0.94);
+    // Untouched keys must survive: the trim is a patch, not a preset.
+    expect(post.settings().saturation).toBe(0.94);
+    expect(post.settings().temperature).toBe(-520);
+  });
+
+  it('puts the frame back exactly as it found it when the zone unloads', async () => {
+    const ctx = makeContext();
+    const post = makePost();
+    ctx.services.register('render.post', post.service);
+    const before = { exposure: post.exposure(), settings: post.settings() };
+
+    const manager = new ZoneManager({ startZone: 'cave', fadeSeconds: 0 });
+    manager.register('cave', () => gradedZone('cave', 0.5, { contrast: 0.8, saturation: 0.7 }));
+    manager.register('field', () => makeZone('field'));
+    await manager.init(ctx);
+    expect(post.exposure()).not.toBeCloseTo(before.exposure, 5);
+
+    await manager.travelTo('field');
+    expect(post.exposure()).toBeCloseTo(before.exposure, 5);
+    expect(post.settings()).toEqual(before.settings);
+  });
+
+  it('never lets one zone become the next zone one’s baseline', async () => {
+    const ctx = makeContext();
+    const post = makePost();
+    ctx.services.register('render.post', post.service);
+    const base = post.exposure();
+
+    const manager = new ZoneManager({ startZone: 'a', fadeSeconds: 0 });
+    manager.register('a', () => gradedZone('a', 1, { contrast: 0.5 }));
+    manager.register('b', () => gradedZone('b', 2, { contrast: 0.25 }));
+    await manager.init(ctx);
+    await manager.travelTo('b');
+
+    // b's two stops are measured from the *shipping* key, not from a's doubled
+    // one. Compounding is the failure this test exists to catch: a lap of
+    // three graded zones would otherwise walk the exposure away permanently.
+    expect(post.exposure()).toBeCloseTo(base * 4, 5);
+    expect(post.settings().contrast).toBe(0.25);
+
+    await manager.travelTo('a');
+    expect(post.exposure()).toBeCloseTo(base * 2, 5);
+    expect(post.settings().contrast).toBe(0.5);
+  });
+
+  it('restores the frame when the manager itself is disposed', async () => {
+    const ctx = makeContext();
+    const post = makePost();
+    ctx.services.register('render.post', post.service);
+    const base = post.exposure();
+    const baseSettings = post.settings();
+
+    const manager = new ZoneManager({ startZone: 'cave', fadeSeconds: 0 });
+    manager.register('cave', () => gradedZone('cave', 1.5, { vignette: 0.5 }));
+    await manager.init(ctx);
+    manager.dispose();
+
+    expect(post.exposure()).toBeCloseTo(base, 5);
+    expect(post.settings()).toEqual(baseSettings);
+  });
+
+  it('leaves the frame alone for a zone that declares no trim', async () => {
+    const ctx = makeContext();
+    const post = makePost();
+    ctx.services.register('render.post', post.service);
+    const base = post.exposure();
+
+    const manager = new ZoneManager({ startZone: 'plain', fadeSeconds: 0 });
+    manager.register('plain', () => makeZone('plain'));
+    await manager.init(ctx);
+    expect(post.exposure()).toBe(base);
+    expect(post.settings()).toEqual({
+      contrast: 1.12,
+      contrastPivot: 0.235,
+      saturation: 0.94,
+      temperature: -520,
+    });
+  });
+});

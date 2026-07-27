@@ -313,7 +313,7 @@ const killTime = (variant) =>
     const enemy = b.pick(v);
     if (enemy === null) return null;
     b.clearField([enemy]);
-    b.stage(enemy, 1.15);
+    b.stage(enemy, 1.4);
     await d2.engine.stepFrames(2);
 
     const player = b.player();
@@ -331,14 +331,27 @@ const killTime = (variant) =>
     const anchor = player.position.clone();
     while (enemy.alive && frames < 240) {
       combat.press('light');
-      // Hold the duel geometry: knockback is real and it is not the subject.
-      const forward = player.forward(new T.Vector3());
-      const spot = anchor.clone().addScaledVector(forward, 1.15);
-      enemy.teleport(spot.x, spot.y, spot.z);
-      player.teleport(anchor.x, anchor.y, anchor.z);
+      // Re-plant the *player* only, and only when he has actually drifted.
+      //
+      // An earlier version of this loop teleported both combatants every single
+      // frame to "hold the duel geometry", and it measured 27 swings with **0
+      // landed**. That was the harness, not the game: `Hitbox.track` resolves a
+      // contact by sweeping the blade from its previous pose to its current
+      // one, and teleporting the wielder every frame makes every one of those
+      // sweeps a degenerate zero-length segment. The staging suppressed exactly
+      // the mechanism it was supposed to be measuring — the same shape of
+      // defect as a foot-plant test whose fixture only feeds it the one input
+      // where a broken implementation agrees with a correct one.
+      //
+      // The enemy is left alone entirely. Knockback pushing it out of reach is
+      // a real part of the fight, and it comes back on its own.
+      if (player.position.distanceTo(anchor) > 0.35) {
+        player.teleport(anchor.x, anchor.y, anchor.z);
+      }
       await d2.engine.stepFrames(1, STRIDE);
       frames++;
     }
+    void T;
     off();
     offHit();
     return {
@@ -497,6 +510,10 @@ const providers = await page.evaluate(async () => {
   const before = combat.playerOffense();
   const beforeDefense = combat.characterDefense();
   const beforeDamage = volley(30);
+  // Read *now*, before anything is equipped. Sampling this in the returned
+  // object literal compared a pre-equip swing against a post-equip sheet and
+  // reported a disagreement that did not exist.
+  const sheetAr = rpg.offense().attackRating;
 
   const ring = item({ baseId: 'probe-ring', name: 'Probe Ring of Precision', category: 'ring', slot: 'ring', mods: { attackRating: 300 } });
   character.acquire(ring);
@@ -504,7 +521,10 @@ const providers = await page.evaluate(async () => {
   character.touch();
   const afterAr = combat.playerOffense();
 
-  const plate = item({ baseId: 'probe-body', name: 'Probe Plate of the Whale', category: 'armor', slot: 'body', defense: 240, mods: { defense: 240, allResistances: 40, damageReduced: 6 } });
+  // `damageReduction` / `damageReducedPercent`, not `damageReduced` — the
+  // earlier spelling was not a `ModifierKey` at all, so the plate carried no
+  // mitigation and the check that followed could only ever fail.
+  const plate = item({ baseId: 'probe-body', name: 'Probe Plate of the Whale', category: 'armor', slot: 'body', defense: 240, mods: { defense: 240, resistAll: 40, damageReduction: 4, damageReducedPercent: 0.08 } });
   character.acquire(plate);
   const equippedPlate = character.equip(plate).equipped;
   character.touch();
@@ -526,7 +546,7 @@ const providers = await page.evaluate(async () => {
     present: true,
     offenseKeyRegistered: s.has('rpg.offense'),
     defenseKeyRegistered: s.has('rpg.defense'),
-    sheetAr: rpg.offense().attackRating,
+    sheetAr,
     swingAr: before.attackRating,
     constantAr: 150,
     equippedRing,
@@ -568,11 +588,27 @@ check(
   providers.defBefore !== null,
   JSON.stringify(providers.defBefore),
 );
+// Two separate claims, because defence rating and damage reduction are two
+// separate mechanisms and conflating them is how "armour does nothing" hides:
+// in Diablo II a defence *rating* buys a lower chance to be hit and does not
+// touch the damage of a blow that lands, while `damageReduction` and
+// `damageReducedPercent` reduce what a landed blow applies. The probe blow is
+// `alwaysHits`, so it isolates the second.
 check(
-  'defence is not sheet-only: armour reduces damage actually applied',
+  'the class floor alone already mitigates a landed blow',
+  providers.damageBefore < providers.rawDamage,
+  `raw ${providers.rawDamage} -> ${providers.damageBefore} bare ` +
+    `(5% + 1 flat from BARBARIAN_ARMS)`,
+);
+check(
+  'armour reduction is not sheet-only: it cuts damage actually applied',
   providers.damageAfter < providers.damageBefore,
-  `raw 20 -> ${providers.damageBefore} bare -> ${providers.damageAfter} armoured ` +
-    `(defence ${providers.defBefore?.defense} -> ${providers.defAfter?.defense})`,
+  `${providers.damageBefore} bare -> ${providers.damageAfter} armoured`,
+);
+check(
+  'armour defence rating reaches the sheet the roll uses',
+  (providers.defAfter?.defense ?? 0) > (providers.defBefore?.defense ?? 0),
+  `${providers.defBefore?.defense} -> ${providers.defAfter?.defense}`,
 );
 
 /* -- done ------------------------------------------------------------------ */
