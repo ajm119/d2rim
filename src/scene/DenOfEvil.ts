@@ -611,10 +611,21 @@ export class DenOfEvil implements Zone {
   #buildNavigationPoints(): void {
     const layout = this.layout;
     const mouth = layout.entranceWorld;
-    // `openCellAtDepth`, not `cellAtDepth`: the arrival point is a place a
-    // character stands and a camera orbits, so it needs room around it and not
-    // merely floor under it. See the note on `cellAtDepth`.
-    const inner = openCellAtDepth(layout, 6) ?? layout.entrance;
+    // Land in a room, not in a corridor.
+    //
+    // The arrival point used to be "any floor cell six steps in", which in a
+    // cave built out of tunnels is usually a cell pressed against a wall: the
+    // player arrived 0.5 m off `den.wall.70.43`, the camera's shoulder-offset
+    // pivot started inside the rock, and the arm collapsed on the frame that is
+    // supposed to introduce the Den. An arrival point is a *staging* decision —
+    // it is where a player first sees a place from — so it asks for the
+    // shallowest chamber past the entrance, which is by construction open
+    // ground, and only falls back to a corridor cell if the cave has no
+    // chamber that shallow.
+    const room = layout.chambers
+      .filter((chamber) => chamber.depth >= 4 && chamber.radiusCells >= 2)
+      .sort((a, b) => a.depth - b.depth)[0];
+    const inner = room?.center ?? openCellAtDepth(layout, 6) ?? layout.entrance;
     const innerWorld = worldOfCell(layout, inner.col, inner.row);
     const floorY = (x: number, z: number): number => this.field.heightAt(x, z);
 

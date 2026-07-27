@@ -825,6 +825,28 @@ export class BloodMoor implements Zone {
       mesh.rotation.y = rng.next() * Math.PI * 2;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+
+      // The block the Den's mouth is cut through gets no collider.
+      //
+      // `buildSceneColliders` fits an axis-aligned box, and this block is a
+      // 14 x 16 m displaced ellipsoid with a cave mouth in its side. A box
+      // cannot represent a hole: it fills the mouth, the approach in front of
+      // it and the ground either side, all invisibly. The measured symptom was
+      // a player arriving from the Den standing *inside* `escarpment.4` —
+      // `findClearSpot` could not find open ground within 5 m and fell back to
+      // placing him anyway — with the camera arm pinned at its floor against
+      // the same box.
+      //
+      // Nothing is lost by dropping it: the west bank's shape is in the terrain
+      // heightfield, which is what the player actually walks on, and the mouth
+      // itself is a portal volume the moment he reaches it. Tested by bounds
+      // rather than by index so it stays correct if either the blocks or the
+      // mouth are re-authored.
+      const reach = Math.max(block.s[0], block.s[2]);
+      if (Math.hypot(block.x - DEN_MOUTH.portal.x, block.z - DEN_MOUTH.portal.y) < reach) {
+        mesh.userData['noCollide'] = true;
+      }
+
       this.#root.add(mesh);
       this.#disposables.push(geometry);
     });
