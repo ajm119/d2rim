@@ -49,3 +49,4 @@ probe.html
 __*.mjs
 src/render/**/__*.ts
 tests/_*.test.ts
+tools/_diag.mjs
