@@ -22,6 +22,7 @@ import {
   RENDER_QUALITIES,
   RENDER_TIERS,
   RenderSettings,
+  detectQuality,
   type RenderQuality,
 } from '../src/render/RenderSettings';
 
@@ -75,6 +76,48 @@ describe('the pixel-ratio ladder', () => {
   it('lets an explicit high/ultra opt-in have the full ratio', () => {
     expect(RENDER_TIERS.high.pixelRatioCap).toBe(2);
     expect(RENDER_TIERS.ultra.pixelRatioCap).toBe(2);
+  });
+});
+
+describe('a Retina laptop', () => {
+  /** The MacBook Air M4's default scaled resolution, and its DPR. */
+  const AIR = { width: 1512, height: 945, dpr: 2 };
+
+  it('is profiled against the fill it would be asked for, not its panel', () => {
+    // The signal used to cap at 2, which measured 5.7 Mpx and tripped the 5 Mpx
+    // rule — demoting a 10-core M4 to `low` for a cost it would never pay,
+    // because automatic detection never selects a tier that renders at DPR 2.
+    const profile = {
+      deviceMemoryGb: 8,
+      cores: 10,
+      backingStorePixels: Math.round(
+        AIR.width * AIR.height * RENDER_TIERS.medium.pixelRatioCap ** 2,
+      ),
+      mobile: false,
+    };
+    expect(profile.backingStorePixels).toBeLessThan(5_000_000);
+    expect(detectQuality(profile)).toBe('medium');
+  });
+
+  it('still lands on low when the machine really is small', () => {
+    expect(
+      detectQuality({ deviceMemoryGb: 4, cores: 10, backingStorePixels: 2_000_000, mobile: false }),
+    ).toBe('low');
+    expect(
+      detectQuality({ deviceMemoryGb: 8, cores: 2, backingStorePixels: 2_000_000, mobile: false }),
+    ).toBe('low');
+  });
+
+  it('renders 3.22 Mpx at medium instead of the uncapped 5.72', () => {
+    const capped = new RenderSettings({ quality: 'medium' }).bufferSize(
+      AIR.width,
+      AIR.height,
+      AIR.dpr,
+    );
+    const uncapped = AIR.width * AIR.dpr * AIR.height * AIR.dpr;
+    expect(capped.megapixels).toBeCloseTo(3.22, 2);
+    // A 44% cut in fragments, on the tier a first-time visitor actually gets.
+    expect(capped.megapixels / (uncapped / 1e6)).toBeCloseTo(0.5625, 3);
   });
 });
 

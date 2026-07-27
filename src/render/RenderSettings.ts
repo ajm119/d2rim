@@ -252,7 +252,19 @@ export function readDeviceProfile(): DeviceProfile {
     return { deviceMemoryGb: null, cores: null, backingStorePixels: 0, mobile: false };
   }
   const nav = navigator as Navigator & { deviceMemory?: number };
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  // Count the pixels this machine would actually be asked to shade, not the
+  // pixels its panel has.
+  //
+  // This used to cap at 2, which made the backing-store signal a proxy for
+  // "is this a Retina display" — and Retina displays are common on exactly the
+  // capable machines the ladder should not be demoting. A 1512x945 MacBook Air
+  // measured 5.7 Mpx, tripped the 5 Mpx rule and dropped to `low` on the
+  // strength of a fill cost the renderer was then never going to pay: automatic
+  // detection only ever chooses between `low` and `medium`, and `medium` caps
+  // the ratio at 1.5. So the profile is measured against that cap, which turns
+  // the signal back into the question it was meant to ask — can this machine
+  // shade the frame we would give it — and the same Air measures 3.2 Mpx.
+  const ratio = Math.min(window.devicePixelRatio || 1, RENDER_TIERS.medium.pixelRatioCap);
   return {
     deviceMemoryGb: typeof nav.deviceMemory === 'number' ? nav.deviceMemory : null,
     cores: typeof nav.hardwareConcurrency === 'number' ? nav.hardwareConcurrency : null,
