@@ -110,6 +110,7 @@ import { texture as textureNodeFactory } from 'three/tsl';
 import type { GameContext, GameModule } from '../core/types';
 
 import { AtmosphereKey, type AtmosphereService } from './Atmosphere';
+import { initialExposureStops } from './DisplaySettings';
 import type { CascadedShadowMapNode } from './CascadedShadowMaps';
 import { IBLModule, IBLKey, type IBLService } from './IBL';
 import { LightingModule, LightingKey, lightImportance, type LightingService } from './Lighting';
@@ -693,6 +694,12 @@ export interface FrameGraphOptions {
   readonly quality?: RenderQuality;
   /** Time-of-day preset. Blood Moor's cold overcast morning by default. */
   readonly preset?: 'bloodMoor' | 'dawn' | 'clearNoon' | 'dusk' | 'night' | 'storm';
+  /**
+   * The player's brightness trim in stops. Defaults to `?exposure=` or the
+   * persisted setting. Pass an explicit value to make a capture reproducible
+   * regardless of what is in the harness's local storage.
+   */
+  readonly exposureStops?: number;
 }
 
 /**
@@ -792,7 +799,13 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       // Retained for the metering path, which is still live for gameplay
       // scenes; it has no effect while `autoExposure` is off.
       middleGrey: 0.17,
-      exposureCompensation: 0.0,
+      // The *player's* brightness trim, in stops, on top of the authored key.
+      // Deliberately not zero-by-construction: `?exposure=` and the pause-menu
+      // slider both land here, and they have to be in effect on the very first
+      // presented frame or a player who turned the game up last session gets a
+      // flash of the old exposure every time they load. See
+      // `render/DisplaySettings` for why this is compensation and not exposure.
+      exposureCompensation: options.exposureStops ?? initialExposureStops(),
       autoExposureRange: [0.8, 2.5],
       adaptationUp: 0.9,
       adaptationDown: 2.0,

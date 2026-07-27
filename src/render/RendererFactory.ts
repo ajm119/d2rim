@@ -4,15 +4,39 @@
  * Creates the one renderer the game uses, wrapped in a backend-agnostic
  * {@link RendererHandle}.
  *
- * ### Backend strategy
+ * ### Backend strategy — WebGL2 is the default, WebGPU is opt-in
  *
- * WebGPU is attempted first. On any failure — no `navigator.gpu`, a null
- * adapter, a device-lost during `init()`, a driver that rejects the swapchain —
- * the factory falls back to WebGL2 and logs which backend won. The fallback is
- * a `WebGPURenderer` constructed with `forceWebGL: true`, i.e. three.js's own
- * `WebGLBackend`, rather than the classic `WebGLRenderer`. That choice is
- * deliberate and is the single implementation-level departure from the literal
- * wording of the architecture contract:
+ * This used to prefer WebGPU and fall back to WebGL2 only when the device
+ * refused to come up at all. That was the wrong default, and it shipped a
+ * broken game to every visitor with a WebGPU-capable browser.
+ *
+ * The reason is documented in full on `Volumetrics.bakeFogNoiseTexture`: three
+ * r185's WebGPU backend uploads a `Data3DTexture` as a stack of separate 2D
+ * slices and then binds it through a 2D view, which Dawn rejects with
+ *
+ * ```
+ * The dimension (TextureViewDimension::e2D) of the texture view is not
+ * compatible with the dimension (TextureDimension::e3D) of [Texture "…"]
+ * ```
+ *
+ * A rejected bind group poisons the command encoder, so the *whole frame's*
+ * command buffer is dropped at submit — every frame, forever. The observable
+ * result on a real WebGPU machine is precisely what was reported: a black
+ * viewport with a live DOM HUD over it, and a frame rate in the single digits
+ * because Dawn is formatting and dispatching a validation error per frame
+ * instead of drawing. Shipping a default path that is known to produce that is
+ * worse than shipping the slower-but-correct one.
+ *
+ * So: **`auto` resolves to WebGL2.** `?backend=webgpu` opts in explicitly, and
+ * still falls back to WebGL2 if the device cannot be obtained. The choice is
+ * logged with the reason either way. When the three.js `Data3DTexture` upload
+ * is genuinely fixed, flipping {@link AUTO_BACKEND} back is a one-line change.
+ *
+ * The WebGL2 renderer is a `WebGPURenderer` constructed with
+ * `forceWebGL: true`, i.e. three.js's own `WebGLBackend`, rather than the
+ * classic `WebGLRenderer`. That choice is deliberate and is the single
+ * implementation-level departure from the literal wording of the architecture
+ * contract:
  *
  * 1. TSL node materials are a feature of the node renderer architecture. A
  *    classic `WebGLRenderer` cannot render them at all, so falling back to it
@@ -42,7 +66,27 @@ import { installWebGPUCompat } from './webgpuCompat';
 export interface CreateRendererOptions {
   /** Force a backend instead of probing. Defaults to the URL param, else auto. */
   backend?: RendererBackend | 'auto';
-  /** MSAA on the default framebuffer. Default true. */
+  /**
+   * MSAA on the **default framebuffer**. Default `false`, and that is a
+   * measured decision rather than a lowering of quality.
+   *
+   * The game never draws geometry to the default framebuffer. `PostStack`
+   * renders the scene into its own `samples: 0` half-float target, runs the
+   * whole chain there, and presents by blitting one full-screen triangle. MSAA
+   * antialiases *primitive edges*, and a full-screen triangle has none inside
+   * the viewport — so every sample beyond the first is resolved and discarded
+   * without ever changing a pixel. Edge quality comes from FXAA or TAA in the
+   * chain, exactly as the tier table says.
+   *
+   * What it costs is not small. The default framebuffer is sized by the
+   * drawing buffer, i.e. CSS pixels × `devicePixelRatio` (capped at 2). On a
+   * 1080p display at DPR 2 that is 3840×2160; at 4× MSAA the colour buffer
+   * alone is 3840·2160·4 bytes·4 samples ≈ **127 MB**, plus a multisampled
+   * depth buffer again, plus a full-resolution resolve every single frame. For
+   * a project whose deployed build was being killed by Chromium's
+   * out-of-memory handler, that is a large amount of memory and bandwidth
+   * bought for literally nothing.
+   */
   antialias?: boolean;
   /**
    * Upper bound on `devicePixelRatio`. Default 2 — beyond that the fill-rate
@@ -53,12 +97,76 @@ export interface CreateRendererOptions {
   exposure?: number;
 }
 
+/**
+ * What `auto` means.
+ *
+ * WebGL2, deliberately — see the module header. This is the single place to
+ * change once three.js uploads `Data3DTexture` correctly on WebGPU.
+ */
+export const AUTO_BACKEND: RendererBackend = 'webgl2';
+
+/**
+ * Why `auto` resolves the way it does. Logged at boot and shown by the debug
+ * overlay so a player can report which path they actually got.
+ */
+export const AUTO_BACKEND_REASON =
+  'three r185 binds Data3DTexture through a 2D view on WebGPU, which Dawn ' +
+  'rejects and which drops every frame that touches the fog volumes. ' +
+  'Opt in with ?backend=webgpu.';
+
 /** Backend hint parsed from `?backend=` on the current URL. */
-function backendFromUrl(): RendererBackend | 'auto' {
-  if (typeof window === 'undefined') return 'auto';
-  const value = new URLSearchParams(window.location.search).get('backend');
+export function backendFromUrl(search?: string): RendererBackend | 'auto' {
+  const query =
+    search ?? (typeof window === 'undefined' ? '' : window.location.search);
+  const value = new URLSearchParams(query).get('backend');
   if (value === 'webgl2' || value === 'webgpu') return value;
   return 'auto';
+}
+
+/**
+ * Uncaptured WebGPU validation/OOM errors observed since boot.
+ *
+ * Zero on WebGL2 and on a healthy WebGPU device. A number that climbs with the
+ * frame counter is the signature of the defect described in the module header,
+ * and it is the one instrument that can prove it on a machine this project has
+ * no access to. Surfaced by `ui/DebugOverlay`.
+ */
+let uncapturedErrors = 0;
+let firstUncapturedError: string | null = null;
+
+export function gpuErrorReport(): { count: number; first: string | null } {
+  return { count: uncapturedErrors, first: firstUncapturedError };
+}
+
+/** Test-only reset. */
+export function resetGpuErrorReport(): void {
+  uncapturedErrors = 0;
+  firstUncapturedError = null;
+}
+
+/**
+ * Count uncaptured device errors instead of letting them scroll past.
+ *
+ * WebGPU reports a bad binding as an *uncaptured device error*, not as a throw:
+ * `render()` returns normally and the submit is silently dropped. Without a
+ * listener the only evidence is console spam that nobody reads; with one, the
+ * overlay can say "1 800 GPU errors in 1 800 frames" and the diagnosis takes
+ * seconds rather than a session.
+ */
+function watchDeviceErrors(renderer: THREE.Renderer): boolean {
+  const device = (renderer as unknown as { backend?: { device?: unknown } }).backend?.device as
+    | { addEventListener?: (type: string, listener: (event: unknown) => void) => void }
+    | undefined;
+  if (typeof device?.addEventListener !== 'function') return false;
+  device.addEventListener('uncapturederror', (event: unknown) => {
+    uncapturedErrors++;
+    const message = (event as { error?: { message?: string } })?.error?.message ?? 'unknown';
+    if (firstUncapturedError === null) {
+      firstUncapturedError = message;
+      console.error(`[RendererFactory] first uncaptured WebGPU error: ${message}`);
+    }
+  });
+  return true;
 }
 
 /** Structural probe for `Renderer.backend` without importing backend classes. */
@@ -137,7 +245,7 @@ export async function createRenderer(
   options: CreateRendererOptions = {},
 ): Promise<RendererHandle> {
   const requested = options.backend ?? backendFromUrl();
-  const antialias = options.antialias ?? true;
+  const antialias = options.antialias ?? false;
   const pixelRatioCap = options.pixelRatioCap ?? 2;
   const exposure = options.exposure ?? 1.0;
 
@@ -148,13 +256,18 @@ export async function createRenderer(
   let renderer: THREE.WebGPURenderer | null = null;
   let backend: RendererBackend = 'webgl2';
 
-  if (requested !== 'webgl2') {
+  // `auto` no longer means "try WebGPU". Only an explicit `?backend=webgpu`
+  // (or an explicit option) reaches the WebGPU path — see the module header.
+  const resolved: RendererBackend = requested === 'auto' ? AUTO_BACKEND : requested;
+
+  if (resolved === 'webgpu') {
     try {
       const candidate = new THREE.WebGPURenderer({ canvas, antialias, forceWebGL: false });
       await candidate.init();
       if (isWebGPUBackend(candidate)) {
         renderer = candidate;
         backend = 'webgpu';
+        watchDeviceErrors(candidate);
       } else {
         // three.js silently fell back to its WebGL backend (typically a null
         // adapter). Discard and take the explicit path so the intent is clear.
@@ -182,6 +295,16 @@ export async function createRenderer(
       `compute=${capabilities.compute} float32Filterable=${capabilities.float32Filterable} ` +
       `maxSamples=${capabilities.maxSamples}`,
   );
+  if (requested === 'auto') {
+    console.info(
+      `[RendererFactory] "${AUTO_BACKEND}" is the default backend. ${AUTO_BACKEND_REASON}`,
+    );
+  } else if (backend === 'webgpu') {
+    console.warn(
+      '[RendererFactory] WebGPU was requested explicitly. This path is known ' +
+        `broken in three r185: ${AUTO_BACKEND_REASON} Use ?backend=webgl2 to go back.`,
+    );
+  }
 
   const three = renderer;
 

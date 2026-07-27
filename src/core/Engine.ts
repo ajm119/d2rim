@@ -36,6 +36,19 @@ import { Clock, createTimeState, FixedStepAccumulator } from './Time';
 import type { GameContext, GameModule, RendererHandle, TimeState } from './types';
 import { createRenderer, type CreateRendererOptions } from '../render/RendererFactory';
 
+/**
+ * Reset three's per-frame render counters.
+ *
+ * Structurally typed rather than narrowed to a renderer class: `info` is not on
+ * the frozen `RendererHandle` contract, and a test double or a future backend
+ * may not have one. A missing `info` is not an error, it just means there is
+ * nothing to report.
+ */
+function resetRendererInfo(renderer: RendererHandle): void {
+  const info = (renderer.three as unknown as { info?: { reset?: () => void } }).info;
+  info?.reset?.();
+}
+
 export interface EngineOptions {
   /** The canvas the renderer draws into. Also the input/pointer-lock target. */
   canvas: HTMLCanvasElement;
@@ -414,6 +427,16 @@ export class Engine {
       this.#time.delta = scaled;
       this.#time.elapsed += scaled;
       this.#time.frame++;
+
+      // three's node renderer resets its own counters from *its* animation
+      // loop, which this engine does not use — it drives frames itself so that
+      // `stepFrames` can be deterministic. Without this call `info.render`
+      // accumulates monotonically for the life of the session, so "draw calls"
+      // in the debug overlay would be "draw calls since boot" and the one
+      // number a player can report about their own GPU would be meaningless.
+      // three documents exactly this: apps with their own loop must reset once
+      // per frame.
+      resetRendererInfo(renderer);
 
       const steps = this.#accumulator.begin(rawDelta, this.#time.scale);
       const fixedDelta = this.#accumulator.fixedDelta;

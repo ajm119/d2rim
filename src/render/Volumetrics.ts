@@ -491,6 +491,21 @@ export interface VolumetricsStats {
   readonly shadowed: boolean;
   /** Whether temporal reprojection had a valid history this frame. */
   readonly temporal: boolean;
+  /** Whether the 3D detail-noise volume is bound. Always false on WebGPU. */
+  readonly detailNoise: boolean;
+  /** Whether the froxel path latched off. Latches once and never retries. */
+  readonly froxelFailed: boolean;
+  /**
+   * Frames of WebGPU validation-error scope still to be spent.
+   *
+   * Counts *down* from 4 and stops. It is in the stats because "is the error
+   * scope running every frame?" was a live hypothesis for the 4 fps report and
+   * a number beats an argument: if this reads 0 while the frame counter climbs,
+   * the scope is not in the steady-state path.
+   */
+  readonly errorScopeFramesLeft: number;
+  /** Froxel dispatches attempted since boot. Stops climbing once latched off. */
+  readonly froxelDispatches: number;
 }
 
 /**
@@ -566,6 +581,24 @@ export interface VolumetricsOptions {
   noiseTextureSize?: number;
   /** Seed for the baked noise. Default `'d2rim.fog'`. */
   noiseSeed?: string | number;
+  /**
+   * Whether to bake and bind the 3D detail-noise volume at all.
+   *
+   * `'auto'` (the default) means **on except on WebGPU**, and that exception is
+   * the whole reason this option exists. See {@link bakeFogNoiseTexture}: three
+   * r185 uploads a `Data3DTexture` as separate 2D slices on the WebGPU backend
+   * and binds it through a 2D view, which Dawn rejects. A rejected bind group
+   * poisons the command encoder, so the entire frame's command buffer is
+   * dropped at submit — not just the fog. That is a black screen at a few
+   * frames a second, and it happens on *both* fog paths, because the froxel
+   * injection kernel and the ray-march fragment shader inline the same
+   * `mediaAt`, and `mediaAt` is what samples this volume.
+   *
+   * The evaluator already handles a null volume (the density simply loses its
+   * turbulence and keeps its height falloff), so dropping it is a small visual
+   * cost and the difference between a picture and no picture.
+   */
+  detailNoise?: 'auto' | 'on' | 'off';
   /** Ray-march steps on the WebGL2 path. Overridden by the tier. */
   marchSteps?: number;
   params?: Partial<GlobalFogParams>;
@@ -1048,6 +1081,22 @@ export function bakeFogNoiseTexture(size = 32, seed: string | number = 'd2rim.fo
   return texture;
 }
 
+/**
+ * Resolve `detailNoise` against the live backend.
+ *
+ * Exported so `tests/volumetrics.detailNoise.test.ts` can assert the policy
+ * without standing up a renderer: this is a shipping-correctness decision, not
+ * an implementation detail, and it should fail a test if someone flips it back.
+ */
+export function detailNoiseEnabled(
+  setting: 'auto' | 'on' | 'off',
+  backend: string,
+): boolean {
+  if (setting === 'off') return false;
+  if (setting === 'on') return true;
+  return backend !== 'webgpu';
+}
+
 function hashString(value: string): number {
   let h = 2166136261;
   for (let i = 0; i < value.length; i++) {
@@ -1263,6 +1312,17 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
    * every binding in the graph actually exercised. Four is that plus slack.
    */
   #froxelWatchFrames = 4;
+  /**
+   * Froxel dispatches attempted since boot.
+   *
+   * Instrumentation, and it settles a specific question. `#failFroxel` latches
+   * (`if (this.#froxelFailed) return`) and `#chooseMode` consults that latch,
+   * so once the froxel path fails it is never retried — this counter freezes.
+   * A counter that tracked the frame number would have meant the opposite, and
+   * a per-frame retry of a failing compute dispatch really would explain a
+   * 250 ms frame. It does not; the cost is elsewhere. See the module header.
+   */
+  #froxelDispatches = 0;
   #warnedNoRenderer = false;
   #temporalValid = false;
   #frameCounter = 0;
@@ -1287,6 +1347,7 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
       temporalBlend: Math.min(1, Math.max(0.01, options.temporalBlend ?? 0.06)),
       noiseTextureSize: options.noiseTextureSize ?? 32,
       noiseSeed: options.noiseSeed ?? 'd2rim.fog',
+      detailNoise: options.detailNoise ?? 'auto',
       registerService: options.registerService ?? true,
     };
     this.#uTemporalBlend.value = this.#options.temporalBlend;
@@ -1316,10 +1377,19 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
     this.#ambient = ctx.services.tryGet(VolumetricAmbientKey);
     this.#motion = tryGetMotionVectors(ctx);
 
-    this.#noiseTexture = bakeFogNoiseTexture(
-      this.#options.noiseTextureSize,
-      this.#options.noiseSeed,
-    );
+    // The one decision that separates "a dark scene" from "no scene at all" on
+    // WebGPU. See `VolumetricsOptions.detailNoise`.
+    const wantsNoise = detailNoiseEnabled(this.#options.detailNoise, ctx.renderer.backend);
+    this.#noiseTexture = wantsNoise
+      ? bakeFogNoiseTexture(this.#options.noiseTextureSize, this.#options.noiseSeed)
+      : null;
+    if (!wantsNoise) {
+      console.info(
+        `[Volumetrics] 3D detail noise disabled (detailNoise="${this.#options.detailNoise}", ` +
+          `backend="${ctx.renderer.backend}"). Fog keeps its height falloff and loses its ` +
+          'turbulence; nothing binds a Data3DTexture, so no submit can be rejected for it.',
+      );
+    }
 
     this.#syncUniformsFromParams();
     this.#mode = this.#chooseMode(ctx);
@@ -1438,6 +1508,10 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
       registeredVolumes: this.#volumes.length,
       shadowed: this.#shadows !== undefined,
       temporal: this.#uHistoryValid.value === 1,
+      detailNoise: this.#noiseTexture !== null,
+      froxelFailed: this.#froxelFailed,
+      errorScopeFramesLeft: Math.max(0, this.#froxelWatchFrames),
+      froxelDispatches: this.#froxelDispatches,
     };
   }
 
@@ -1832,6 +1906,7 @@ export class VolumetricsModule implements GameModule, VolumetricsService {
   /* -- internals: froxel dispatch ---------------------------------------- */
 
   #renderFroxelVolume(renderer: NodeRenderer): void {
+    this.#froxelDispatches++;
     let froxel = this.#froxel;
     if (froxel === null) {
       try {

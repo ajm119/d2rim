@@ -489,6 +489,18 @@ export class CompositePass implements PostPass {
     this.setExposure(exposureFromEV100(ev100));
   }
 
+  /**
+   * Extra stops on top of the manual or metered value.
+   *
+   * This is the player's brightness trim (see `render/DisplaySettings`), which
+   * is why it is readable: the pause menu has to be able to show what is
+   * currently in force, including a value that came from `?exposure=` rather
+   * than from the slider.
+   */
+  get exposureCompensation(): number {
+    return this.#compensation;
+  }
+
   /** Extra stops applied on top of the manual or metered value. */
   setExposureCompensation(stops: number): void {
     this.#compensation = stops;

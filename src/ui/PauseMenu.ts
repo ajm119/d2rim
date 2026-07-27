@@ -20,10 +20,31 @@
  * `IndexedDbSaveStore.write` resolves when the transaction commits. The button
  * reports the outcome, because a save button that gives no feedback is a save
  * button players press four times.
+ *
+ * ### Brightness
+ *
+ * The menu owns the one display setting the art direction cannot make for the
+ * player: a brightness trim in stops. It writes through
+ * `PostStack.composite.setExposureCompensation` — *not* `setExposure`, which
+ * belongs to the art direction and is overwritten on every zone transition by
+ * `ZoneManager`'s `ZoneGrade` trim — and persists to local storage immediately,
+ * so it survives a crash as well as a quit. See `render/DisplaySettings`.
+ *
+ * The slider is live while the menu is open: the world is still rendering
+ * behind the scrim (only `time.scale` is zero), so the player can see what they
+ * are choosing rather than adjusting blind and closing the menu to find out.
  */
 
 import type { GameContext, GameModule } from '../core/types';
 import { QuestSystemKey, type QuestSystem } from '../quest/QuestSystem';
+import {
+  EXPOSURE_STOPS_MAX,
+  EXPOSURE_STOPS_MIN,
+  clampExposureStops,
+  loadExposureStops,
+  saveExposureStops,
+} from '../render/DisplaySettings';
+import { PostStackKey, type PostStack } from '../render/post/PostStack';
 import { RpgSystemKey, type RpgSystem } from '../rpg/RpgSystem';
 import { AUTOSAVE_SLOT } from '../rpg/SaveGame';
 import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, screenRoot, UI, Z } from './theme';
@@ -38,6 +59,9 @@ export class PauseMenu implements GameModule, UiScreen {
   #ctx: GameContext | null = null;
   #log: HTMLDivElement | null = null;
   #status: HTMLDivElement | null = null;
+  #slider: HTMLInputElement | null = null;
+  #readout: HTMLDivElement | null = null;
+  #stops = 0;
   #savedScale = 1;
 
   constructor() {
@@ -62,6 +86,15 @@ export class PauseMenu implements GameModule, UiScreen {
     this.#savedScale = ctx.time.scale;
     ctx.time.scale = 0;
     ctx.events.emit('engine:pause', { paused: true });
+
+    // Show what is actually in force, which is not necessarily what is stored:
+    // `?exposure=` deliberately overrides the saved value without persisting.
+    const live = ctx.services.tryGet<PostStack>(PostStackKey)?.composite.exposureCompensation;
+    if (live !== undefined) {
+      this.#stops = clampExposureStops(live);
+      if (this.#slider !== null) this.#slider.value = String(this.#stops);
+      this.#syncReadout();
+    }
   }
 
   onClose(): void {
@@ -133,6 +166,8 @@ export class PauseMenu implements GameModule, UiScreen {
     this.#status = status;
     panel.appendChild(status);
 
+    panel.appendChild(this.#buildBrightness());
+
     panel.appendChild(
       el('div', headingStyle(`margin-top:6px;border-top:1px solid ${UI.border};padding-top:14px;`), 'Quest log'),
     );
@@ -141,6 +176,87 @@ export class PauseMenu implements GameModule, UiScreen {
     panel.appendChild(log);
 
     this.root.appendChild(panel);
+  }
+
+  /**
+   * The brightness row: label, slider, live readout, reset.
+   *
+   * Range and step come from `DisplaySettings` rather than being written here,
+   * so the URL override, the persisted value and this control can never
+   * disagree about what is representable.
+   */
+  #buildBrightness(): HTMLElement {
+    const row = el(
+      'div',
+      `display:flex;align-items:center;gap:10px;flex-wrap:wrap;` +
+        `border-top:1px solid ${UI.border};padding-top:14px;`,
+    );
+    row.appendChild(
+      el('div', `color:${UI.text};font:600 13px/1.5 ${UI.font};min-width:78px;`, 'Brightness'),
+    );
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = String(EXPOSURE_STOPS_MIN);
+    slider.max = String(EXPOSURE_STOPS_MAX);
+    slider.step = '0.05';
+    slider.dataset['d2rim'] = 'menu-brightness';
+    slider.setAttribute('style', 'flex:1 1 200px;min-width:160px;accent-color:' + UI.accent + ';');
+    slider.setAttribute('aria-label', 'Brightness, in stops');
+    this.#slider = slider;
+
+    const readout = el(
+      'div',
+      `color:${UI.textDim};font:12px/1.6 ${UI.font};min-width:96px;text-align:right;`,
+    );
+    this.#readout = readout;
+
+    // Seed from storage rather than from the post stack: the stack may not have
+    // registered yet at `init` time, and storage is the authority the stack was
+    // itself seeded from at boot.
+    this.#stops = clampExposureStops(loadExposureStops());
+    slider.value = String(this.#stops);
+
+    const apply = (stops: number, persist: boolean): void => {
+      this.#stops = clampExposureStops(stops);
+      slider.value = String(this.#stops);
+      this.#applyExposure();
+      if (persist) saveExposureStops(this.#stops);
+    };
+
+    // `input` for the live preview, `change` for the commit. Persisting on
+    // every `input` would write to local storage a hundred times per drag.
+    slider.addEventListener('input', () => apply(Number.parseFloat(slider.value), false));
+    slider.addEventListener('change', () => apply(Number.parseFloat(slider.value), true));
+
+    row.append(slider, readout, this.#button('Reset', 'menu-brightness-reset', () => apply(0, true)));
+    this.#syncReadout();
+    return row;
+  }
+
+  /**
+   * Push the trim into the post stack.
+   *
+   * Public in effect (the slider and `onOpen` both call it) because the stack
+   * is resolved lazily: `PostStack` registers its service during its own `init`
+   * and this module is registered after it, but a test may build the menu with
+   * no renderer at all and must not crash for it.
+   */
+  #applyExposure(): void {
+    this.#ctx?.services.tryGet<PostStack>(PostStackKey)?.composite.setExposureCompensation(
+      this.#stops,
+    );
+    this.#syncReadout();
+  }
+
+  #syncReadout(): void {
+    const readout = this.#readout;
+    if (readout === null) return;
+    const stops = this.#stops;
+    readout.textContent =
+      stops === 0
+        ? 'default'
+        : `${stops > 0 ? '+' : ''}${stops.toFixed(2)} EV  ×${(2 ** stops).toFixed(2)}`;
   }
 
   #button(label: string, id: string, onClick: () => void): HTMLButtonElement {
