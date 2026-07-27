@@ -435,7 +435,6 @@ const packFight = (count, opts = {}) =>
       const d2 = window.__d2rim;
       const T = d2.three;
 
-      d.reviveAll();
       const pack = d.director().enemies.filter((e) => e.alive).slice(0, n);
       if (pack.length < n) return null;
       d.clearField(pack);
@@ -550,29 +549,28 @@ const packFight = (count, opts = {}) =>
     },
   );
 
-/* -- 1. bare fists of a starting Barbarian, one on one --------------------- */
-
 const VARIANTS = ['minion', 'warrior', 'rogue', 'mage'];
-console.log('\n-- duels, starting gear --');
-for (const variant of VARIANTS) {
-  const r = await duel(variant);
-  results[`duel.${variant}`] = r;
-  if (r === null) {
-    check(`a ${variant} is available to fight`, false, 'no full-health target of that variant');
-    continue;
+
+/** Fight every variant once, on the roster this boot came up with. */
+const duelAll = async (prefix) => {
+  for (const variant of VARIANTS) {
+    const r = await duel(variant);
+    results[`${prefix}.${variant}`] = r;
+    if (r === null) {
+      check(`${prefix}: a ${variant} is available to fight`, false, 'none on the roster');
+      continue;
+    }
+    console.log(`  ${variant}: ${JSON.stringify(r)}`);
   }
-  console.log(`  ${variant}: ${JSON.stringify(r)}`);
-}
+  if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
+};
 
-if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
+/* -- 1. a starting Barbarian, one on one ----------------------------------- */
 
-/* -- 2. the same fights with a magic weapon --------------------------------
- *
- * Before the pack fight, not after it. A pack fight runs long enough for the
- * skeletons killed in its first seconds to sink and be culled from the
- * director, and a culled skeleton cannot be revived for the next measurement.
- * Duels are short enough that `duel` can revive its target before the corpse
- * goes; the pack fight therefore goes last, when nothing is measured after it. */
+results.boot1 = await boot('phase 1 — duels, starting kit');
+await duelAll('duel');
+
+/* -- 2. the same fights with the best weapon the drop table will give ------ */
 
 /**
  * Equip the best magic weapon the drop table will produce, and report what the
@@ -653,51 +651,18 @@ const equipMagicWeapon = () =>
     };
   });
 
-/**
- * Put the starting weapon back on, so the pack fight is fought in the kit a new
- * player actually has rather than in whatever the drop table happened to give
- * this run.
- */
-const restoreStartingWeapon = () =>
-  page.evaluate(() => {
-    const d = window.__duel;
-    const rpg = d.rpg();
-    const item = d.startingWeapon ?? null;
-    if (rpg === undefined || item === null) return null;
-    const ok = rpg.character.equip(item).equipped;
-    rpg.character.touch();
-    const o = d.combat().playerOffense();
-    return {
-      restored: ok,
-      weapon: rpg.character.equipment.get('weapon')?.name ?? null,
-      min: o.damage.physical.min,
-      max: o.damage.physical.max,
-    };
-  });
-
-console.log('\n-- duels, magic weapon --');
+results.boot2 = await boot('phase 2 — duels, best rolled weapon');
 const gear = await equipMagicWeapon();
 results.gear = gear;
 console.log(`  gear: ${JSON.stringify(gear)}`);
-
-for (const variant of VARIANTS) {
-  const r = await duel(variant);
-  results[`magic.${variant}`] = r;
-  if (r === null) {
-    check(`a ${variant} is available for the magic-weapon duel`, false, 'none left');
-    continue;
-  }
-  console.log(`  ${variant} (magic): ${JSON.stringify(r)}`);
-}
-
-if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
+await duelAll('magic');
 
 /* -- 3. a three-skeleton pack, starting gear ------------------------------- */
 
-const restored = await restoreStartingWeapon();
-results.restored = restored;
-console.log(`\n-- pack fight, starting gear --\n  restored: ${JSON.stringify(restored)}`);
-
+// A fresh boot rather than an unequip: the character comes back level 1 with
+// the Hand Axe already on, which is exactly the state this fight is asking
+// about — can a *new* player survive a pack.
+results.boot3 = await boot('phase 3 — three at once, starting kit');
 const pack = await packFight(3);
 results['pack.base'] = pack;
 console.log(`  pack: ${JSON.stringify(pack)}`);
@@ -815,9 +780,13 @@ console.log(
     `— reported, not asserted; see the note above this check`,
 );
 check(
-  'the starting weapon went back on before the pack fight',
-  restored !== null && restored.restored === true,
-  `${restored?.weapon}, ${restored?.min}-${restored?.max} physical`,
+  'every phase started from a full six-skeleton roster',
+  [results.boot1, results.boot2, results.boot3].every(
+    (b) => Object.values(b?.census ?? {}).reduce((a, x) => a + x, 0) === 6,
+  ),
+  [results.boot1, results.boot2, results.boot3]
+    .map((b) => JSON.stringify(b?.census ?? null))
+    .join(' '),
 );
 
 check(
