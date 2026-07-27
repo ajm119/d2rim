@@ -1,310 +1,557 @@
 # d2rim
 
-A Skyrim-style third/first-person re-imagining of Diablo II Act I, built in
-three.js.
+A Skyrim-style third/first-person re-imagining of **Diablo II Act I**, built in
+three.js and taken to a playable vertical slice.
 
-Barbarian, melee-focused, third-person by default with a first-person toggle.
-The vertical slice runs Rogue Encampment (hub) → Blood Moor (outdoor) → Den of
-Evil (cave dungeon, first quest).
+You are the Barbarian. You start in the Rogue Encampment, take the Den of Evil
+quest from Akara, walk out into the Blood Moor, fight your way through the
+skeletons in it, clear the cave at the far end, and walk back to turn the quest
+in for a skill point. Melee combat, D2's affix item generator, a grid inventory,
+a skill tree, five NPCs with dialogue and vendors, and save/load through the
+browser's IndexedDB.
+
+It is a **vertical slice**, not a game. One class, one act, three zones, one
+quest chain, and **no audio at all**. Read [Known defects](#known-defects)
+before you form an opinion — it is complete and specific on purpose.
 
 ---
 
 ## Quick start
 
 ```bash
-npm install
-npm run dev        # vite dev server on http://127.0.0.1:5173
-npm run build      # typecheck + production build
-npm run preview    # serve the production build
-npm test           # vitest unit tests
-npm run typecheck  # tsc, app + tooling configs
-npm run capture    # headless screenshot of the reference scene
+npm install          # no engines field is declared; developed and verified on Node 22.22
+npm run dev          # vite dev server on http://127.0.0.1:5173
+```
+
+| Script                  | What it does                                                |
+| ----------------------- | ----------------------------------------------------------- |
+| `npm run dev`           | Vite dev server, `127.0.0.1:5173`                            |
+| `npm run build`         | `npm run typecheck && vite build`                            |
+| `npm run preview`       | Serves `dist/` on `127.0.0.1:4173`                           |
+| `npm test`              | `vitest run` — 55 test files                                 |
+| `npm run test:watch`    | Vitest in watch mode                                         |
+| `npm run typecheck`     | `tsc --noEmit` over the app and the tooling tsconfigs        |
+| `npm run assets`        | Fetch the third-party assets listed in `tools/assets/manifest.json` |
+| `npm run assets:verify` | Re-verify every fetched asset by SHA-256                     |
+| `npm run shots`         | Deterministic headless screenshot harness (`tools/capture/`) |
+| `npm run contact-sheet` | Composite the captures into one labelled grid                |
+| `npm run guard`         | Blank-frame guard over captured PNGs                         |
+| `npm run capture`       | Older single-shot capture entry point (`scripts/capture.mjs`) |
+
+The verification harnesses in `tools/*.mjs` are **not** wired to npm scripts.
+They run against the built bundle:
+
+```bash
+npm run build && node tools/verify-kill.mjs
 ```
 
 ### URL parameters
 
-| Parameter         | Effect                                                          |
-| ----------------- | --------------------------------------------------------------- |
-| `?backend=webgl2` | Force the WebGL2 backend (WebGPU is the default when available) |
-| `?backend=webgpu` | Force WebGPU; fails over to WebGL2 if it cannot initialise      |
-| `?autostart=0`    | Boot without starting the rAF loop; the caller steps frames     |
-| `?quality=low`    | Cheapest tier: FXAA at 0.75 scale, no GTAO, no SSR, 2 cascades   |
-| `?quality=medium` | FXAA, half-res GTAO, no SSR, 3 cascades                          |
-| `?quality=high`   | Default. TAA(8), half-res GTAO and SSR, 4 x 2048 cascades        |
-| `?quality=ultra`  | TAA(16) + sharpen, full-res GTAO, high SSR, 4 x 3072 cascades     |
+| Parameter                                | Default        | Effect                                                        |
+| ---------------------------------------- | -------------- | ------------------------------------------------------------- |
+| `?backend=webgpu` \| `webgl2`            | auto-probe     | Force a renderer backend instead of probing for WebGPU         |
+| `?quality=low` \| `medium` \| `high` \| `ultra` | `high`  | The whole render ladder at once — see `src/render/RenderSettings.ts` |
+| `?zone=encampment` \| `bloodMoor` \| `denOfEvil` | `encampment` | Boot straight into a zone                                |
+| `?autostart=0`                           | on             | Boot without starting the rAF loop; the caller steps frames    |
+| `?enemies=0`                             | on             | Boot zones unpopulated                                         |
+| `?fade=0`                                | `0.35` s       | Disable the zone-transition fade                               |
 
-One `?quality=` value drives every subsystem at once — see
-`src/render/RenderSettings.ts`, which owns the ladder and is the reason there is
-one knob rather than six.
+An unrecognised `?quality=` logs a warning and falls back to `high` rather than
+failing quietly.
+
+### Controls
+
+Bindings are `KeyboardEvent.code`, so they are layout-independent — `KeyW` is
+the same physical key on AZERTY. Source of truth: `DEFAULT_BINDINGS` in
+`src/core/Input.ts`.
+
+| Action                      | Binding                        |
+| --------------------------- | ------------------------------ |
+| Move                        | `W` `A` `S` `D` / arrow keys   |
+| Sprint                      | `Shift` (either)               |
+| Jump                        | `Space`                        |
+| Attack (light chain)        | Left mouse                     |
+| Heavy attack                | Middle mouse or `R`            |
+| Block                       | Right mouse                    |
+| Interact / talk             | `E`                            |
+| Toggle first/third person   | `F`                            |
+| Inventory                   | `I` or `Tab`                   |
+| Skill tree                  | `K`                            |
+| Pause menu                  | `Escape`                       |
+
+Screen-specific input, handled by `UiManager` on a capturing listener so it wins
+over gameplay:
+
+- **Escape** closes the topmost open panel; with nothing open it opens the pause
+  menu. Panel toggles are inert while a dialogue is open — the player is
+  talking, not managing gear.
+- **Inventory** is click-to-lift, click-to-place, not HTML5 drag: *click to lift
+  an item, click again to place it, right-click to equip.*
+- **Dialogue** advances on `Space` / `Enter`; `1`–`9` pick a numbered choice.
+- **Skill tree** and **vendor** are pointer-only.
+
+Pointer lock is requested on the first canvas click, because browsers require a
+user gesture. Game code never sees a key code — it asks `input.isDown('Attack')`
+— which is what makes rebinding and future gamepad support a non-event.
 
 ---
 
 ## Architecture
 
-### Tech stack
+### The module contract
 
-- **Vite + TypeScript** (strict, plus `noUncheckedIndexedAccess` and
-  `exactOptionalPropertyTypes`), ES modules, no framework for game code.
-- **three.js** via the `three/webgpu` and `three/tsl` entry points.
-- **@dimforge/rapier3d-compat** for physics.
-- **Native WebAudio** for audio.
-- **vitest** for unit tests, **playwright** for headless capture.
+The engine is a registry of `GameModule`s. A module is a self-contained system
+— the player controller, combat, a zone, one render pass, one UI screen — that
+receives a `GameContext` and implements whichever lifecycle hooks it needs.
+`src/core/types.ts` is the whole contract and is worth reading first.
 
-### Module model
-
-The engine is a registry of `GameModule`s driven by a fixed-timestep loop.
-A module is a self-contained system (player controller, combat, terrain, UI)
-that receives a `GameContext` and hooks whichever lifecycle phases it needs:
-
-```
-rAF → clock.tick → accumulate
-    → fixedUpdate × N   constant 60 Hz slices; deterministic simulation
-    → update            once, variable dt; presentation-rate logic
-    → lateUpdate        once, after every module's update has settled
-    → input.endFrame    consume per-frame edges and deltas
-    → renderer.render
+```ts
+interface GameModule {
+  readonly name: string;                       // unique; Engine.add throws on a duplicate
+  init(ctx: GameContext): Promise<void> | void;
+  fixedUpdate?(ctx: GameContext, fixedDt: number): void;  // 0..N times, constant 60 Hz
+  update?(ctx: GameContext, dt: number): void;            // exactly once, variable dt
+  lateUpdate?(ctx: GameContext, dt: number): void;        // once, after every update
+  dispose?(): void;
+}
 ```
 
-Simulation is decoupled from display rate so physics behaves identically at
-60 Hz and 144 Hz. `engine.alpha` carries the leftover fraction of a simulation
-slice for interpolated rendering.
+`GameContext` carries `engine`, `scene`, `camera`, `renderer`, `input`, `events`,
+`time`, `services`. Its identity is stable for the engine's lifetime, so a module
+may hold onto it.
 
-Modules never import each other. They communicate two ways:
+`TimeState` is deliberately fixed to exactly four mutable fields — `elapsed`,
+`delta`, `frame`, `scale` — and is mutated in place. Read it, do not cache it.
+Setting `scale` to 0 freezes gameplay while rendering continues.
 
-- **`EventBus`** — typed pub/sub for notifications. The `GameEvents` interface
-  is extended by declaration merging, so a feature adds its own events without
-  editing the core:
+**Registration order is frame order.** Modules are initialised sequentially, not
+in parallel, because they routinely depend on services registered by earlier
+ones, and disposed in reverse. `main.ts` states each ordering constraint where
+it matters: combat is registered *before* the player because `PlayerController`
+stands its placeholder attack input down when it finds a `combat` service;
+`CombatFeedback` is last of the gameplay modules because its `lateUpdate` adds
+camera shake and must run after `CameraRig` has placed the camera.
 
-  ```ts
-  declare module '../core/EventBus' {
-    interface GameEvents {
-      'combat:hit': { attacker: number; target: number; damage: number };
-    }
+### The loop
+
+Fixed timestep, decoupled from display rate, so physics behaves the same at
+60 Hz and 144 Hz.
+
+```
+rAF ─► input.beginFrame()
+    ─► clamp raw delta to [0, 0.25 s], scale by time.scale, advance TimeState
+    ─► fixedUpdate × N        constant 1/60 s slices, at most 5 per frame
+    ─► update                 once, variable dt
+    ─► lateUpdate             once, after every module's update has settled
+    ─► input.endFrame()       clear per-frame edges and mouse deltas
+    ─► await renderer.render(scene, camera)
+    ─► emit 'engine:frame'
+```
+
+`maxSubSteps = 5` is the spiral-of-death guard. `Engine.alpha` carries the
+leftover fraction between simulation steps for interpolated rendering; it lives
+on the engine rather than in `TimeState` because the contract fixes that type at
+four fields. A `#stepInFlight` guard drops a rAF callback whose predecessor's
+GPU work has not resolved, so the CPU cannot queue renders faster than the
+device retires them.
+
+A module that throws is caught, logged once per phase, and then skipped: one
+broken system degrades that system rather than killing the frame loop.
+
+`Engine.stepFrames(count, dt?)` cancels the rAF loop, latches manual mode and
+advances an exact number of frames with an exact delta, bypassing the wall
+clock. Every harness in `tools/` is built on it, and it is the reason
+`stepFrames(n)` reproduces the same frame across runs.
+
+### EventBus and ServiceLocator
+
+Modules never import each other. They communicate two ways, and between them the
+module graph stays acyclic — which is the property that lets systems be added,
+removed and tested in isolation.
+
+**`EventBus`** — typed pub/sub, extended by declaration merging, so a feature
+adds its own events without editing the core:
+
+```ts
+declare module '../core/EventBus' {
+  interface GameEvents {
+    'combat:hit': { attacker: number; target: number; /* … */ };
   }
-  ```
-
-- **`ServiceLocator`** — typed registry for handing out object references.
-  Keys carry their value type, so lookups need no cast:
-
-  ```ts
-  export const PhysicsKey = serviceKey<PhysicsWorld>('physics');
-  services.register(PhysicsKey, world);
-  const world = services.get(PhysicsKey); // PhysicsWorld
-  ```
-
-Together these keep the module graph acyclic, which is the property that lets
-systems be added, removed and tested in isolation.
-
-### Source layout
-
-```
-src/
-  core/
-    types.ts            The architecture contract: GameContext, GameModule,
-                        TimeState, RendererHandle, RendererBackend
-    Engine.ts           Frame loop, module registry, resize, visibility pause,
-                        deterministic stepFrames()
-    EventBus.ts         Typed pub/sub, augmentable via declaration merging
-    ServiceLocator.ts   Typed service registry
-    Input.ts            Action-mapped keyboard/mouse + pointer lock
-    Time.ts             FixedStepAccumulator, Clock, TimeState factory
-  render/
-    RendererFactory.ts  WebGPU-first renderer with WebGL2 fallback
-    webgpuCompat.ts     Browser compatibility shims (see below)
-    FrameGraph.ts       THE INTEGRATION POINT. Assembles every render module in
-                        dependency order, closes the seams between them, and
-                        audits every ServiceLocator contract at boot
-    RenderSettings.ts   The one quality ladder and the one weather state
-    Sky.ts / Atmosphere.ts / TimeOfDay.ts    scattering sky, aerial perspective
-    Lighting.ts / CascadedShadowMaps.ts / IBL.ts
-    MaterialLibrary.ts + materials/          triplanar, blending, parallax, wetness
-    Volumetrics.ts      froxel fog, shadowed in-scatter, local fog volumes
-    post/               PostStack, TAA, GTAO, SSR, Bloom, Tonemap, ColorGrade,
-                        LightShafts, Denoise, Motion
-    ProceduralSky.ts    HDR equirectangular sky: background + IBL
-    ProceduralTextures.ts  Seamless albedo/roughness/normal synthesis
-  scene/
-    BloodMoor.ts        The showcase scene: the Act I vertical slice
-    ReferenceScene.ts   The phase-1 material chart, kept for regression isolation
-  ui/
-    DebugOverlay.ts     Backend / FPS / frame count readout
-  main.ts               Boot, module registration, window.__d2rim
+}
 ```
 
-### Determinism
+Handlers live in insertion-ordered `Set`s; `emit` iterates a snapshot so a
+handler may unsubscribe another mid-emit; a throwing handler is caught and does
+not stop the rest.
 
-`Engine.stepFrames(n, dt?)` advances the world by an exact number of frames with
-an exact delta, bypassing the wall clock and cancelling the rAF loop. Combined
-with seeded procedural generation (no `Math.random` anywhere in asset
-synthesis), the same step count reproduces the same frame, which makes
-golden-image regression testing viable.
+**`ServiceLocator`** — typed registry, keyed by a phantom-branded key so lookups
+need no cast:
 
-### Headless tooling
-
-`window.__d2rim` exposes `{ engine, ctx, ready }`. The capture sequence is:
-
-```js
-await window.__d2rim.ready;
-await window.__d2rim.engine.stepFrames(60);
-// world state is now deterministic; capture
+```ts
+export const PhysicsKey = serviceKey<PhysicsWorld>('physics.world');
+services.register(PhysicsKey, world);
+const world = services.get(PhysicsKey);   // inferred PhysicsWorld
 ```
 
----
+`get` throws (listing what *is* registered) and `register` throws on a duplicate
+id. `tryGet` is the optional-dependency route. This exists because
+`CombatSystem` needs the player's transform, and importing `PlayerController` —
+which imports combat — would be a cycle.
 
-## Renderer
+### The frame graph
 
-WebGPU is attempted first and WebGL2 is the fallback. Which one won is logged at
-boot and shown in the debug overlay.
+`src/render/FrameGraph.ts` is where twelve independently-authored render modules
+become one renderer. It builds them in a fixed order, closes the seams between
+them, and audits 24 `ServiceLocator` contracts at boot, printing a
+connected/degraded table. Nothing in the renderer is allowed to silently no-op
+because a service was never registered.
 
-The fallback is a `WebGPURenderer` constructed with `forceWebGL: true` — three's
-own `WebGLBackend` — rather than the classic `WebGLRenderer`. This is deliberate:
+There is **no dependency solver**. Ordering is an explicit array plus one
+insertion hint (`addPass(pass, { before: 'post.taa' })`), and the nine
+load-bearing constraints are written down in the module comment. This is a
+deliberate choice: a solver would hide the constraints it satisfies.
 
-1. TSL node materials only exist in the node renderer architecture. A classic
-   `WebGLRenderer` cannot draw them, so falling back to it would not degrade
-   effects, it would fail to draw the game's materials at all.
-2. `WebGLBackend` is a real WebGL2 path, verified rendering a full lit, shadowed,
-   tone-mapped frame in this project's headless container.
-3. Loading the classic build alongside `three/webgpu` would put two copies of
-   every core class in the bundle and silently break `instanceof`.
+Per-frame order:
 
-`RendererHandle.three` is still typed `WebGPURenderer | WebGLRenderer`, so adding
-a direct-`WebGLRenderer` tier later needs no contract change.
-
-### Colour pipeline
-
-Set once in `RendererFactory` and authored against everywhere else:
-ACES filmic tone mapping at exposure 1.0, sRGB output, linear working space,
-PCF-soft shadows.
-
-### Compatibility shim
-
-three.js r185 sets `GPUTextureViewDescriptor.swizzle` to the string `'rgba'`.
-Chromium 141's Dawn implements the revised spec where that field is a dictionary,
-so **every** `GPUTexture.createView()` throws and WebGPU is entirely dead.
-
-`render/webgpuCompat.ts` installs a self-latching patch before the renderer is
-constructed: descriptors pass through untouched until that exact failure is
-observed, then the string is converted to `{ r, g, b, a }` for the rest of the
-session. On browsers that accept the string it never latches, so the shim
-becomes a no-op automatically once three.js ships the dictionary form — there
-are no version checks to maintain.
-
----
-
-## Showcase scene
-
-`src/scene/BloodMoor.ts` is the visual baseline the rest of the project is
-calibrated against: a composed view of Diablo II Act I's Blood Moor, built from
-the project's real photoscanned material sets and real prop models.
-
-It is composed rather than assembled. Three depth planes — foreground rubble
-shelf, midground campfire and ruined wall, background treed ridge — with one
-focal point (the fire, the only warm light in the frame) and one leading line
-(the broken fence running from the lower-left corner back toward it). The
-Barbarian stands between the wall and the fire, idling, which proves the
-41-joint rig loads and animates and gives the moor a scale reference.
-
-The ground is one mesh with a height-blended two-archetype material: wet mud
-underneath, dead grass on top, coverage driven by world height and slope so mud
-collects in the hollows the way water would sort it. Exposed cliff rock is
-deliberately *not* a third splat layer — splatting can only produce rock lying
-flat against the heightfield, so the escarpment is real displaced geometry
-carrying the triplanar `rock` archetype. The ruined wall is boxed courses of the
-parallax-mapped `wetStone` archetype, tiled per block from the block's own world
-size so the coursing stays life-sized.
-
-`TerrainField` is the single authority for ground height: the mesh builder and
-every prop placement sample the same function, which is the only reason props sit
-*on* the ground rather than hovering. Everything derives from one seed and every
-animation reads `TimeState.elapsed`, so `stepFrames(n)` reproduces any frame.
-
-`src/scene/ReferenceScene.ts` — the phase-1 material response chart — is kept
-because it isolates BRDF regressions from art-direction changes, which the
-showcase scene deliberately cannot.
-
----
-
-## Frame graph
-
-`src/render/FrameGraph.ts` is where six independently-authored subsystems become
-one renderer. Read its module comment before touching render order: it documents
-every seam it closes, including the two fog models (aerial perspective owns
-beyond 96 m, the froxel volume owns nearer, and the near-ground mist term is
-zeroed out of the atmosphere so it is not modelled twice), the single exposure
-authority (`PostStack.composite` — the renderer's own tone mapping is forced
-off and the frame graph asserts it), and the four `ServiceLocator` ids that more
-than one module declares.
-
-`auditServices` prints a connected/degraded table at boot. Nothing in this
-renderer is allowed to silently no-op because a service was never registered.
-
----
-
-## Headless capture
-
-```bash
-node scripts/capture.mjs --backend=webgl2 --frames=60
-node scripts/capture.mjs --backend=webgpu --frames=0
+```
+update       TimeOfDay ──► Sky (sky-view LUT, environment probe, fog node)
+lateUpdate   Lighting (key light + CSM cascade fit)
+             GuideBuffer (shared depth+normal prepass, one draw)
+             GTAO ──► IBL ──► SSR (hi-Z, against last frame's colour)
+             Volumetrics (froxel scatter) ──► LightShafts
+render       MOTION (jitter projection, bind velocity MRT)
+             SHADOWS (CSM cascades) ──► OPAQUE ──► TRANSPARENT
+             post.ssr        composite reflection delta      [HDR]
+             lightshafts     composite volumetrics + shafts  [HDR]
+             post.taa        temporal resolve                [HDR]
+             post.bloom      producer — writes its own pyramid
+             post.composite  EXPOSURE ─► AgX ─► GRADE        [HDR ─► LDR]
+             post.fxaa       FXAA tiers only                 [LDR]
+DOM          HUD, inventory, dialogue — composited by the browser
 ```
 
-Output lands in `captures/`.
+A pass is either a **chain** pass (consumes the running colour texture and
+produces a new one) or a **producer** (reads it, writes only into buffers it
+owns, and so costs no ping-pong slot — which is how bloom's six render targets
+cost zero full-res scratch).
 
-Capture goes through `RendererHandle.captureFrame()` — render to an offscreen
-target, then `readRenderTargetPixelsAsync` — for **both** backends rather than
-`page.screenshot()`. Two independent reasons:
+Two seams worth knowing about, both documented at length in `FrameGraph.ts`:
 
-- WebGPU has no choice. Its canvas swapchain never reaches the headless
-  compositor, so a screenshot is pure black even though the GPU produced correct
-  pixels.
-- On WebGL2 a screenshot *works*, but `render()` only queues GPU work. Under
-  software rasterisation the CPU queues frames far faster than they retire, so a
-  screenshot waits on a compositor dozens of frames behind and times out. The
-  readback is a genuine sync point.
+- **Two fog models, one atmosphere.** The froxel volume owns everything inside
+  45 m and aerial perspective owns beyond it; the near-ground mist term is
+  zeroed out of the atmosphere so it is not modelled twice.
+- **One exposure authority.** `PostStack.composite` owns exposure, locked at
+  1.72 with auto-exposure off; the renderer's own tone mapping is forced to
+  `NoToneMapping` while the stack is installed, and the frame graph asserts it.
+  The tone curve is **AgX** with a `grimdark` look, not ACES — ACES's hue skew
+  turns the two colours this game lives on, orange firelight and blue-grey
+  shade, into yellow and cyan.
 
-### Container-specific notes
+### Zone lifecycle
 
-The development container has no GPU: everything is SwiftShader software
-rasterisation through ANGLE → Vulkan 1.3. Consequences worth knowing:
+A `Zone` is a `GameModule` that additionally owns a subtree (`root`), a travel
+id, entry points, portals, optional NPC anchors and enemy spawns, an optional
+colour grade, and an optional collider builder. All zone geometry is authored
+**origin-centred in zone-local coordinates**; two zones are never live at once.
 
-- **Frame rates here mean nothing** about real-GPU performance. Capture at
-  960×540 and budget generous timeouts.
-- **WebGL2 is the reliable headless backend.** It needs no special flags.
-- **WebGPU renders correctly but cannot present.** Worse, presenting to the
-  canvas eventually loses the device (`A valid external Instance reference no
-  longer exists`), which takes the readback with it. So WebGPU captures must use
-  `--frames=0` (and `?autostart=0`, which the harness sets), keeping all
-  rendering on the offscreen path. Animated captures use WebGL2.
-- Working Chromium flags:
-  `--no-sandbox --disable-dev-shm-usage --enable-unsafe-webgpu --use-gl=angle --use-angle=swiftshader`.
-  `--enable-unsafe-webgpu` is the only decisive one. Never run
-  `playwright install`; the browser bundle is pre-provisioned and the harness
-  points at it explicitly.
-- Omitting `--enable-unsafe-webgpu` makes `requestAdapter()` return null, which
-  exercises the WebGL2 fallback path for free — useful as a CI matrix.
+`ZoneManager` is one ordinary module that hosts the active zone and forwards the
+three update phases to it. Zones are registered as **factories, not instances**,
+so re-entering a zone constructs a fresh one. It must be registered after
+`PhysicsWorld` and before `PlayerController`.
+
+Load, with the progress phases it reports:
+
+1. `construct` — call the factory
+2. `build` — `await zone.init(ctx)`
+3. `colliders` — snapshot physics collider ids, call `zone.buildColliders()`,
+   build portal colliders, diff to learn which ones the zone owns
+4. `place` — apply the zone's colour grade *before* placing the player, so the
+   first frame of a new zone is already graded for it; resolve an entry point
+5. enemies — construct the zone's `EnemyDirector` and start the model download
+6. `ready` — emit `zone:loaded`
+
+Unload reclaims five things and is tested for all five: geometries, materials
+and textures (walking the detached subtree, and disposing lights' shadow maps),
+the snapshotted physics colliders, and the zone's enemies. Anything from
+`AssetManager`'s cache is stamped shared and skipped. The per-zone grade is
+reverted on unload so a zone cannot leak its look into the next one.
+
+The three zones are `encampment` (Rogue Encampment, the hub), `bloodMoor` (the
+outdoor showcase scene) and `denOfEvil` (a procedurally generated cave, from
+`src/world/DungeonGenerator.ts`).
+
+### Renderer
+
+WebGPU is probed first, WebGL2 is the fallback, and which one won is logged at
+boot and shown in the debug overlay. The fallback is a `WebGPURenderer` built
+with `forceWebGL: true` — three's own `WebGLBackend` — not the classic
+`WebGLRenderer`, because TSL node materials only exist in the node renderer
+architecture; falling back to the classic renderer would not degrade effects, it
+would fail to draw the game's materials at all.
 
 ---
 
-## Controls
+## What genuinely works
 
-| Action                    | Binding                  |
-| ------------------------- | ------------------------ |
-| Move                      | `W` `A` `S` `D` / arrows |
-| Sprint                    | `Shift`                  |
-| Jump                      | `Space`                  |
-| Attack                    | Left mouse               |
-| Heavy attack              | Middle mouse / `R`       |
-| Block                     | Right mouse              |
-| Interact                  | `E`                      |
-| Toggle first/third person | `F`                      |
-| Inventory                 | `I` / `Tab`              |
-| Skill tree                | `K`                      |
-| Menu                      | `Escape`                 |
+Every claim in this section has a harness behind it. Where a number appears, it
+was measured by driving the built game, not by reading the source.
 
-Input is action-mapped: game code asks `input.isDown('Attack')` and never sees a
-key code, so rebinding and future gamepad support need no gameplay changes.
+**The character.** A 41-joint rig with 76 animation clips, driven by a blend
+space and an animation graph with layered upper/full-body actions. Third person
+by default, first person on `F`.
+
+**Foot planting.** A three-pass analytic IK solver pins the stance foot in world
+space. Measured by `tools/verify-footplant.mjs`, before the solver and after it:
+
+| gait   | body m/s | slower foot m/s | ratio        | planted frac  | held foot m/s |
+| ------ | -------- | --------------- | ------------ | ------------- | ------------- |
+| walk   | 0.93     | 0.62 → 0.162    | .67 → .174   | .18 → .875    | → 0.000       |
+| run    | 3.98     | 2.47 → 2.381    | .62 → .598   | .06 → .246    | → 0.010       |
+| sprint | 5.53     | 3.30 → 3.090    | .60 → .559   | .04 → .267    | → 0.001       |
+
+**Melee combat, in both directions.** Swept hitboxes (the blade is a moving line
+segment, sampled every frame and swept between poses with five substeps),
+authored damage windows delivered as animation events, input buffering, and a
+real five-move chain. The numbers are in [Combat balance](#combat-balance)
+below.
+
+**Enemies.** Four skeleton variants — minion, warrior, rogue, mage — on a
+behaviour tree, with perception, a stand-off distance, pursuit, real attack
+clips and real damage. Their reach numbers are measured, not guessed:
+`tools/measure-enemy-reach.mjs` loads each GLB and sweeps a player capsule
+outward to find the furthest separation at which each clip's implied blade still
+touches during its authored window.
+
+**Three connected zones**, with portals and travel in both directions, and
+without leaking. `tools/verify-zones.mjs` walks camp → moor → den → moor → camp
+and asserts that zone-owned colliders and character-collider records return to
+baseline *exactly*, then walks a **second** lap and asserts renderer geometry and
+texture counts are flat — because an absolute bound cannot tell cache warm-up
+from a leak.
+
+**The RPG layer.** D2's affix item generator, a grid inventory with real
+placement, a skill tree, a quest chain, five NPCs with dialogue trees, vendors,
+and save/load. `tools/verify-rpg.mjs` runs the whole loop end to end against the
+browser's real IndexedDB: level up, spend a skill point and confirm a *combat*
+number moved, equip an item and confirm the offence handed to the damage model
+changed, accept the Den quest from Akara, clear the Den, turn it in, save,
+reload, compare.
+
+**Gear is load-bearing, not cosmetic.** `rpg.offense` / `rpg.defense` are
+`ServiceLocator` providers that `CombatSystem` asks for instead of reading
+constants, so an equipped ring's attack rating moves the roll the swing actually
+makes, and an equipped plate's damage reduction cuts the damage a blow actually
+applies. Both are asserted in `tools/verify-balance.mjs`.
+
+### Combat balance
+
+For most of this project's life every combat number it had was damage
+**taken**. It could say how fast a passive Barbarian dies and could not say
+whether he can kill anything, which is not a game. `tools/verify-kill.mjs`
+closes that, and the way it does it matters: it teleports the fighters **once**
+to stage the encounter and then lets both act, aiming the player by feeding
+pointer pixels through `Input.nudgePointer` — the same accumulator a `mousemove`
+writes to — capped at 8 rad/s so the harness cannot turn faster than a hand
+could. A rotation is not a teleport, so the blade keeps moving between frames
+and `WeaponHitbox`'s sweep stays a real sweep. Movement is real `KeyW` events;
+attacks are real `mousedown` on the canvas.
+
+**Outgoing** — a level-1 Barbarian in the starting kit, against a skeleton that
+is moving, retreating and fighting back. One run each:
+
+| variant | pool | swings | landed | mean blow | time to kill | player HP left |
+| ------- | ---- | ------ | ------ | --------- | ------------ | -------------- |
+| minion  | 46   | 2      | 2      | 29.0      | **1.00 s**   | 120 / 120      |
+| warrior | 68   | 8      | 4      | 19.5      | **4.60 s**   | 89 / 120       |
+| rogue   | 58   | 4      | 3      | 20.7      | **2.93 s**   | 112 / 120      |
+| mage    | 52   | 11     | 3      | 23.0      | **5.27 s**   | 76 / 120       |
+
+`swings` counts every press the combo machine accepted; `landed` counts the ones
+that connected *and* passed the to-hit roll. The gap between them is the fight:
+a mashing player whiffs while the skeleton repositions. The mage is the hardest
+of the four because it moves the most — it is the only variant where the 8 rad/s
+aim cap ever binds (mean residual aim error 4.3°, zero for the other three).
+
+**Incoming**, measured separately by `tools/verify-balance.mjs`: one skeleton
+kills a passive, non-blocking, non-moving player in **12.30 s**; three kill him
+in **5.20 s**.
+
+<!-- PACK -->
+
+---
+
+## Known defects
+
+This list is complete to the best of the project's knowledge and is not
+softened. If something here reads as a dealbreaker for your use, it probably is.
+
+### There is no audio. None.
+
+`src/audio` was never built. There is no `AudioContext` anywhere in the source —
+`'audio'` exists as an `AssetKind` and nothing consumes it. No footsteps, no
+weapon impacts, no wind, no fire crackle, no monster vocalisations, no music, no
+UI clicks. The game is silent.
+
+This is not a small gap and it is not one that can be closed by dropping files
+in. Every sound this game needs would have to be **synthesised** — wind, fire and
+monster vocalisations especially — because no CC0 audio source is reachable
+through this environment's egress proxy. The Kenney RPG Audio pack *is* fetched
+and attributed (21 entries), but nothing plays it.
+
+### `quality=ultra` fails the tier-parity gate, marginally
+
+`tools/capture/capture.mjs` asserts that quality tiers change the *cost* of the
+picture and not the picture: `quality-low` and `quality-ultra` must agree to
+0.03 of mean luminance and 0.025 of near-black share. Ultra currently fails this
+by a small margin. The suspect is tier-varying `shadowDistance` — 90 m at low
+against 240 m at ultra (`src/render/RenderSettings.ts`) — which changes cascade
+fit and therefore how much of the frame is in shadow at all. Not diagnosed to a
+root cause; not fixed.
+
+### WebGPU is dead on this three.js version, and the fix is not small
+
+`webgpu-backend-check` fails. three.js r185 uploads a `Data3DTexture` as 2D
+slices and then binds it through 2D views. Dawn rejects every submit that
+touches the froxel fog volumes, so the whole frame fails on the WebGPU backend.
+This is not a shim-able mistake like the `swizzle` string that
+`render/webgpuCompat.ts` patches: a real fix needs the volumetrics rewritten
+onto a **2D slice atlas with hand-written TSL trilinear sampling**. Until then,
+**WebGL2 is the backend that works**, and it is what every harness and capture
+uses.
+
+### Feet still slide at speed
+
+See the table above. The lock engages for about 88% of a walk cycle and only
+about **25%** of a run or sprint, because this rig's run clip has a short contact
+and the pin cannot be taken until the plant test has agreed for two frames. The
+foot the lock *is* holding is genuinely still — hundredths of a metre per second
+— but at a run the slower foot still moves at 0.56–0.60 of body speed. Walking
+looks right. Running slides. Closing that gap is real remaining work.
+
+### No item icons
+
+There is no item art in this project. Every inventory item is drawn as a
+quality-coloured plate with its name on it. At a 34-pixel grid cell that is
+arguably more readable than a 32×32 sprite would be, but it is not what an
+inventory is supposed to look like.
+
+### Other things a new reader should not be misled by
+
+- **One class, one act.** The Barbarian, and the first three areas of Act I.
+  There is no Sorceress, no Amazon, no Act II, no Andariel, no waypoints, no
+  town portal, no multiplayer, no difficulty tiers.
+- **Attack rating from gear cannot rescue a miss.** The base swing rolls to hit
+  against the provider's rating; if that roll misses, no `combat:hit` fires and
+  the RPG bridge has nothing to augment. Gear AR shows on the sheet and feeds
+  the augmentation packet, but it does not widen the base hit window.
+- **The art is stylized low-poly, on purpose.** See
+  [Assets](#assets-and-attribution).
+- **`src/physics/WorldColliders.ts` is dead code**, superseded by
+  `ZoneManager`.
+- **`npm run capture` and `npm run shots` are two different harnesses.**
+  `scripts/capture.mjs` is the older single-shot entry point; `tools/capture/`
+  is the deterministic seeded one.
+- **`render.gbuffer.surface` is deliberately unsatisfiable.** This is a forward
+  renderer, so SSR runs on scalar defaults (roughness 0.34, metalness 0) rather
+  than a real G-buffer. The audit reports it as degraded because it is.
+- **Two Mixamo-derived assets are held back** pending a licensing decision and
+  are not fetched by a default `npm run assets`.
+- **This container has no GPU.** Everything is SwiftShader software
+  rasterisation through ANGLE → Vulkan. **Frame rates measured here mean
+  nothing** and no performance claim in this repository should be read as one.
+  The project has never run on real hardware.
+
+---
+
+## Verification harnesses
+
+The main discipline of this project was **driving the real game rather than
+trusting claims**. Every harness in `tools/` spawns `vite preview` over `dist/`
+(never the dev server — HMR destroys the execution context mid-run), drives the
+built bundle through `window.__d2rim`, and steps frames *inside the page*,
+because a Playwright round trip per frame costs more than the frame does under
+software rasterisation.
+
+| Harness                     | What it proves                                                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify-kill.mjs`           | **The player can win.** Time-to-kill, swings and landed hits for a Barbarian against each skeleton variant that is moving and fighting back, with and without a magic weapon, plus a three-skeleton pack fight. Asserts a budget. |
+| `verify-balance.mjs`        | The other direction: how long a passive player survives one skeleton and three, and that `rpg.offense`/`rpg.defense` are load-bearing.          |
+| `verify-player-damage.mjs`  | The two-sided regression guard — a skeleton left alone takes health off the player, a player who refuses to fight dies, and a dead player respawns alive at full health. |
+| `verify-combat-loop.mjs`    | The walk a player walks: boot at the camp with no flags, travel camp → moor → den, and prove each zone places its declared spawn table and that skeletons perceive, close, damage and die. |
+| `verify-encounter.mjs`      | That the Blood Moor's six skeletons appear on **both** the walk-in and the boot-in path — which differ, and the deferred one was broken.        |
+| `verify-zones.mjs`          | Standing, leaking and looking: that the player stands on each zone's real surface, that a full lap returns colliders and records to baseline exactly and a second lap leaves geometry and texture counts flat, and that each zone's capture survives the blank-frame guard. |
+| `verify-rpg.mjs`            | A ten-step end-to-end pass over the whole RPG layer, including save/load through the browser's real IndexedDB.                                  |
+| `verify-footplant.mjs`      | Per-frame **world** speed of the foot bones, asserted per gait — because foot sliding is the single most visible tell of amateur character work. |
+| `verify-enemy-clips.mjs`    | That every skeleton's semantic attack state resolves to a real clip and that its hit events fire.                                              |
+| `verify-enemy-damage.mjs`   | The separation at which an enemy swing actually connects with the player.                                                                      |
+| `verify-enemy-blade.mjs`    | Where an enemy's blade actually is during its own hit window, relative to the player capsule.                                                   |
+| `verify-standoff.mjs`       | That skeletons hold a stand-off instead of burrowing into the player.                                                                          |
+| `verify-independent.mjs`    | A from-scratch re-verification written by a reviewing agent, sharing no code with the other harnesses.                                          |
+| `verify-followup.mjs`       | A focused re-check of AI approach, the camera arm, foot plants and wall collision.                                                             |
+| `measure-enemy-reach.mjs`   | Produces the `reachDuringWindow` numbers in `src/ai/enemies/Skeleton.ts` by sweeping a player capsule against each clip.                        |
+| `combat-drive.mjs` / `combat-kill-check.mjs` | That one scripted swing damages a staged skeleton, and that a target at low health dies from a landed hit.                     |
+| `scratch-drive.mjs`         | An ad-hoc character harness: holds real keys, steps frames, dumps a deterministic state snapshot.                                               |
+| `capture/capture.mjs`       | Deterministic seeded screenshots, built so a broken renderer produces a **failed run** rather than a plausible-looking black image.             |
+| `capture/frame-guard.mjs`   | Five near-orthogonal statistics over a decoded PNG, because the worst failure mode of a capture harness is quietly writing a black image.        |
+| `capture/exposure-report.mjs` | A nine-percentile luma histogram, crushed/clipped share, and warm/cold hue separation.                                                        |
+| `assets/fetch-assets.mjs`   | Idempotent, resumable, SHA-256-locked asset fetching, and the generator behind `public/ATTRIBUTIONS.md`.                                        |
+
+Plus 55 Vitest files under `tests/`, running in a Node environment over the pure
+logic: the damage model, the combo state machine, hitbox geometry, the item
+generator, the dungeon generator, zone teardown, the render maths (atmosphere,
+sky, CSM, GTAO, SSR, denoise, tonemap, colour grade) and the frame-graph wiring.
+
+### A note on harness design
+
+Two failures shaped how these are written, and both are worth internalising
+before adding another:
+
+1. **A staging trick can suppress the thing it is measuring.** An early attempt
+   at the player-side kill measurement teleported both fighters to fixed marks
+   every frame to hold the duel geometry still. It recorded **27 swings and 0
+   landed hits** — not because the game was broken, but because `WeaponHitbox`
+   resolves a contact by sweeping the blade from its *previous* pose, and a
+   per-frame teleport makes every sweep a zero-length segment. `verify-kill.mjs`
+   teleports exactly once, to stage the encounter, and then aims with real
+   pointer pixels through `Input.nudgePointer`.
+2. **A capture that always succeeds is worse than no capture.** Hence the frame
+   guard, the parity gate, and the rule that unknown option names are rejected
+   rather than ignored.
+
+---
+
+## Assets and attribution
+
+**`public/ATTRIBUTIONS.md` is the authoritative list**, generated by
+`tools/assets/fetch-assets.mjs` from `tools/assets/manifest.json`. Do not edit it
+by hand. Every entry carries its author, source, retrieval URL, local path, byte
+size and SHA-256, and the licence text at source is archived under
+`public/assets/licenses/` so the claim can be verified offline.
+
+146 catalogued entries. 144 ship: **143 CC0-1.0** and exactly one CC-BY-4.0 (the
+Fox model, which doubles as the test case proving the attribution generator
+handles a licence that actually requires attribution). The remaining two are
+Mixamo-derived and are **held back pending a licensing decision** — they are not
+downloaded by a default `npm run assets` and must not appear in a public build
+until a human decides.
+
+Principal sources: Kay Lousberg / **KayKit** (65 entries — characters, props,
+dungeon kit), **Poly Haven** (32 — HDRIs and PBR textures), **Kenney** RPG Audio
+(21, unused), **ambientCG** (11), `@pmndrs/assets` (6), and a handful from the
+three.js and Khronos sample sets.
+
+**Why the art direction is "stylized-AAA" and not photoreal.** The KayKit
+character and prop art is stylized low-poly — chunky silhouettes, flat-ish
+forms, no photoscanned detail. That is what is actually in the box, so the
+renderer is aimed at making stylized geometry read as grimdark and expensive:
+AgX tonemapping on a `grimdark` look, a locked exposure, per-zone grading,
+volumetric fog, light shafts, GTAO, SSR and cascaded shadows doing the work that
+surface detail would otherwise do. Photoreal was never available and pretending
+otherwise would have produced a worse-looking game.
 
 ---
 
 ## Licence
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE). The licence covers this repository's code. Third
+party assets carry their own licences; see `public/ATTRIBUTIONS.md`.

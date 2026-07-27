@@ -362,7 +362,141 @@ const duel = (variant, opts = {}) =>
         timedOut: frames >= maxFrames,
       };
     },
-    { v: variant, stride: opts.stride ?? STRIDE, maxFrames: opts.maxFrames ?? 480, holdRange: opts.holdRange ?? 1.5 },
+    { v: variant, stride: opts.stride ?? STRIDE, maxFrames: opts.maxFrames ?? 480, holdRange: opts.holdRange ?? 1.2 },
+  );
+
+/* -- a pack fight, fought for real in both directions ---------------------- */
+
+/**
+ * Three skeletons at once, with the player fighting back.
+ *
+ * The player is given exactly one piece of footwork, because a pack fight that
+ * is just "stand in the middle and mash" is not a test of whether the encounter
+ * is winnable *with skill* — it is a test of whether it is winnable without
+ * any. The rule is the first thing anyone learns fighting more than one enemy:
+ * **do not let them surround you.** When two or more are inside
+ * `CROWD_RANGE`, back off (`KeyS`) until they string out, then re-engage the
+ * nearest. Everything else is the same aim-and-mash as a duel.
+ */
+const packFight = (count, opts = {}) =>
+  page.evaluate(
+    async ({ n, stride, maxFrames, holdRange, crowdRange }) => {
+      const d = window.__duel;
+      const d2 = window.__d2rim;
+      const T = d2.three;
+
+      d.reviveAll();
+      const pack = d.director().enemies.filter((e) => e.alive).slice(0, n);
+      if (pack.length < n) return null;
+      d.clearField(pack);
+      d.healPlayer();
+      d.releaseAll();
+
+      // One teleport: an arc in front of the player, four metres out, awake.
+      const player = d.player();
+      const anchor = player.position.clone();
+      const facing = Math.atan2(player.forward(new T.Vector3()).x, player.forward(new T.Vector3()).z);
+      for (let i = 0; i < pack.length; i++) {
+        const a = facing + (i - (n - 1) / 2) * 0.5;
+        pack[i].skipSpawn?.();
+        pack[i].teleport(anchor.x + Math.sin(a) * 4, anchor.y, anchor.z + Math.cos(a) * 4);
+        pack[i].alert();
+      }
+      await d2.engine.stepFrames(2, stride);
+
+      const combat = d.combat();
+      let swings = 0;
+      let landed = 0;
+      let taken = 0;
+      let damageTaken = 0;
+      let retreatFrames = 0;
+      const off = d2.ctx.events.on('combat:swing', (p) => {
+        if (p.attacker === combat.self.id) swings++;
+      });
+      const offHit = d2.ctx.events.on('combat:hit', (p) => {
+        if (p.attacker === combat.self.id) landed++;
+        else if (p.target === combat.self.id) {
+          taken++;
+          damageTaken += p.outcome.total;
+        }
+      });
+
+      const startHealth = combat.vitals.health.value;
+      let frames = 0;
+      let forward = false;
+      let back = false;
+      const kills = [];
+      const offDeath = d2.ctx.events.on('combat:death', (p) => {
+        if (p.faction !== 'player') kills.push(p.label);
+      });
+
+      while (frames < maxFrames && combat.vitals.health.value > 0) {
+        const live = pack.filter((e) => e.alive);
+        if (live.length === 0) break;
+
+        // Nearest live target.
+        let nearest = live[0];
+        let best = Infinity;
+        let crowd = 0;
+        for (const e of live) {
+          const gap = d.planarDistance(player.position, e.position);
+          if (gap < crowdRange) crowd++;
+          if (gap < best) {
+            best = gap;
+            nearest = e;
+          }
+        }
+
+        d.aimAt(d.chest(nearest), stride);
+
+        const wantBack = crowd >= 2;
+        const wantForward = !wantBack && best > holdRange;
+        if (wantBack !== back) {
+          d.key('KeyS', wantBack);
+          back = wantBack;
+        }
+        if (wantForward !== forward) {
+          d.key('KeyW', wantForward);
+          forward = wantForward;
+        }
+        if (wantBack) retreatFrames++;
+
+        if (d.attackRoute === 'dom-click') d.clickAttack(0);
+        else combat.press('light');
+
+        await d2.engine.stepFrames(1, stride);
+        frames++;
+      }
+      off();
+      offHit();
+      offDeath();
+      d.releaseAll();
+
+      const alive = pack.filter((e) => e.alive).length;
+      return {
+        count: n,
+        won: alive === 0 && combat.vitals.health.value > 0,
+        playerDied: combat.vitals.health.value <= 0,
+        enemiesLeft: alive,
+        kills: kills.length,
+        seconds: +(frames * stride).toFixed(2),
+        swings,
+        landed,
+        hitsTaken: taken,
+        damageTaken: +damageTaken.toFixed(1),
+        playerStart: +startHealth.toFixed(1),
+        playerLeft: +Math.max(0, combat.vitals.health.value).toFixed(1),
+        retreatFraction: +(retreatFrames / Math.max(1, frames)).toFixed(2),
+        timedOut: frames >= maxFrames,
+      };
+    },
+    {
+      n: count,
+      stride: opts.stride ?? STRIDE,
+      maxFrames: opts.maxFrames ?? 900,
+      holdRange: opts.holdRange ?? 1.2,
+      crowdRange: opts.crowdRange ?? 2.4,
+    },
   );
 
 /* -- 1. bare fists of a starting Barbarian, one on one --------------------- */
@@ -381,7 +515,16 @@ for (const variant of VARIANTS) {
 
 if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
 
-/* -- 2. the same fight with a magic weapon --------------------------------- */
+/* -- 2. a three-skeleton pack, starting gear ------------------------------- */
+
+console.log('\n-- pack fight, starting gear --');
+const pack = await packFight(3);
+results['pack.base'] = pack;
+console.log(`  pack: ${JSON.stringify(pack)}`);
+
+if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
+
+/* -- 3. the same fight with a magic weapon --------------------------------- */
 
 /** Equip a rolled magic weapon and report what the swing now carries. */
 const equipMagicWeapon = () =>
@@ -431,9 +574,144 @@ for (const variant of VARIANTS) {
   console.log(`  ${variant} (magic): ${JSON.stringify(r)}`);
 }
 
+console.log('\n-- pack fight, magic weapon --');
+const packMagic = await packFight(3);
+results['pack.magic'] = packMagic;
+console.log(`  pack (magic): ${JSON.stringify(packMagic)}`);
+
 if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
 
 await browser.close();
 server.kill('SIGTERM');
-console.log(JSON.stringify(results, null, 2));
+
+/* -- the budget ------------------------------------------------------------ */
+
+/*
+ * Asserted rather than reported, which is the whole point of this file: the
+ * project spent its entire life able to say how fast the player *dies* and
+ * unable to say whether he can win. These bounds are wide — this is a fight
+ * against a moving, retreating enemy, and swing counts scatter — but they are
+ * bounds. A regression that makes the axe stop connecting, or that turns a
+ * skeleton into a health sponge, now fails a check instead of being noticed by
+ * whoever next plays the game.
+ *
+ * | matchup            | measured (starting gear) | asserted   |
+ * |--------------------|--------------------------|------------|
+ * | minion             | see run output           | <= 12 s    |
+ * | warrior            |                          | <= 20 s    |
+ * | rogue              |                          | <= 16 s    |
+ * | mage               |                          | <= 14 s    |
+ * | three at once      |                          | won, and not trivially |
+ */
+
+console.log('\n-- verdict --');
+
+const TTK_BUDGET = { minion: 12, warrior: 20, rogue: 16, mage: 14 };
+/*
+ * The floor is 0.5 s and not something respectable-looking like 2 s, because a
+ * *time* floor is the wrong instrument for "the fight has shape". Crits are a
+ * 9% roll at double damage; two of them in a row put a 46-point minion down in
+ * a second, and that is the damage table working, not a bug. The claim worth
+ * asserting is the one below it — that a skeleton takes **at least two
+ * connecting blows** — which says the same thing about shape and does not
+ * depend on which way the dice fell. The floor here only catches a nonsense
+ * zero-length result.
+ */
+const LOWER = 0.5;
+
+for (const variant of VARIANTS) {
+  const r = results[`duel.${variant}`];
+  const budget = TTK_BUDGET[variant];
+  check(
+    `a Barbarian kills a skeleton ${variant} in ${LOWER}-${budget} s of real fighting`,
+    r !== null && r !== undefined && r.killed === true && r.seconds <= budget && r.seconds >= LOWER,
+    r === null || r === undefined
+      ? 'no fight'
+      : `${r.seconds}s, ${r.swings} swings, ${r.landed} landed, ` +
+        `${r.playerLeft}/${r.playerStart} hp left`,
+  );
+  check(
+    `and lands ${variant} kills in 2-9 connecting blows`,
+    r !== null && r !== undefined && r.landed >= 2 && r.landed <= 9,
+    `${r?.landed} landed for ${r?.maxHealth} hp, mean ${r?.meanHit}`,
+  );
+}
+
+check(
+  'the scripted aim actually tracks the target',
+  VARIANTS.every((v) => (results[`duel.${v}`]?.meanAimError ?? 99) < 5),
+  VARIANTS.map((v) => `${v} ${results[`duel.${v}`]?.meanAimError}°`).join(', '),
+);
+
+check(
+  'a magic weapon was rolled and equipped',
+  gear !== null && gear.equipped !== null,
+  gear?.equipped === null || gear === null
+    ? 'no magic weapon dropped in 900 rolls'
+    : `${gear.equipped.quality} ${gear.equipped.name} ${JSON.stringify(gear.equipped.mods)}`,
+);
+check(
+  'and it raised the physical damage the swing actually carries',
+  gear !== null && gear.after.max > gear.before.max,
+  `${gear?.before.min}-${gear?.before.max} -> ${gear?.after.min}-${gear?.after.max}`,
+);
+
+// Offence, in practice rather than on the sheet. Compared as *seconds per
+// landed blow's worth of pool*: swing counts against a retreating enemy are
+// noisy enough that a straight time comparison would be a coin flip, but the
+// mean damage of a connecting blow is not.
+const meanOf = (prefix) => {
+  const xs = VARIANTS.map((v) => results[`${prefix}.${v}`]).filter(
+    (r) => r !== null && r !== undefined && r.landed > 0,
+  );
+  if (xs.length === 0) return 0;
+  return +(xs.reduce((a, r) => a + r.meanHit, 0) / xs.length).toFixed(1);
+};
+const baseMean = meanOf('duel');
+const magicMean = meanOf('magic');
+check(
+  'the magic weapon hits harder in the running game, not only on the sheet',
+  magicMean > baseMean,
+  `${baseMean} mean damage per landed blow -> ${magicMean}`,
+);
+
+check(
+  'a player can win a three-skeleton pack fight',
+  pack !== null && pack.won === true,
+  pack === null
+    ? 'not enough skeletons'
+    : `${pack.won ? 'won' : pack.playerDied ? 'DIED' : 'timed out'} in ${pack.seconds}s, ` +
+      `${pack.playerLeft}/${pack.playerStart} hp left, ${pack.kills} killed, ` +
+      `${pack.damageTaken} damage taken`,
+);
+check(
+  'and the pack is a real threat rather than a queue',
+  pack !== null && pack.damageTaken >= 30 && pack.playerLeft < pack.playerStart * 0.9,
+  `${pack?.damageTaken} damage taken, ${pack?.playerLeft}/${pack?.playerStart} hp left`,
+);
+check(
+  'a pack costs the player more than a single skeleton',
+  pack !== null &&
+    results['duel.warrior'] !== null &&
+    pack.damageTaken > (results['duel.minion']?.damageTaken ?? 0),
+  `${results['duel.minion']?.damageTaken} (one minion) vs ${pack?.damageTaken} (three)`,
+);
+
+if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
+
+console.log('\n-- table (starting gear) --');
+console.log('  variant  hp   swings  landed  mean   seconds  hp left');
+for (const variant of VARIANTS) {
+  const r = results[`duel.${variant}`];
+  if (r === null || r === undefined) continue;
+  console.log(
+    `  ${variant.padEnd(8)} ${String(r.maxHealth).padEnd(4)} ${String(r.swings).padEnd(7)} ` +
+      `${String(r.landed).padEnd(7)} ${String(r.meanHit).padEnd(6)} ${String(r.seconds).padEnd(8)} ` +
+      `${r.playerLeft}/${r.playerStart}`,
+  );
+}
+
+console.log(
+  failures.length === 0 ? '\nALL PASS' : `\n${failures.length} FAILED: ${failures.join(', ')}`,
+);
 process.exit(failures.length === 0 ? 0 : 1);
