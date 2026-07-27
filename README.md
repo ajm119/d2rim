@@ -452,6 +452,15 @@ inventory is supposed to look like.
   the augmentation packet, but it does not widen the base hit window.
 - **The art is stylized low-poly, on purpose.** See
   [Assets](#assets-and-attribution).
+- **Enemies do not respawn, and cannot be revived.** A zone's spawn table runs
+  once on load; the Blood Moor's six skeletons are all the skeletons there will
+  ever be until you leave and come back. And there is a latent bug behind that:
+  `Vitals.revive()` restores a dead enemy's health pool but does not touch
+  `EnemyBase`'s own state machine, so the "revived" enemy is still in
+  `state === 'dead'`, keeps sinking, and is culled by `EnemyDirector` 4.6 s
+  after it originally fell — while `alive` reads `true` the whole time. Nothing
+  in the game currently revives an enemy, so nothing is visibly broken, but any
+  future resurrect (a Necromancer, a boss phase) will hit this.
 - **`src/physics/WorldColliders.ts` is dead code**, superseded by
   `ZoneManager`.
 - **`npm run capture` and `npm run shots` are two different harnesses.**
