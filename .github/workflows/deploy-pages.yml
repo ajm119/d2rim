@@ -1,0 +1,65 @@
+# Builds the game and publishes it to GitHub Pages.
+#
+# The site is a project page, so it is served from
+# https://<owner>.github.io/<repo>/ and the bundle must be built with a matching
+# base path. VITE_BASE supplies it (see vite.config.ts); it is derived from the
+# repository name so a fork deploys correctly without editing this file.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [claude/diablo2-skyrim-poc-9xj3j5]
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs pages:write to deploy and id-token:write for the
+# deploy-pages OIDC handshake.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once, but let a newer commit supersede a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Guard the deploy: a red build or a failing suite should not ship.
+      - run: npm test
+
+      - name: Build
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      # `enablement: true` creates the Pages site on first run if it does not
+      # exist yet, so no manual trip through repository settings is needed.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -18,6 +18,13 @@ import { defineConfig } from 'vitest/config';
  *   bootstrap uses.
  */
 export default defineConfig({
+  // Deployment sub-path. GitHub Pages serves a project site from
+  // `https://<user>.github.io/<repo>/`, so every emitted URL needs that prefix.
+  // `AssetManager` already resolves its registry paths against
+  // `import.meta.env.BASE_URL`, which Vite derives from this, so setting it here
+  // is sufficient for both the bundle and the streamed game assets.
+  // Unset locally, so `npm run dev` and `npm run preview` stay at `/`.
+  base: process.env.VITE_BASE ?? '/',
   resolve: {
     // Array form so the `three` entry can be an exact-match regex. The object
     // form does prefix matching, which would rewrite `three/webgpu` itself into
@@ -43,7 +50,10 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    sourcemap: true,
+    // Source maps are ~11 MB and are only ever fetched with devtools open, but
+    // they still have to be uploaded to Pages on every deploy. Keep them for
+    // local builds, drop them when building for deployment.
+    sourcemap: !process.env.VITE_BASE,
     chunkSizeWarningLimit: 2048,
     rollupOptions: {
       output: {
