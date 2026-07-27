@@ -826,26 +826,27 @@ export class BloodMoor implements Zone {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
 
-      // The block the Den's mouth is cut through gets no collider.
+      // The escarpment carries no colliders. The terrain does.
       //
-      // `buildSceneColliders` fits an axis-aligned box, and this block is a
-      // 14 x 16 m displaced ellipsoid with a cave mouth in its side. A box
-      // cannot represent a hole: it fills the mouth, the approach in front of
-      // it and the ground either side, all invisibly. The measured symptom was
-      // a player arriving from the Den standing *inside* `escarpment.4` —
-      // `findClearSpot` could not find open ground within 5 m and fell back to
-      // placing him anyway — with the camera arm pinned at its floor against
-      // the same box.
+      // `buildSceneColliders` fits an axis-aligned box to a mesh's bounding
+      // box, and these are displaced ellipsoids up to 14 x 16 m across, sunk
+      // half their height into the bank. Six of them derive six boxes that
+      // together blanket the whole west bank from x = -21.8 to -7.0 and up to
+      // 8 m tall — a wall of invisible geometry across the only approach to the
+      // Den of Evil, with the `from-den` arrival point *inside* it. The
+      // measured consequences: `findClearSpot` found no open ground within 5 m
+      // and placed the player inside the box anyway, and the camera arm was
+      // pinned at its floor on the frame that introduces the moor.
       //
-      // Nothing is lost by dropping it: the west bank's shape is in the terrain
-      // heightfield, which is what the player actually walks on, and the mouth
-      // itself is a portal volume the moment he reaches it. Tested by bounds
-      // rather than by index so it stays correct if either the blocks or the
-      // mouth are re-authored.
-      const reach = Math.max(block.s[0], block.s[2]);
-      if (Math.hypot(block.x - DEN_MOUTH.portal.x, block.z - DEN_MOUTH.portal.y) < reach) {
-        mesh.userData['noCollide'] = true;
-      }
+      // A box cannot describe this shape. It cannot describe the cave mouth cut
+      // into block 4 at all — a hole is precisely what an AABB has no way to
+      // express. And the shape is already described somewhere better:
+      // `TerrainField`'s west bank is a smooth ramp rising 4.6 m over 14 m and
+      // the rocks are keyed into it (see the sinking note above), so the
+      // heightfield the player actually walks on already carries the bank's
+      // form. What is lost is the ability to bump into an individual boulder
+      // face; what is gained is a reachable Den.
+      mesh.userData['noCollide'] = true;
 
       this.#root.add(mesh);
       this.#disposables.push(geometry);

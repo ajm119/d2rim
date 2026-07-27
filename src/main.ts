@@ -22,6 +22,7 @@ import { NpcSystem } from './quest/NPC';
 import { LootSystem } from './rpg/Loot';
 import { RpgSystem } from './rpg/RpgSystem';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
+import { RENDER_TIERS, qualityFromUrl } from './render/RenderSettings';
 import { collectMemoryReport, formatMemoryReport } from './render/MemoryReport';
 import { BloodMoor } from './scene/BloodMoor';
 import { DenOfEvil } from './scene/DenOfEvil';
@@ -163,7 +164,22 @@ const fadeSeconds = params.get('fade') === '0' ? 0 : 0.35;
 const events = new EventBus();
 const loadingScreen = new LoadingScreen(events);
 
-const engine = new Engine({ canvas, autoStart, events });
+// The tier's pixel-ratio cap, resolved before the engine exists.
+//
+// `RenderSettings` owns this value and re-applies it in `init`, but the engine
+// is constructed first and starts creating the renderer immediately, so a cap
+// applied later would let the very first frame be built at the device's full
+// ratio — on a Retina laptop, four times the fragments — and then resize. That
+// is a visible hitch on precisely the machines the cap exists to protect, so
+// the URL is read once here and the two agree from the first frame.
+const bootTier = RENDER_TIERS[qualityFromUrl()];
+
+const engine = new Engine({
+  canvas,
+  autoStart,
+  events,
+  pixelRatioCap: bootTier.pixelRatioCap,
+});
 
 // Registration order *is* frame order — see `render/FrameGraph.ts`, which owns
 // the ordering constraints and the reasoning behind every one of them.

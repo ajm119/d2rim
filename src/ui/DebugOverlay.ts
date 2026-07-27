@@ -138,6 +138,8 @@ export class DebugOverlay implements GameModule {
   #width = 0;
   #height = 0;
   #pixelRatio = 1;
+  /** The raw `devicePixelRatio`, so the tier's cap can be seen doing its job. */
+  #deviceRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
   #unsubscribeResize: (() => void) | null = null;
   #unsubscribeFrame: (() => void) | null = null;
   #drawCalls = 0;
@@ -172,6 +174,7 @@ export class DebugOverlay implements GameModule {
       this.#width = width;
       this.#height = height;
       this.#pixelRatio = pixelRatio;
+      if (typeof window !== 'undefined') this.#deviceRatio = window.devicePixelRatio || 1;
       // Force a redraw on the next update so a resize shows immediately.
       this.#sinceRefresh = REFRESH_INTERVAL;
     });
@@ -246,7 +249,19 @@ export class DebugOverlay implements GameModule {
       `d2rim  ${backend}${backend === 'webgpu' && shim.startsWith('patched') ? ` (${shim})` : ''}`,
       `fps    ${fps.toFixed(1).padStart(5)}  (${(this.#smoothedDelta * 1000).toFixed(1)} ms)`,
       `frame  ${ctx.time.frame}`,
-      `size   ${this.#width}x${this.#height} @${this.#pixelRatio.toFixed(2)}x`,
+      // Two sizes, because only one of them costs anything.
+      //
+      // The CSS size is what the window is; the *drawing buffer* is what the
+      // GPU fills, and on a Retina display those differ by a factor of two per
+      // axis — four in fragments. Reporting only the CSS size is how a machine
+      // ends up quietly rendering 4.7 megapixels while the overlay says 1280.
+      // `device` is the raw `devicePixelRatio` and `@` is what survived the
+      // tier's cap, so the two together say whether the cap is doing anything.
+      `size   ${this.#width}x${this.#height} css`,
+      `buffer ${Math.round(this.#width * this.#pixelRatio)}x` +
+        `${Math.round(this.#height * this.#pixelRatio)} ` +
+        `@${this.#pixelRatio.toFixed(2)}x (device ${this.#deviceRatio.toFixed(2)}x) ` +
+        `${((this.#width * this.#pixelRatio * this.#height * this.#pixelRatio) / 1e6).toFixed(2)} Mpx`,
       `caps   compute=${capabilities.compute ? 'yes' : 'no'} msaa=${capabilities.maxSamples}x`,
     ];
 

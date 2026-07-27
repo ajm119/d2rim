@@ -104,7 +104,7 @@ export class Engine {
   readonly #accumulator: FixedStepAccumulator;
   readonly #clock: Clock;
   readonly #modules: ModuleRecord[] = [];
-  readonly #pixelRatioCap: number;
+  #pixelRatioCap: number;
   readonly #autoStart: boolean;
   readonly #rendererOptions: CreateRendererOptions;
 
@@ -493,6 +493,31 @@ export class Engine {
    * that has not settled) is ignored rather than producing a degenerate
    * projection matrix.
    */
+  /** The cap currently in force. See {@link setPixelRatioCap}. */
+  get pixelRatioCap(): number {
+    return this.#pixelRatioCap;
+  }
+
+  /**
+   * Change the upper bound on `devicePixelRatio`, and resize to match.
+   *
+   * The engine holds the value but does not *choose* it: the choice belongs to
+   * `render/RenderSettings`, because the cap is squared into the fragment count
+   * and is therefore the single largest term in a quality tier's budget. A flat
+   * cap of 2 on a Retina display quadruples the cost of every full-screen pass
+   * relative to the same window at DPR 1, which is not a decision the engine
+   * has any information to make.
+   *
+   * Resizing immediately rather than waiting for the next window resize is the
+   * point: it makes a live `?quality=` change take effect on the next frame.
+   */
+  setPixelRatioCap(cap: number): void {
+    const next = Math.max(0.5, cap);
+    if (next === this.#pixelRatioCap) return;
+    this.#pixelRatioCap = next;
+    this.resize();
+  }
+
   resize(): void {
     const renderer = this.#renderer;
     if (renderer === null) return;

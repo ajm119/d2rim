@@ -84,6 +84,36 @@ export interface RenderTier {
   /** Light-shaft buffer scale relative to the chain resolution. */
   readonly lightShaftScale: number;
   /**
+   * Upper bound on `devicePixelRatio` for this tier.
+   *
+   * ### Why this belongs to the tier and not to the Engine
+   *
+   * It used to be a flat 2 on `Engine`, and a flat cap is the most expensive
+   * constant in the project. `devicePixelRatio` is *squared* into the pixel
+   * count: on a Retina laptop a cap of 2 makes every fragment shader in the
+   * frame run four times as often as it would on the same window at DPR 1. The
+   * frame's dominant cost here is the terrain uber-shader — three triplanar
+   * sample sets plus detail, macro variation and wetness, over most of the
+   * screen — so that factor of four lands almost entirely on the thing that is
+   * already the most expensive.
+   *
+   * Everything else the tier controls is chosen to fit a machine's budget, and
+   * this is the largest single term in that budget, so it has to be chosen in
+   * the same place and travel with the same knob. A tier that carefully halves
+   * its shadow map and then renders at four times the pixels is not a quality
+   * setting, it is two settings arguing.
+   *
+   * The ladder is deliberately not linear:
+   * - `low` = 1: a machine that needed `low` cannot afford Retina fill.
+   * - `medium` = 1.5: 2.25x the pixels of DPR 1, not 4x. Half a DPR step is
+   *   most of the visible sharpness — text and high-contrast edges — for a
+   *   little over half the cost, and 1.5 is the ratio at which a modern laptop
+   *   GPU still has thermal headroom left over. On a fanless machine, headroom
+   *   is the difference between a frame rate and a frame rate that decays.
+   * - `high`/`ultra` = 2: explicit opt-in, so the player has said they want it.
+   */
+  readonly pixelRatioCap: number;
+  /**
    * Scatter multiplier for prop/vegetation instancing in the showcase scene.
    *
    * **1 at every tier, deliberately.** This used to run 0.45 → 1.25 across the
@@ -118,6 +148,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 128,
     froxelDimensions: [96, 54, 48],
     lightShaftScale: 0.35,
+    pixelRatioCap: 1,
     scatterDensity: 1,
   },
   medium: {
@@ -135,6 +166,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 192,
     froxelDimensions: [128, 72, 64],
     lightShaftScale: 0.4,
+    pixelRatioCap: 1.5,
     scatterDensity: 1,
   },
   high: {
@@ -152,6 +184,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 256,
     froxelDimensions: null,
     lightShaftScale: 0.5,
+    pixelRatioCap: 2,
     scatterDensity: 1,
   },
   ultra: {
@@ -169,6 +202,7 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     environmentWidth: 384,
     froxelDimensions: null,
     lightShaftScale: 0.5,
+    pixelRatioCap: 2,
     scatterDensity: 1,
   },
 };
@@ -327,6 +361,7 @@ export class RenderSettings implements GameModule, RenderQualityProvider, Weathe
 
   #quality: RenderQuality;
   readonly #weather: WeatherState;
+  #ctx: GameContext | null = null;
 
   constructor(options: RenderSettingsOptions = {}) {
     this.#quality = options.quality ?? qualityFromUrl();
@@ -334,18 +369,40 @@ export class RenderSettings implements GameModule, RenderQualityProvider, Weathe
   }
 
   init(ctx: GameContext): void {
+    this.#ctx = ctx;
     ctx.services.register<RenderQualityProvider>(RenderQualityKey, this);
     ctx.services.register<WeatherStateProvider>(WeatherStateKey, this);
+    // The engine boots with a default cap; this is the tier taking ownership of
+    // it. Done in `init` rather than left to the first resize so the very first
+    // frame is already the right size — a boot that renders one 4x frame and
+    // then shrinks is a visible hitch on exactly the machines this protects.
+    this.#applyPixelRatioCap();
+
+    const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    const css = this.#cssSize();
+    const buffer = this.bufferSize(css.width, css.height, dpr);
     console.info(
       `[RenderSettings] quality="${this.#quality}" ` +
         `(post=${this.tier.post} gtao=${this.tier.gtao} ssr=${this.tier.ssr} ` +
         `volumetrics=${this.tier.volumetrics} shadows=${this.tier.shadowCascades}×` +
         `${this.tier.shadowMapSize}), wetness=${this.#weather.wetness.toFixed(2)}`,
     );
+    console.info(
+      `[RenderSettings] pixel ratio: device ${dpr.toFixed(2)}x, tier cap ` +
+        `${this.tier.pixelRatioCap}x, using ${buffer.ratio.toFixed(2)}x — ` +
+        `drawing buffer ${buffer.width}x${buffer.height} ` +
+        `(${buffer.megapixels.toFixed(2)} Mpx before the post stack's render scale)`,
+    );
   }
 
   dispose(): void {
+    this.#ctx = null;
     // Services are unregistered by `ServiceLocator.clear()` on engine teardown.
+  }
+
+  #cssSize(): { width: number; height: number } {
+    if (typeof window === 'undefined') return { width: 1920, height: 1080 };
+    return { width: window.innerWidth || 1920, height: window.innerHeight || 1080 };
   }
 
   get quality(): RenderQuality {
@@ -354,6 +411,46 @@ export class RenderSettings implements GameModule, RenderQualityProvider, Weathe
 
   get tier(): RenderTier {
     return RENDER_TIERS[this.#quality];
+  }
+
+  /**
+   * Change tier at runtime and push the consequences that cannot wait.
+   *
+   * Most of a tier is read through `this.tier` by whoever needs it, so it
+   * follows automatically. The pixel-ratio cap is the exception: it lives on
+   * the renderer's drawing buffer, which only changes when something asks it
+   * to. Applying it here rather than leaving it to the next window resize is
+   * the difference between `?quality=` being a setting and being a reload.
+   */
+  setQuality(quality: RenderQuality): void {
+    if (this.#quality === quality) return;
+    this.#quality = quality;
+    this.#applyPixelRatioCap();
+  }
+
+  /**
+   * The drawing buffer this tier would produce for a given CSS size and DPR.
+   *
+   * Exported as a function rather than left implicit because the number nobody
+   * computes is the number that surprises everybody: a "0.75 render scale" tier
+   * on a Retina display still fills more pixels than a full-scale tier on a
+   * DPR-1 one, and stating it is the only way that comparison ever gets made.
+   */
+  bufferSize(cssWidth: number, cssHeight: number, devicePixelRatio: number): {
+    ratio: number;
+    width: number;
+    height: number;
+    megapixels: number;
+  } {
+    const ratio = Math.min(devicePixelRatio || 1, this.tier.pixelRatioCap);
+    const width = Math.round(cssWidth * ratio);
+    const height = Math.round(cssHeight * ratio);
+    return { ratio, width, height, megapixels: (width * height) / 1e6 };
+  }
+
+  #applyPixelRatioCap(): void {
+    const cap = this.tier.pixelRatioCap;
+    this.#ctx?.engine.setPixelRatioCap(cap);
   }
 
   /* -- RenderQualityProvider --------------------------------------------- */
