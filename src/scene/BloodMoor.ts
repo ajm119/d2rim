@@ -2054,9 +2054,17 @@ export class BloodMoor implements Zone {
 
     const rock =
       materials?.create('rock', {
-        albedoTint: [0.115, 0.112, 0.115],
-        roughnessRange: [0.7, 1],
-      }) ?? new THREE.MeshStandardNodeMaterial({ color: 0x1a1a1a, roughness: 0.95 });
+        // Darker and flatter than the escarpment's cliff rock, on purpose. The
+        // jamb's job is to be the *frame* of a hole: at the escarpment's value
+        // and gloss it came back as a bright boulder pile catching the sky, and
+        // a bright frame around a dark gap reads as rocks, not as a mouth. The
+        // roughness floor is raised for the same reason — a specular highlight
+        // on the jamb is the single strongest cue that this is a solid object.
+        albedoTint: [0.075, 0.073, 0.078],
+        albedoSaturation: 0.45,
+        roughnessRange: [0.86, 1],
+        wetnessExposure: 0.25,
+      }) ?? new THREE.MeshStandardNodeMaterial({ color: 0x121212, roughness: 0.97 });
     rock.name = 'moor.denMouth.rock';
     this.#disposables.push(rock);
 
@@ -2117,15 +2125,49 @@ export class BloodMoor implements Zone {
     throatMaterial.envMapIntensity = 0.02;
     this.#disposables.push(throatMaterial);
 
-    const throatGeometry = new THREE.BoxGeometry(4.6, 3.4, 5.2);
+    // Sized to be *hidden* by the jamb from every direction except through the
+    // gap. The previous pass enlarged it to 6.2 x 4.4 x 7.5 so the darkness
+    // would read from an oblique approach, and it did — as a black cube floating
+    // above the rocks, because a recess wider and taller than the thing it is
+    // recessed into is not a recess, it is a box. Back inside the jamb, and the
+    // obliqueness problem is solved by the hood below instead.
+    const throatGeometry = new THREE.BoxGeometry(4.4, 3.2, 6.5);
     this.#disposables.push(throatGeometry);
     const throat = new THREE.Mesh(throatGeometry, throatMaterial);
     throat.name = 'moor.denMouth.throat';
-    throat.position.set(0, 1.1, -3.4);
+    throat.position.set(0, 1.05, -3.9);
     throat.receiveShadow = true;
     // Never a collider: the player walks into it and the portal takes over.
     throat.userData['noCollide'] = true;
     group.add(throat);
+
+    /* the hood */
+
+    // A slab over the top of the throat, and the piece that makes the whole
+    // assembly read from above.
+    //
+    // The default third-person camera looks *down* at the player, so the
+    // approach to any ground-level opening is an approach from above — and from
+    // above, a jamb and a lintel frame nothing at all. Without a roof the eye
+    // sees straight over the lintel into the recess, and the recess reads as
+    // whatever it geometrically is: a dark box lying in the grass. The hood is
+    // 5 m of rock across the top of it.
+    const hoodGeometry = generateRockGeometry({
+      seed: `${SCATTER_SEED}.denmouth.hood`,
+      detail: 3,
+      radius: 2.6,
+      displacement: 0.36,
+      scale: [1.95, 0.72, 1.7],
+      flattenBase: 0.1,
+    });
+    this.#disposables.push(hoodGeometry);
+    const hood = new THREE.Mesh(hoodGeometry, rock);
+    hood.name = 'moor.denMouth.hood';
+    hood.position.set(0, 3.3, -3.6);
+    hood.rotation.y = 0.24;
+    hood.castShadow = true;
+    hood.receiveShadow = true;
+    group.add(hood);
 
     /* spoil */
     const spoilGeometry = generateRockGeometry({

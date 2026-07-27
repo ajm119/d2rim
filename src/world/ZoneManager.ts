@@ -225,6 +225,13 @@ export class ZoneManager implements GameModule {
 
   fixedUpdate(ctx: GameContext, dt: number): void {
     this.#zone?.fixedUpdate?.(ctx, dt);
+    // The director has to be driven on all three phases, not two. Everything an
+    // enemy *decides* — perception, the behaviour tree, steering, the attack
+    // state machine — lives in `EnemyBase.fixedUpdate`; `update` only poses the
+    // model and `lateUpdate` only sweeps the weapon. Without this line the
+    // skeletons render, blend and cull correctly and never think, which reads
+    // as "the AI is broken" rather than as a missing lifecycle call.
+    this.#director?.fixedUpdate(ctx, dt);
   }
 
   update(ctx: GameContext, dt: number): void {

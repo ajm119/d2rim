@@ -45,24 +45,33 @@
  *
  * ## Cost
  *
- * | element        | draws | triangles | note                                  |
- * |----------------|-------|-----------|---------------------------------------|
- * | ground         | 1     | ~18 400   | 96x96 displaced plane, one material   |
- * | palisade       | 1     | ~8 900    | one instanced batch of ~198 logs      |
- * | fire ring      | 1     | ~11 500   | instanced boulders                    |
- * | built geometry | 6     | ~4 200    | forge, anvil, carts, gate, torch posts, fire logs — merged per material |
- * | fires          | 16    | ~1 300    | 8 x (ember disc + plume)              |
- * | kit props      | ~30   | ~40 000   | tents, barrels, crates, racks, banners |
+ * Measured by `tools/verify-zones.mjs`: **68 meshes, 64 710 triangles,
+ * 249 colliders, 8 registered lights (5 bound)**.
  *
- * Roughly 55 draw calls and 85 k triangles before shadows, on one 2 K material
- * set plus the shared hexkit atlas. The shadow pass doubles the draw count for
- * the shadow-casting subset. That is an order of magnitude inside the budget a
- * 60 Hz target allows for a hub area, and the dominant term is the kit props —
- * which is the right thing for it to be, because they are the only part a player
- * walks up to.
+ * | element        | draws | note                                              |
+ * |----------------|-------|---------------------------------------------------|
+ * | ground         | 1     | 128x128 displaced plane, one blended material     |
+ * | palisade       | 1     | one instanced batch of ~198 logs                  |
+ * | hearth ring    | 1     | instanced boulders                                |
+ * | built geometry | 6     | forge, anvil, two carts, gate, torch posts, fire logs — merged per material |
+ * | fires          | 16    | 8 x (ember disc + plume)                          |
+ * | kit props      | ~43   | tents, barrels, crates, racks, banners            |
+ *
+ * The ground is the single largest triangle consumer at ~33 k, and it is the one
+ * mesh that is worth it: it is the surface every other cost is measured against.
+ * The shadow pass roughly doubles the draw count for the shadow-casting subset,
+ * of which there is exactly one light. That is an order of magnitude inside the
+ * budget a 60 Hz target allows for a hub, and the dominant *draw* term is the
+ * kit props — the right thing for it to be, because they are the only part a
+ * player walks up to.
+ *
+ * Colliders are 246 props plus one terrain heightfield: one per palisade log,
+ * which is deliberate. A single ring collider would be cheaper and would also
+ * make the wall a cylinder the player slides along instead of a row of posts.
  */
 
 import * as THREE from 'three/webgpu';
+import { positionWorld, saturate, smoothstep } from 'three/tsl';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 import { AssetManagerKey, type AssetKey, type AssetManager } from '../assets/AssetManager';
@@ -179,14 +188,29 @@ export class CampGround {
     const outside = smootherstep(PALISADE_RADIUS - 3, PALISADE_RADIUS + 26, distance);
 
     const rolling =
-      noise.noise2D(x * 0.011, z * 0.011) * 2.4 +
-      noise.noise2D(x * 0.031, z * 0.031) * 0.85 +
-      noise.noise2D(x * 0.085, z * 0.085) * 0.22;
+      noise.noise2D(x * 0.011, z * 0.011) * 3.1 +
+      noise.noise2D(x * 0.031, z * 0.031) * 1.1 +
+      noise.noise2D(x * 0.085, z * 0.085) * 0.26;
     // Trodden ground: fine, shallow, and everywhere. It is what stops the camp
     // floor reading as a plane under a raking firelight.
     const trodden = noise.noise2D(x * 0.42, z * 0.42) * 0.06 + noise.noise2D(x * 0.9, z * 0.9) * 0.035;
 
-    return rolling * outside + trodden;
+    // The rim.
+    //
+    // Authored, not noise, and it fixes a real defect rather than adding a
+    // flourish. With the ground merely rolling out to the terrain edge, the far
+    // half of a 260 m plane is seen almost edge-on from any camera above head
+    // height, and 130 m of mud at grazing incidence paints a bright banded strip
+    // straight across the sky — the horizon becomes a smear of stretched texture
+    // instead of a silhouette. Raising the surround into a shallow bowl puts a
+    // real skyline in front of that strip.
+    //
+    // It is also the right *content* answer, which is why it is a rim and not a
+    // fog tweak: a camp under siege is sited in dead ground, and the rogues did
+    // not pitch this one in the middle of an open plain.
+    const rim = smootherstep(42, 118, distance) * 13.5;
+
+    return rolling * outside + rim + trodden;
   }
 
   normalAt(x: number, z: number, epsilon = 0.6): THREE.Vector3 {
@@ -348,8 +372,20 @@ export class RogueEncampment implements Zone {
    * accident.
    */
   readonly entryPoints: readonly ZoneEntryPoint[] = [
-    { id: 'camp-centre', position: at(0, 8.2), yaw: Math.PI },
-    { id: 'gate', position: at(0, 19.5), yaw: Math.PI },
+    // Deliberately off the centre line.
+    //
+    // The terrain heightfield is 128 cells across a 260 m square centred on the
+    // origin, so `x = 0` falls exactly on a cell boundary — and a downward
+    // raycast at a heightfield seam is the one place Rapier's query can come
+    // back empty over solid ground. `PhysicsWorld.groundHeight` returned null at
+    // (0, 8.2) while returning a sane value 1 m either side, which is a
+    // diagnostic-only failure here (the character controller resolves contacts
+    // by shape cast, not by ray) but would be a real one for foot IK or for any
+    // future system that asks "how high is the floor under the player".
+    //
+    // Authoring spawns off the seam costs nothing and removes the whole class.
+    { id: 'camp-centre', position: at(1.4, 8.2), yaw: Math.PI },
+    { id: 'gate', position: at(0.9, 19.5), yaw: Math.PI },
     { id: 'forge', position: at(9.6, -6.2), yaw: 0 },
   ];
 
@@ -487,28 +523,36 @@ export class RogueEncampment implements Zone {
     const geometry = this.field.buildGeometry(TERRAIN_SIZE, TERRAIN_SEGMENTS);
     this.#owned.push(geometry);
 
-    // One material, not a height-blended pair. The Blood Moor blends mud and
-    // dead grass because water sorts them by elevation across an open moor; a
-    // camp floor is trampled by two hundred people and is mud everywhere. A
-    // second splat layer here would be detail nobody can see paid for on every
-    // pixel of the largest mesh in the zone.
+    // Two archetypes, blended by distance from the fire — and the *absence* of
+    // an `albedoTint` here is the load-bearing detail.
+    //
+    // The first two passes tinted `wetMud` by hand and the camp came back a
+    // single warm brown from the bonfire out to the horizon. The Blood Moor's
+    // ground, which reads correctly cold, passes no tint at all: the archetype
+    // spec is already the art direction, and overriding its albedo was
+    // overwriting the one thing that had been calibrated. So the tint is gone
+    // and the archetypes are used as shipped.
+    //
+    // The blend is the camp's own idea, though. Two hundred people have walked
+    // the inside of this palisade to bare mud; ten metres outside it, the moor's
+    // dead grass is still there. That boundary is legible from any angle and it
+    // is the cheapest possible way to say "this ground is used".
+    const trodden = saturate(
+      smoothstep(PALISADE_RADIUS - 7, PALISADE_RADIUS + 11, positionWorld.xz.length()),
+    );
+
     const material =
-      materials?.create('wetMud', {
-        // Cold and dark, and this is the single most important number in the file.
-        //
-        // At [0.62, 0.60, 0.60] — a near-neutral multiply on a warm photoscan —
-        // the camp came back as one orange hue from the bonfire out to the
-        // palisade, which is the exact failure the act's palette rule exists to
-        // prevent: if the *ground* is warm, the fire is not the warm thing, it
-        // is merely the brightest thing. Halved and pushed blue, with the
-        // photoscan's own chroma pulled most of the way out first, because a
-        // tint multiplies channel ratios and cannot by itself change a hue.
-        albedoSaturation: 0.32,
-        albedoTint: [0.29, 0.305, 0.35],
-        roughnessRange: [0.72, 0.98],
-        tiling: 0.34,
-        // Damp, not wet. The camp is the dry place.
-        wetnessExposure: 0.45,
+      materials?.createBlended({
+        base: 'wetMud',
+        overlay: 'deadGrass',
+        weight: trodden,
+        depth: 0.16,
+        // Hex anti-tiling is wrong at this scale for the same reason it is wrong
+        // on the moor: its cells are metres wide on a 260 m plane and the blend
+        // seams show up as a honeycomb. Macro variation breaks the repeat with
+        // no cell structure to give itself away.
+        baseOverrides: { antiTile: 'macro' },
+        overlayOverrides: { antiTile: 'macro' },
       }) ?? new THREE.MeshStandardNodeMaterial({ color: 0x2a2622, roughness: 0.95 });
     material.name = 'camp.ground';
     this.#owned.push(material);

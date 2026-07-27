@@ -47,21 +47,45 @@ await page.goto(`http://127.0.0.1:${PORT}/?autostart=0&backend=webgl2&quality=lo
 await page.evaluate(() => window.__d2rim.ready);
 
 // Zones stream their enemies in after the world is ready, so wait for one to
-// exist rather than assuming the first frame has a fight in it.
+// exist rather than assuming the first frame has a fight in it. If the zone
+// does not produce one, spawn a skeleton through the director's own public
+// entry point instead: this harness is about whether an enemy's swing lands,
+// not about whose job it is to place him, and it should not be blocked by a
+// zone whose population is still being wired up next door.
 const spawned = await page.evaluate(async () => {
   const d2 = window.__d2rim;
   const svc = d2.ctx.services;
   const find = () => svc.tryGet?.('ai.director') ?? svc.tryGet?.('world.zones')?.director ?? null;
-  for (let i = 0; i < 90; i++) {
+  const live = () => (find()?.enemies ?? []).filter((e) => e.alive).length;
+  for (let i = 0; i < 60; i++) {
     await d2.engine.stepFrames(1);
-    const director = find();
-    if ((director?.enemies ?? []).some((e) => e.alive)) return i;
+    if (live() > 0) return { source: 'zone', frames: i, count: live() };
   }
-  return -1;
+
+  const director = find();
+  if (director === null) return { source: 'none', reason: 'no director' };
+  const assets = svc.get('assets');
+  const player = svc.get('character.player');
+  const gltf = await Promise.race([
+    assets.loadGLTF('enemy.skeleton.warrior'),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('GLB load timed out')), 60000)),
+  ]).catch((error) => ({ error: String(error) }));
+  if (gltf.error !== undefined) return { source: 'none', reason: gltf.error };
+  assets.pin('enemy.skeleton.warrior');
+  const clips = [...gltf.animations];
+  for (const variant of ['warrior', 'minion']) {
+    director.spawn(
+      { variant, x: player.position.x + (variant === 'warrior' ? 2.6 : -2.6), z: player.position.z, patrol: 0 },
+      gltf.scene,
+      clips,
+    );
+  }
+  for (let i = 0; i < 20; i++) await d2.engine.stepFrames(1);
+  return { source: 'harness', count: live() };
 });
-console.log(`enemies live after ${spawned} frames`);
-if (spawned < 0) {
-  console.log('PLAYER DAMAGE: FAIL — no enemy ever spawned');
+console.log('enemy supply:', JSON.stringify(spawned));
+if ((spawned.count ?? 0) < 1) {
+  console.log(`PLAYER DAMAGE: FAIL — no enemy to fight (${spawned.reason ?? 'unknown'})`);
   await browser.close();
   server.kill();
   process.exit(1);
@@ -166,7 +190,13 @@ check('the enemy actually swung', a.swingFrames > 0, `${a.swingFrames} swing fra
  * is real rather than scripted. Grinding 120 health off at ~6 a hit takes about
  * three thousand driven frames, which on a software renderer is minutes of
  * wall clock for no extra information. */
-await page.evaluate(() => window.__d2rim.ctx.services.get('combat').vitals.applyDamage(112));
+await page.evaluate(() => {
+  // Leave exactly enough for one more swing to finish. Draining him to zero
+  // outright would kill him *here*, through a code path no enemy uses, and the
+  // whole point of this phase is that a skeleton can land the killing blow.
+  const vitals = window.__d2rim.ctx.services.get('combat').vitals;
+  vitals.applyDamage(Math.max(0, vitals.health.value - 6));
+});
 const b = await run(220, 'dead');
 console.log('\n[B] left on a sliver of health and still not fighting back:', JSON.stringify(b));
 check('the player died', b.deaths.includes('player'), JSON.stringify(b.deaths));

@@ -50,3 +50,4 @@ __*.mjs
 src/render/**/__*.ts
 tests/_*.test.ts
 tools/_diag.mjs
+tools/_zoneprobe.mjs

@@ -81,7 +81,10 @@ const browser = await chromium.launch({ args: [...CHROMIUM_ARGS], executablePath
 const page = await browser.newPage({ viewport: { width: 192, height: 108 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto(`http://127.0.0.1:${PORT}/?autostart=0&backend=webgl2&quality=low`, {
+// `zone=bloodMoor`: the default start zone is the Rogue Encampment, whose
+// walls are close enough that the character cannot reach a steady gait inside
+// them. Locomotion has to be measured somewhere with room to run.
+await page.goto(`http://127.0.0.1:${PORT}/?autostart=0&backend=webgl2&quality=low&zone=bloodMoor`, {
   waitUntil: 'load',
 });
 await page.evaluate(() => window.__d2rim.ready);
@@ -138,6 +141,16 @@ let failed = false;
 for (const gait of GAITS) {
   // Blocking slows the character to the walk gait; it is the only way the
   // input map has of asking for a walk, and it is what the walk clip is for.
+  // Back to the spawn between gaits: 96 frames at sprint covers ten metres of
+  // a scattered moor, and the next gait should not start wedged against a rock.
+  await page.evaluate(() => {
+    const svc = window.__d2rim.ctx.services;
+    const player = svc.get('character.player');
+    const physics = svc.get('physics.world');
+    const spot = physics.findClearSpot(1.1, 0.4, 0.42, player.height, 6);
+    if (spot !== null) player.teleport(spot.x, spot.y, spot.z);
+  });
+  await page.evaluate(() => window.__d2rim.engine.stepFrames(8));
   if (gait.mouse === 'right') await page.mouse.down({ button: 'right' });
   await page.keyboard.down('w');
   for (const key of gait.keys) if (key !== 'w') await page.keyboard.down(key);

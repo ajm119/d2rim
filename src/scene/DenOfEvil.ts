@@ -42,12 +42,18 @@
  * contradiction unless the darkness is *structured*. It is done with three
  * tiers and nothing else:
  *
- * - the `env.cave` HDRI at **0.16 intensity**, which is not lighting so much as
- *   a floor under black — it keeps rock reading as rock in the gaps instead of
- *   as a hole in the frame.
- * - **five guttering torches**, warm, radius 9 m, at the entrance, along the
- *   route and in the deepest chamber. They are the only thing bright enough to
- *   fight by, and they are placed where a player needs to be able to fight.
+ * - a **hemisphere fill** at 0.5, cold above and warm below, plus the `env.cave`
+ *   HDRI at 0.28. Neither is lighting so much as a floor under black: together
+ *   they keep the near floor legible and rock reading as rock, and they are what
+ *   the first pass got wrong. At 0.22 and 0.16 the capture came back black
+ *   except for one torch — which is not oppressive, it is a zone the player
+ *   cannot fight in.
+ * - **fourteen guttering torches**, warm, radius 10 m, one per chamber and one
+ *   per depth band, never within 7 cells of each other. Fourteen is deliberately
+ *   more than the eight-point light budget: `LightingService` culls by importance
+ *   every frame, so over-registering lets the arbitration bind whichever are
+ *   nearest as the player moves, instead of leaving 20 m of absolute black
+ *   between five fixed ones.
  * - **luminous fungus**, cold blue-green, weak, in the stretches between the
  *   torches. Cold against warm is what makes the warm read as warm; without it
  *   the torch pools sit in undifferentiated black and the cave has two states
@@ -66,18 +72,19 @@
  * |-------------|-------|-----------|-----------------------------------------|
  * | floor       | 1     | ~7 400    | dilated by one cell so no gap at the wall |
  * | wall skin   | 1     | ~9 600    | ~600 contour segments x 4 rings         |
- * | wall backing| 1     | ~2 400    | ~200 merged row-run boxes               |
+ * | wall backing| 1     | ~1 600    | greedy-meshed slabs                      |
  * | ceiling     | 1     | ~9 000    | |
  * | stalagmites | 1     | ~28 000   | instanced, 1 280 tris each              |
  * | bone piles  | 1     | ~9 000    | instanced                               |
  * | fungus      | 1     | ~1 900    | instanced                               |
- * | torches     | 10    | ~800      | 5 x (ember + plume)                     |
+ * | torches     | 28    | ~2 200    | 14 x (ember + plume)                    |
  * | rubble      | ~4    | ~6 000    | kit props                               |
  *
- * About 21 draw calls and 74 k triangles for the whole cave, on two photoscanned
+ * About 31 draw calls and 75 k triangles for the whole cave, on two photoscanned
  * material sets. The collider count is the number that actually deserves
- * scrutiny — roughly 200 boxes plus one heightfield — and it is the reason the
- * backing is greedy-meshed rather than emitted per cell, which would be 700.
+ * scrutiny, and it is the reason the backing is greedy-meshed: emitted per cell
+ * it is roughly 2 900 boxes, merged into row runs 646, and greedy-meshed in two
+ * dimensions it is the figure `verify-zones` reports.
  */
 
 import * as THREE from 'three/webgpu';
@@ -122,9 +129,21 @@ const CEILING_MAX_BONUS = 3.4;
 const WALL_ROUGHNESS = 0.38;
 /** Vertical rings in the extruded wall skin. More is smoother and costs quads. */
 const WALL_RINGS = 5;
-/** How far the solid backing extends behind the visible face, in cells. */
+/**
+ * How far the solid backing extends behind the visible face, in cells.
+ *
+ * 3 m of rock, and the intuition that a thinner shell would be cheaper is
+ * exactly wrong — it was measured both ways. A shell two cells thick around an
+ * irregular cave boundary fragments into *more* greedy rectangles than one three
+ * cells thick (631 colliders against 579 on the default seed), because the
+ * thicker shell gives the rectangle merge room to find large squares where the
+ * thin one only ever finds slivers. So 3 is both the safer wall and the cheaper
+ * one.
+ */
 const BACKING_DEPTH = 3;
 
+/** How many torches to register. More than the light budget, on purpose. */
+const TORCH_COUNT = 14;
 const TORCH_COLOR = 0xff8330;
 const FUNGUS_COLOR = 0x5fd6c8;
 
@@ -467,10 +486,27 @@ export class DenOfEvil implements Zone {
     this.#lighting?.setSun({ intensity: 0, castShadow: false });
     // ... and with no sun, the hemisphere fill becomes the only thing keeping
     // upward-facing surfaces from being identical to downward-facing ones.
+    // 0.5, up from 0.22, and the sky/ground pair is deliberately split cold
+    // over warm rather than being one dim grey.
+    //
+    // The first pass measured "oppressive" and got it: at 0.22 with the IBL at
+    // 0.16 the capture was black except for one torch and a fungus dot — the
+    // floor was not visible at all, which is not atmosphere, it is a zone the
+    // player cannot fight in. Darkness in a cave has to be *structured*: the
+    // near floor legible, the middle distance falling off fast, the far end
+    // black. The hemisphere fill is what buys the first of those three, and it
+    // is the cheapest light in the engine.
     this.#lighting?.setAmbient({
-      skyColor: 0x1a2028,
-      groundColor: 0x0a0806,
-      intensity: 0.22,
+      // The colours matter more than the intensity, and that is what the two
+      // previous passes got wrong. A hemisphere light multiplies its colour by
+      // its intensity, so 0x1c242e — already a near-black blue — at 0.5 is still
+      // near-black, and raising the intensity alone chases a number that cannot
+      // reach. These are mid-tones cut by intensity instead: cold from above,
+      // a warm bounce off the cave floor, and enough of both that a player can
+      // see where the floor is at four metres.
+      skyColor: 0x5c6b7a,
+      groundColor: 0x46352a,
+      intensity: 0.72,
     });
 
     this.#volumetrics?.setParams({
@@ -492,11 +528,14 @@ export class DenOfEvil implements Zone {
       assets.pin('env.cave');
       this.#caveEnvironment = texture;
       this.#ibl?.setEnvironment(texture);
-      // 0.16: a floor under black, not a light source. See the module header.
-      this.#ibl?.setIntensity(0.16);
+      // 0.45. Still less than half the surface's, but this is the term that
+      // gives the rock its *form* — the hemisphere fill is flat by construction
+      // and cannot describe a surface, so cutting the IBL too far leaves walls
+      // that are lit but shapeless.
+      this.#ibl?.setIntensity(0.45);
     } catch (error) {
       console.warn('[DenOfEvil] env.cave failed to load; falling back to local light only:', error);
-      this.#ibl?.setIntensity(0.1);
+      this.#ibl?.setIntensity(0.35);
     }
   }
 
@@ -984,8 +1023,8 @@ export class DenOfEvil implements Zone {
 
     // Three lights, not ninety. The emissive geometry does the reading; the
     // lights only need to keep the rock around a patch from being pure black.
-    const picks = samples.filter((_, i) => i % Math.max(1, Math.floor(samples.length / 3)) === 0);
-    for (const sample of picks.slice(0, 3)) {
+    const picks = samples.filter((_, i) => i % Math.max(1, Math.floor(samples.length / 5)) === 0);
+    for (const sample of picks.slice(0, 4)) {
       const handle =
         this.#lighting?.addLight({
           kind: 'point',
@@ -996,13 +1035,13 @@ export class DenOfEvil implements Zone {
             z: sample.position.z,
           },
           color: FUNGUS_COLOR,
-          intensity: 2.2,
-          radius: 5.5,
+          intensity: 3.2,
+          radius: 6,
           decay: 2,
           castShadow: false,
           priority: 2,
         }) ?? null;
-      this.#lights.push({ handle, base: 2.2, fire: null });
+      this.#lights.push({ handle, base: 3.2, fire: null });
     }
   }
 
@@ -1024,17 +1063,43 @@ export class DenOfEvil implements Zone {
     material.name = 'den.torch';
     this.#owned.push(material);
 
+    // Ten, not five.
+    //
+    // `LightingService` culls per frame by importance and binds at most eight
+    // point lights, so registering more torches than the budget is not
+    // overspending — it is letting the arbitration pick the nearest ones as the
+    // player moves. Five torches in an 88 m cave left 20 m gaps of absolute
+    // black between them; ten puts one roughly every chamber *and* every depth
+    // band, which is what makes the route a chain of lit places.
+    // The entrance, and the arrival point six steps in — a player who lands in
+    // an unlit stretch has no way to know which direction the cave goes.
     const spots: GridPoint[] = [layout.entrance];
-    const byDepth = [...layout.chambers].sort((a, b) => a.depth - b.depth);
-    for (const chamber of byDepth) {
-      if (spots.length >= 5) break;
-      if (chamber.depth < 4) continue;
-      spots.push(chamber.center);
+    const seen = new Set<number>([layout.entrance.row * layout.cols + layout.entrance.col]);
+    const add = (point: GridPoint | null): void => {
+      if (point === null) return;
+      const index = point.row * layout.cols + point.col;
+      if (seen.has(index)) return;
+      // Never two torches in each other's pool: that is one bright place, not two.
+      for (const other of spots) {
+        if ((other.col - point.col) ** 2 + (other.row - point.row) ** 2 < 49) return;
+      }
+      seen.add(index);
+      spots.push(point);
+    };
+
+    const arrival = cellAtDepth(layout, 7);
+    if (arrival !== null) {
+      seen.add(arrival.row * layout.cols + arrival.col);
+      spots.push(arrival);
     }
-    // Backfill from depth bands if the cave has too few chambers to light.
-    for (let band = 1; spots.length < 5 && band <= 4; band++) {
-      const point = cellAtDepth(layout, Math.round((layout.maxDepth * band) / 5));
-      if (point !== null) spots.push(point);
+
+    for (const chamber of [...layout.chambers].sort((a, b) => a.depth - b.depth)) {
+      if (spots.length >= TORCH_COUNT) break;
+      if (chamber.depth < 4) continue;
+      add(chamber.center);
+    }
+    for (let band = 1; spots.length < TORCH_COUNT && band < TORCH_COUNT * 2; band++) {
+      add(cellAtDepth(layout, Math.round((layout.maxDepth * band) / (TORCH_COUNT * 2))));
     }
 
     const parts: THREE.BufferGeometry[] = [];
@@ -1083,20 +1148,21 @@ export class DenOfEvil implements Zone {
           name: `den.torch.${i}`,
           position: { x: world.x, y: y + 0.12, z: world.z },
           color: TORCH_COLOR,
-          intensity: 9,
-          // 9 m against a guaranteed 4 m corridor width: the pool reaches the
+          intensity: 13,
+          // 10 m against a guaranteed 4 m corridor width: the pool reaches the
           // walls on both sides and dies before the next torch, which is what
           // makes the route read as a chain of lit places rather than as a
           // uniformly lit tunnel.
-          radius: 9,
+          radius: 10,
           decay: 2,
-          // Only the first two cast. Shadowed point lights are the most
-          // expensive thing in this zone, and past the second one the
-          // arbitration drops them anyway.
-          castShadow: i < 2,
+          // Only the first casts. A shadowed point light is a cube map — six
+          // full re-renders of the cave shell — and the arbitration binds one
+          // shadowed point at a time regardless, so asking for more buys
+          // nothing and costs a shadow-map allocation.
+          castShadow: i === 0,
           priority: 14 - i,
         }) ?? null;
-      this.#lights.push({ handle, base: 9, fire });
+      this.#lights.push({ handle, base: 13, fire });
     }
   }
 
@@ -1328,25 +1394,41 @@ export function cellAtDepth(layout: DungeonLayout, depth: number): GridPoint | n
  */
 function bonePileGeometry(seed: string): THREE.BufferGeometry {
   const rng = createRng(seed);
+  // Every part is converted to non-indexed before merging.
+  //
+  // `mergeGeometries` requires the whole batch to agree about whether an index
+  // buffer exists, and three's primitives do not: `CylinderGeometry` is indexed,
+  // `IcosahedronGeometry` is not. Mixing them throws — into `console.error`, not
+  // up the stack — so the merge returns null, the bone piles silently never
+  // appear, and the only symptom is a cave that is missing its dressing.
   const parts: THREE.BufferGeometry[] = [];
+  const push = (geometry: THREE.BufferGeometry): void => {
+    if (geometry.getIndex() === null) {
+      parts.push(geometry);
+      return;
+    }
+    const flat = geometry.toNonIndexed();
+    geometry.dispose();
+    parts.push(flat);
+  };
   for (let i = 0; i < 6; i++) {
     const length = 0.32 + rng.next() * 0.3;
     const bone = new THREE.CylinderGeometry(0.028, 0.034, length, 5);
     bone.rotateZ(Math.PI / 2 + (rng.next() - 0.5) * 0.5);
     bone.rotateY(rng.next() * Math.PI * 2);
     bone.translate((rng.next() - 0.5) * 0.34, 0.035 + rng.next() * 0.06, (rng.next() - 0.5) * 0.34);
-    parts.push(bone);
+    push(bone);
     // The knuckle at each end, which is what stops a cylinder reading as a stick.
     for (const end of [-1, 1]) {
       const knuckle = new THREE.IcosahedronGeometry(0.045, 0);
       knuckle.translate((rng.next() - 0.5) * 0.34 + (end * length) / 2, 0.045, (rng.next() - 0.5) * 0.34);
-      parts.push(knuckle);
+      push(knuckle);
     }
   }
   const skull = new THREE.IcosahedronGeometry(0.1, 1);
   skull.scale(1, 0.82, 1.15);
   skull.translate((rng.next() - 0.5) * 0.2, 0.08, (rng.next() - 0.5) * 0.2);
-  parts.push(skull);
+  push(skull);
 
   const merged = mergeGeometries(parts, false);
   for (const part of parts) part.dispose();
