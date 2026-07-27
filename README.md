@@ -357,7 +357,9 @@ and `WeaponHitbox`'s sweep stays a real sweep. Movement is real `KeyW` events;
 attacks are real `mousedown` on the canvas.
 
 **Outgoing** — a level-1 Barbarian in the starting kit, against a skeleton that
-is moving, retreating and fighting back. One run each:
+is moving, retreating and fighting back. These reproduce to the frame across
+independent runs, because `stepFrames` bypasses the wall clock and the combat
+RNG is seeded:
 
 | variant | pool | swings | landed | mean blow | time to kill | player HP left |
 | ------- | ---- | ------ | ------ | --------- | ------------ | -------------- |
