@@ -48,11 +48,13 @@ import {
 /**
  * The shortest arm any zone spawn is allowed to produce.
  *
- * Not a tuning constant — a legibility one. At 1 m the Barbarian's shoulders
- * are most of a 55°-FOV frame, and the opening shot of a zone is exactly where
- * that is least affordable.
+ * Not a tuning constant — a legibility one, and it was measured off captures:
+ * at 1.2 m the Barbarian's head and shoulder own the left half of a 1280x720
+ * frame at 55° FOV, and the opening shot of a zone is exactly where that is
+ * least affordable. 1.5 m sits just under the rig's own floor, so the assertion
+ * fails on a real regression rather than on a tuning nudge.
  */
-const READABLE_ARM = 1.0;
+const READABLE_ARM = 1.5;
 
 /**
  * The authored ground positions the three zones put the player down on.

@@ -142,11 +142,18 @@ const DEFAULTS = {
 /**
  * The arm floor as a fraction of the rest length, when nobody has said.
  *
- * 0.34 rather than a constant, so a character of a different size is framed the
- * same way: the floor and the rest length are the same judgement about how much
- * of the frame the character may own, made at two distances.
+ * A fraction rather than a constant, so a character of a different size is
+ * framed the same way: the floor and the rest length are the same judgement
+ * about how much of the frame the character may own, made at two distances.
+ *
+ * 0.45 — about 1.6 m on the Barbarian — was measured, not guessed. The first
+ * attempt used 0.34, and the captures at the Den arrival and the Blood Moor
+ * den-mouth arrival were still unusable: at 1.2 m the character's head and
+ * shoulder fill the left half of a 1280x720 frame at 55° FOV. 1.6 m is the
+ * shortest arm at which the frame still reads as a shot of a character in a
+ * place rather than a shot of a character.
  */
-export const MIN_ARM_FRACTION = 0.34;
+export const MIN_ARM_FRACTION = 0.45;
 
 /**
  * Collider kinds the camera arm must never be stopped by.

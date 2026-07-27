@@ -46,11 +46,12 @@ const HEIGHT = 720;
 /**
  * The shortest arm any spawn may produce, metres.
  *
- * Matches `READABLE_ARM` in `tests/character.cameraRig.test.ts`. At 1 m the
- * Barbarian's shoulders are most of a 55°-FOV frame, and the opening shot of a
- * zone is exactly where that is least affordable.
+ * Matches `READABLE_ARM` in `tests/character.cameraRig.test.ts`. Measured off
+ * captures: at 1.2 m the Barbarian's head and shoulder own the left half of the
+ * frame, and the opening shot of a zone is exactly where that is least
+ * affordable.
  */
-const READABLE_ARM = 1.0;
+const READABLE_ARM = 1.5;
 const failures = [];
 
 mkdirSync(OUT, { recursive: true });

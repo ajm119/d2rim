@@ -2219,18 +2219,35 @@ export class BloodMoor implements Zone {
       flattenBase: 0.5,
     });
     this.#disposables.push(spoilGeometry);
+    // The arrival point, in this group's local frame, and the ground it needs
+    // kept clear.
+    //
+    // The spoil heap's scatter annulus (1.6-5.8 m) contains the `from-den`
+    // arrival point at 3.5 m, and it duly dropped a rock on it: a player
+    // climbing out of the Den landed with `moor.denMouth.spoil#20` level with
+    // his head, 0.6 m from the camera pivot, so the arm collapsed to its floor
+    // on the frame that is supposed to show him the moor. A spoil heap outside
+    // a mine is exactly the right dressing for this spot; a spoil heap *on the
+    // doorstep* is not, and the fix is the doorstep, not the heap.
+    const clearX = DEN_MOUTH.approach.x - x;
+    const clearZ = DEN_MOUTH.approach.y - z;
+    const CLEAR_RADIUS = 2.2;
+
     const spoil: ScatterSample[] = [];
-    for (let i = 0; i < 22; i++) {
+    // Attempts, not iterations: rejecting a sample must not cost a rock, or
+    // clearing the doorstep quietly thins the whole heap.
+    for (let attempt = 0; attempt < 220 && spoil.length < 22; attempt++) {
       const angle = rng.next() * Math.PI * 2;
       const radius = 1.6 + rng.next() * 4.2;
       const sx = Math.cos(angle) * radius;
       const sz = Math.sin(angle) * radius * 0.7 + 1.4;
+      if (Math.hypot(sx - clearX, sz - clearZ) < CLEAR_RADIUS) continue;
       spoil.push({
         position: new THREE.Vector3(sx, this.field.heightAt(x + sx, z + sz) - base + 0.05, sz),
         normal: new THREE.Vector3(0, 1, 0),
         scale: 0.45 + rng.next() * 1.1,
         rotation: rng.next() * Math.PI * 2,
-        index: i,
+        index: spoil.length,
       });
     }
     const rubble = buildInstancedMesh(spoilGeometry, rock, spoil);
