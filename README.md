@@ -392,11 +392,17 @@ softened. If something here reads as a dealbreaker for your use, it probably is.
 weapon impacts, no wind, no fire crackle, no monster vocalisations, no music, no
 UI clicks. The game is silent.
 
-This is not a small gap and it is not one that can be closed by dropping files
-in. Every sound this game needs would have to be **synthesised** — wind, fire and
-monster vocalisations especially — because no CC0 audio source is reachable
-through this environment's egress proxy. The Kenney RPG Audio pack *is* fetched
-and attributed (21 entries), but nothing plays it.
+It is not merely that the files are missing — **28 `.ogg` files are sitting in
+`public/assets/audio/`** (footsteps, combat, foley, loot, UI, from the Kenney RPG
+Audio pack, fetched and attributed) and no code anywhere loads or plays a single
+one of them. What is missing is the entire playback layer: a mixer, positional
+sources, an animation-event-to-sound binding, and ducking.
+
+And the files that *are* there do not cover what the game most needs. Wind, fire
+crackle and monster vocalisations would all have to be **synthesised**, because
+no CC0 source for them is reachable through this environment's egress proxy. So
+this is not a "drop in some files" gap; it is a subsystem plus original sound
+design.
 
 ### `quality=ultra` fails the tier-parity gate, marginally
 
@@ -503,7 +509,7 @@ sky, CSM, GTAO, SSR, denoise, tonemap, colour grade) and the frame-graph wiring.
 
 ### A note on harness design
 
-Two failures shaped how these are written, and both are worth internalising
+Four failures shaped how these are written, and all four are worth internalising
 before adding another:
 
 1. **A staging trick can suppress the thing it is measuring.** An early attempt
@@ -517,6 +523,20 @@ before adding another:
 2. **A capture that always succeeds is worse than no capture.** Hence the frame
    guard, the parity gate, and the rule that unknown option names are rejected
    rather than ignored.
+3. **A harness can quietly consume the world it measures.** `EnemyDirector`
+   splices a corpse out of its list once the corpse has finished sinking. A
+   version of `verify-kill.mjs` that fought four duels and then a thirty-second
+   pack fight destroyed six skeletons permanently, and every measurement after
+   that reported "no fresh target of that variant" — which reads exactly like a
+   broken spawn table. Fights now revive their target immediately, and the long
+   fight goes last.
+4. **A scripted player can be too careful to produce a result.** The pack fight
+   gives the player one rule of footwork: back off when two skeletons are on
+   him. Applied unconditionally, the player spent a third of the fight retreating
+   at full health, took 28 damage in thirty seconds and the clock expired with
+   one skeleton still up. That is a stalemate, and a stalemate answers neither
+   "can he win" nor "is it dangerous". The rule is now conditioned on actually
+   being hurt.
 
 ---
 

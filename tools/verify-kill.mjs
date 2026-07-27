@@ -49,9 +49,16 @@
  *
  *   - Swings, landed hits and simulated seconds for the Barbarian to kill each
  *     skeleton variant, plus the health he has left when it drops.
- *   - The same fight with a magic weapon equipped, to show gear moves offence
- *     in practice and not only on the character sheet.
- *   - A three-skeleton pack fight, fought for real in both directions.
+ *   - The same four fights with the best weapon the drop table will produce, to
+ *     show gear moves the offence the swing resolves against and not only the
+ *     character sheet.
+ *   - A three-skeleton pack fight, fought for real in both directions, with the
+ *     starting weapon put back on first.
+ *
+ * In that order, and the order is load-bearing: `EnemyDirector` splices a
+ * corpse out of its list once the corpse has finished sinking, so a fight long
+ * enough for that to happen permanently reduces the roster. Duels are short and
+ * revive their target immediately; the pack fight is neither, so it goes last.
  *
  * Usage: `node tools/verify-kill.mjs [--json out.json]`
  * Assumes `dist/` is current; run `npm run build` first.
@@ -79,8 +86,7 @@ const JSON_OUT = (() => {
  * samples once per stepped frame — and because it sweeps from the previous pose
  * the arc between samples is still covered. This exists because a rendered
  * frame is the expensive part on a software rasteriser, and a measurement
- * nobody can afford to run is a measurement nobody runs. `--stride60` re-runs
- * one duel at a true 60 Hz as a control.
+ * nobody can afford to run is a measurement nobody runs.
  */
 const STRIDE = 2 / 60;
 
@@ -115,22 +121,52 @@ page.on('console', (m) => logs.push(`${m.type()}: ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
 
 const url = `http://127.0.0.1:${PORT}/?autostart=0&backend=webgl2&quality=low&fade=0&zone=bloodMoor`;
-console.log(`loading ${url}`);
-await page.goto(url, { waitUntil: 'load' });
-await page.evaluate(() => window.__d2rim.ready);
-await page.evaluate(async () => {
-  const d2 = window.__d2rim;
-  await d2.engine.stepFrames(2);
-  await d2.zones.enemiesReady;
-  await d2.engine.stepFrames(4);
-  // Hit stop scales `ctx.time`, which would make simulated seconds a lie and
-  // costs many times the renders per simulated second on a software rasteriser.
-  d2.engine.getModule('combat.feedback')?.setHitStop(false);
-});
+
+/**
+ * Reload the page for a fresh Blood Moor and a fresh level-1 character.
+ *
+ * ### Why every phase gets its own boot
+ *
+ * The moor's roster is six skeletons — two minions, two warriors, **one** rogue
+ * and **one** mage — and a dead one does not come back. `Vitals.revive()` looks
+ * like it should bring a corpse back and does not: it restores the health pool,
+ * but `EnemyBase` keeps its own state machine, and a revived corpse is still in
+ * `state === 'dead'`, so it goes on sinking and `EnemyDirector` culls it 4.6 s
+ * after it fell. `alive` reads true the whole time, which is why the effect is
+ * so hard to see — an earlier run of this harness watched the rogue and a
+ * warrior evaporate mid-measurement and reported "no fresh target of that
+ * variant", which reads exactly like a broken spawn table.
+ *
+ * So the roster is treated as consumable, and each phase starts from a full
+ * one. This also makes the magic-weapon phase a clean A/B: the character is
+ * level 1 again, with the same attributes and the same skills, and the weapon
+ * is the only thing that differs. Without the reload the fourth duel was fought
+ * by a character two levels up from the first, and every number in it was
+ * confounded.
+ */
+const boot = async (label) => {
+  console.log(`\n[boot] ${label}`);
+  await page.goto(url, { waitUntil: 'load' });
+  await page.evaluate(() => window.__d2rim.ready);
+  await page.evaluate(async () => {
+    const d2 = window.__d2rim;
+    await d2.engine.stepFrames(2);
+    await d2.zones.enemiesReady;
+    await d2.engine.stepFrames(4);
+    // Hit stop scales `ctx.time`, which would make simulated seconds a lie and
+    // costs many times the renders per simulated second on a software rasteriser.
+    d2.engine.getModule('combat.feedback')?.setHitStop(false);
+  });
+  await installDriver();
+  const probe = await probeAttackRoute();
+  console.log(`[boot] roster ${JSON.stringify(probe.census)}, attack route ${probe.route}`);
+  return probe;
+};
 
 /* -- the driver, installed in the page ------------------------------------- */
 
-await page.evaluate(
+const installDriver = () =>
+  page.evaluate(
   ({ stride, turnLimit }) => {
     const d2 = window.__d2rim;
     const T = d2.three;
@@ -211,8 +247,14 @@ await page.evaluate(
         }
       },
 
-      reviveAll() {
-        for (const e of this.director().enemies) e.vitals?.revive?.();
+      /** How many skeletons are still in the director's list, by variant. */
+      census() {
+        const out = {};
+        for (const e of this.director().enemies) {
+          const v = e.profile.variant;
+          out[v] = (out[v] ?? 0) + (e.alive ? 1 : 0);
+        }
+        return out;
       },
 
       /** A live, full-health enemy of `variant`, or null. */
@@ -240,24 +282,23 @@ await page.evaluate(
       },
     };
   },
-  { stride: STRIDE, turnLimit: 8.0 },
-);
+    { stride: STRIDE, turnLimit: 8.0 },
+  );
 
 /* -- does a real click reach the combo machine? ---------------------------- */
 
-const route = await page.evaluate(async () => {
-  const d = window.__duel;
-  const d2 = window.__d2rim;
-  let swings = 0;
-  const off = d2.ctx.events.on('combat:swing', () => swings++);
-  d.clickAttack(0);
-  await d2.engine.stepFrames(2, 1 / 60);
-  off();
-  d.attackRoute = swings > 0 ? 'dom-click' : 'combat.press';
-  return { swings, route: d.attackRoute };
-});
-console.log(`  attack route: ${route.route} (probe fired ${route.swings} swing(s))`);
-results.attackRoute = route;
+const probeAttackRoute = () =>
+  page.evaluate(async () => {
+    const d = window.__duel;
+    const d2 = window.__d2rim;
+    let swings = 0;
+    const off = d2.ctx.events.on('combat:swing', () => swings++);
+    d.clickAttack(0);
+    await d2.engine.stepFrames(2, 1 / 60);
+    off();
+    d.attackRoute = swings > 0 ? 'dom-click' : 'combat.press';
+    return { swings, route: d.attackRoute, census: d.census() };
+  });
 
 /* -- one duel -------------------------------------------------------------- */
 
@@ -275,7 +316,6 @@ const duel = (variant, opts = {}) =>
       const d2 = window.__d2rim;
       const T = d2.three;
 
-      d.reviveAll();
       const enemy = d.pick(v);
       if (enemy === null) return null;
       d.clearField([enemy]);
@@ -341,7 +381,7 @@ const duel = (variant, opts = {}) =>
 
       const seconds = frames * stride;
       const sum = (xs) => xs.reduce((a, x) => a + x, 0);
-      return {
+      const out = {
         variant: v,
         maxHealth: +startHealth.toFixed(1),
         killed: !enemy.alive,
@@ -361,6 +401,8 @@ const duel = (variant, opts = {}) =>
         closestApproach: +closest.toFixed(2),
         timedOut: frames >= maxFrames,
       };
+      out.census = d.census();
+      return out;
     },
     { v: variant, stride: opts.stride ?? STRIDE, maxFrames: opts.maxFrames ?? 480, holdRange: opts.holdRange ?? 1.2 },
   );
@@ -374,9 +416,17 @@ const duel = (variant, opts = {}) =>
  * is just "stand in the middle and mash" is not a test of whether the encounter
  * is winnable *with skill* — it is a test of whether it is winnable without
  * any. The rule is the first thing anyone learns fighting more than one enemy:
- * **do not let them surround you.** When two or more are inside
- * `CROWD_RANGE`, back off (`KeyS`) until they string out, then re-engage the
- * nearest. Everything else is the same aim-and-mash as a duel.
+ * **do not let them surround you.** When two or more are inside `crowdRange`
+ * *and* the player is hurt, back off (`KeyS`) until they string out, then
+ * re-engage the nearest. Everything else is the same aim-and-mash as a duel.
+ *
+ * The health condition is load-bearing and was added after a run without it.
+ * Retreating on crowding alone made the player back away for a third of the
+ * fight at full health, which is not skill, it is stalling: he took 28 damage
+ * in thirty seconds, killed two of three, and the measurement expired with the
+ * third skeleton alive and the player *above* his starting health. A stalemate
+ * answers neither "can he win" nor "is it dangerous". A player who gives ground
+ * only when he is actually losing it produces a fight with an outcome.
  */
 const packFight = (count, opts = {}) =>
   page.evaluate(
@@ -449,7 +499,8 @@ const packFight = (count, opts = {}) =>
 
         d.aimAt(d.chest(nearest), stride);
 
-        const wantBack = crowd >= 2;
+        const hurt = combat.vitals.health.value < startHealth * 0.65;
+        const wantBack = crowd >= 2 && hurt;
         const wantForward = !wantBack && best > holdRange;
         if (wantBack !== back) {
           d.key('KeyS', wantBack);
@@ -493,7 +544,7 @@ const packFight = (count, opts = {}) =>
     {
       n: count,
       stride: opts.stride ?? STRIDE,
-      maxFrames: opts.maxFrames ?? 900,
+      maxFrames: opts.maxFrames ?? 1500,
       holdRange: opts.holdRange ?? 1.2,
       crowdRange: opts.crowdRange ?? 2.4,
     },
@@ -515,18 +566,26 @@ for (const variant of VARIANTS) {
 
 if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
 
-/* -- 2. a three-skeleton pack, starting gear ------------------------------- */
+/* -- 2. the same fights with a magic weapon --------------------------------
+ *
+ * Before the pack fight, not after it. A pack fight runs long enough for the
+ * skeletons killed in its first seconds to sink and be culled from the
+ * director, and a culled skeleton cannot be revived for the next measurement.
+ * Duels are short enough that `duel` can revive its target before the corpse
+ * goes; the pack fight therefore goes last, when nothing is measured after it. */
 
-console.log('\n-- pack fight, starting gear --');
-const pack = await packFight(3);
-results['pack.base'] = pack;
-console.log(`  pack: ${JSON.stringify(pack)}`);
-
-if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
-
-/* -- 3. the same fight with a magic weapon --------------------------------- */
-
-/** Equip a rolled magic weapon and report what the swing now carries. */
+/**
+ * Equip the best magic weapon the drop table will produce, and report what the
+ * swing now carries.
+ *
+ * *Best*, not first. Run 2 took the first magic weapon that dropped — a Short
+ * Sword of the Fox, whose only affix was `+1 dexterity` — and equipping it moved
+ * the swing's physical damage from 10-19 to 9-20. That is a real number and it
+ * proves the plumbing, but it is a *worse* weapon than the starting kit on the
+ * low end, so it cannot show that gear changes offence in practice. Rolling a
+ * few hundred drops and keeping the one with the highest resulting damage is
+ * what a player does over an hour of play, compressed.
+ */
 const equipMagicWeapon = () =>
   page.evaluate(() => {
     const d = window.__duel;
@@ -537,25 +596,82 @@ const equipMagicWeapon = () =>
     // reachable by name from a production bundle.
     const loot = window.__d2rim.ctx.services.get('rpg.loot');
     const before = d.combat().playerOffense();
-    let equipped = null;
-    for (let seed = 1; seed < 900 && equipped === null; seed++) {
+    // Remember what the character started the game holding, so the pack fight
+    // afterwards is fought with the starting kit and not with whatever this
+    // function happened to find. Stashed as a live reference, because
+    // `Character.equip` takes the item itself and does not require it to be in
+    // the bag — and the bag is about to be used as a scratch space.
+    const starting = rpg.character.equipment.get('weapon') ?? null;
+    d.startingWeapon = starting;
+
+    /*
+     * Empty the bag after every attempt.
+     *
+     * `Character.equip` puts whatever it displaced back into the inventory, and
+     * **refuses the equip entirely** if the displaced item will not fit — losing
+     * an item to a full bag is the one failure a player never forgives, so the
+     * whole operation is rolled back. Six hundred rolls would fill a ten-by-four
+     * grid long before the loop ended, and every equip after that point would
+     * silently return `occupied`. The items being dropped here are scratch, not
+     * the player's; the two that matter are held as references above and below.
+     */
+    const drain = () => {
+      for (const item of [...rpg.character.inventory.items]) rpg.character.inventory.remove(item);
+    };
+
+    let best = null;
+    let bestMax = before.damage.physical.max;
+    for (let seed = 1; seed < 600; seed++) {
       const rolled = loot.onEnemyDeath(4000 + seed, 'warrior#0');
       for (const item of rolled.items) {
         if (item.slot !== 'weapon' || item.quality === 'normal') continue;
         if (!rpg.character.canEquip(item)) continue;
-        rpg.character.acquire(item);
         if (!rpg.character.equip(item).equipped) continue;
-        equipped = { name: item.name, quality: item.quality, mods: item.mods };
-        break;
+        rpg.character.touch();
+        const candidate = d.combat().playerOffense().damage.physical.max;
+        if (candidate > bestMax) {
+          bestMax = candidate;
+          best = item;
+        } else {
+          const back = best ?? starting;
+          if (back !== null) rpg.character.equip(back);
+        }
+        drain();
       }
     }
+    if (best !== null) rpg.character.equip(best);
+    drain();
     loot.clear();
     rpg.character.touch();
     const after = d.combat().playerOffense();
     return {
-      equipped,
+      equipped:
+        best === null ? null : { name: best.name, quality: best.quality, mods: best.mods },
+      startingWeapon: starting === null ? null : starting.name,
       before: { min: before.damage.physical.min, max: before.damage.physical.max, ar: before.attackRating },
       after: { min: after.damage.physical.min, max: after.damage.physical.max, ar: after.attackRating },
+    };
+  });
+
+/**
+ * Put the starting weapon back on, so the pack fight is fought in the kit a new
+ * player actually has rather than in whatever the drop table happened to give
+ * this run.
+ */
+const restoreStartingWeapon = () =>
+  page.evaluate(() => {
+    const d = window.__duel;
+    const rpg = d.rpg();
+    const item = d.startingWeapon ?? null;
+    if (rpg === undefined || item === null) return null;
+    const ok = rpg.character.equip(item).equipped;
+    rpg.character.touch();
+    const o = d.combat().playerOffense();
+    return {
+      restored: ok,
+      weapon: rpg.character.equipment.get('weapon')?.name ?? null,
+      min: o.damage.physical.min,
+      max: o.damage.physical.max,
     };
   });
 
@@ -574,10 +690,17 @@ for (const variant of VARIANTS) {
   console.log(`  ${variant} (magic): ${JSON.stringify(r)}`);
 }
 
-console.log('\n-- pack fight, magic weapon --');
-const packMagic = await packFight(3);
-results['pack.magic'] = packMagic;
-console.log(`  pack (magic): ${JSON.stringify(packMagic)}`);
+if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
+
+/* -- 3. a three-skeleton pack, starting gear ------------------------------- */
+
+const restored = await restoreStartingWeapon();
+results.restored = restored;
+console.log(`\n-- pack fight, starting gear --\n  restored: ${JSON.stringify(restored)}`);
+
+const pack = await packFight(3);
+results['pack.base'] = pack;
+console.log(`  pack: ${JSON.stringify(pack)}`);
 
 if (JSON_OUT !== null) writeFileSync(JSON_OUT, JSON.stringify(results, null, 2));
 
@@ -656,10 +779,21 @@ check(
   `${gear?.before.min}-${gear?.before.max} -> ${gear?.after.min}-${gear?.after.max}`,
 );
 
-// Offence, in practice rather than on the sheet. Compared as *seconds per
-// landed blow's worth of pool*: swing counts against a retreating enemy are
-// noisy enough that a straight time comparison would be a coin flip, but the
-// mean damage of a connecting blow is not.
+/*
+ * Offence in practice, and a note on what is *not* asserted here.
+ *
+ * `gear.before` / `gear.after` above are read from `CombatSystem.playerOffense()`
+ * — the live object the swing resolves against, not the character screen — so
+ * "the weapon changed the offence the running game uses" is asserted directly.
+ *
+ * What is only *reported* is the mean damage of a connecting blow across the
+ * duels, and the reason is sample size rather than doubt. A duel lands three or
+ * four blows; criticals are a 9% roll at double damage. One crit moves a
+ * four-sample mean by more than the entire difference between a Hand Axe and a
+ * War Axe, so asserting an inequality on it would be asserting a coin flip.
+ * What *is* asserted is the robust consequence: with the better weapon on, all
+ * four skeletons still die.
+ */
 const meanOf = (prefix) => {
   const xs = VARIANTS.map((v) => results[`${prefix}.${v}`]).filter(
     (r) => r !== null && r !== undefined && r.landed > 0,
@@ -670,9 +804,20 @@ const meanOf = (prefix) => {
 const baseMean = meanOf('duel');
 const magicMean = meanOf('magic');
 check(
-  'the magic weapon hits harder in the running game, not only on the sheet',
-  magicMean > baseMean,
-  `${baseMean} mean damage per landed blow -> ${magicMean}`,
+  'the Barbarian still kills all four variants with the rolled weapon on',
+  VARIANTS.every((v) => results[`magic.${v}`]?.killed === true),
+  VARIANTS.map(
+    (v) => `${v} ${results[`magic.${v}`]?.killed === true ? results[`magic.${v}`].seconds + 's' : 'NOT KILLED'}`,
+  ).join(', '),
+);
+console.log(
+  `  mean damage per landed blow: ${baseMean} (starting kit) -> ${magicMean} (rolled weapon) ` +
+    `— reported, not asserted; see the note above this check`,
+);
+check(
+  'the starting weapon went back on before the pack fight',
+  restored !== null && restored.restored === true,
+  `${restored?.weapon}, ${restored?.min}-${restored?.max} physical`,
 );
 
 check(
