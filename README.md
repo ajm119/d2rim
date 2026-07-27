@@ -402,11 +402,14 @@ fight rather than a queue.
 
 **Gear.** Equipping a rolled weapon moves `CombatSystem.playerOffense()` — the
 object the swing resolves against, not the character screen — and the harness
-asserts it. Worth saying plainly, though: at character level 1 the Blood Moor
-drop table does **not** reliably produce a weapon better than the starting Hand
-Axe. The best magic weapon in one 600-drop search was a Sharp Club at 8–20
-against the axe's 10–19: a higher maximum and a *lower* mean. The plumbing
-works; the level-1 loot curve is flat.
+asserts that. Worth saying plainly, though: at character level 1 the Blood Moor
+drop table does **not** produce a weapon better than the starting Hand Axe.
+Six hundred drops were rolled, filtered to magic-or-better weapons the character
+can equip, and ranked by the mean of their physical range; **none of them beat
+the axe's 10–19**. The two closest were a Short Sword of the Fox at 9–20 (the
+same mean of 14.5, plus 5 attack rating) and a Sharp Club at 8–20 (a higher
+maximum and a *lower* mean). The plumbing works. The level-1 loot curve is flat
+— see [Known defects](#the-level-1-loot-curve-is-flat).
 
 ---
 
@@ -467,12 +470,15 @@ looks right. Running slides. Closing that gap is real remaining work.
 ### The level-1 loot curve is flat
 
 Six hundred drops rolled off the Blood Moor table, filtered to magic-or-better
-weapons the character can actually use, and the best of them was a Sharp Club at
-8–20 physical against the starting Hand Axe's 10–19 — a higher maximum and a
-lower mean. Affixes, generation, equipping and the path from an item to the
-damage the swing carries are all verified and all work; what is missing is a
-reason to care about a drop in the first area. The base-item and affix weights
-want retuning against what the player starts holding.
+weapons a level-1 character can actually equip, and ranked by mean physical
+damage: **not one of them beat the starting Hand Axe.** The best were a Short
+Sword of the Fox at 9–20 (identical mean, +5 attack rating) and a Sharp Club at
+8–20 (higher maximum, lower mean). Affix generation, equipping, and the path
+from an item to the damage the swing carries are all verified and all work —
+what is missing is a reason to care about a drop in the first area. The
+base-item and affix weights want retuning against what the player starts
+holding. `tools/verify-kill.mjs` reports this on every run rather than asserting
+it, because it is a balance fact and not a broken link.
 
 ### No item icons
 
