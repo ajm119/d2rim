@@ -8,7 +8,11 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [claude/diablo2-skyrim-poc-9xj3j5]
+    # main is listed so the site redeploys once this work is merged. The
+    # github-pages environment restricts deployment to the default branch by
+    # default, so deploying from the feature branch additionally requires
+    # allowing it under Settings > Environments > github-pages.
+    branches: [main, claude/diablo2-skyrim-poc-9xj3j5]
   workflow_dispatch:
 
 # GITHUB_TOKEN needs pages:write to deploy and id-token:write for the
