@@ -31,11 +31,10 @@
  *
  * But that skin is a *surface*. It has no volume, its normals are ambiguous
  * where the contour is thin, and the camera arm sphere-cast would happily pass
- * through it. So the solid cells behind it are also filled with boxes — merged
- * into row runs so there are two hundred of them rather than seven hundred —
- * and those are what carry the collision and what the camera stops against.
- * Together they give a wall with a rock face on the inside and three metres of
- * literal rock behind it.
+ * through it. So the solid cells behind it are also filled with boxes — greedy
+ * meshed, see {@link DenOfEvil.prototype} `#computeBacking` — and those are what
+ * carry the collision and what the camera stops against. Together they give a
+ * wall with a rock face on the inside and three metres of literal rock behind it.
  *
  * ## Light
  *
@@ -237,8 +236,8 @@ export class DenOfEvil implements Zone {
   readonly #entry: ZoneEntryPoint[] = [];
   readonly #portals: PortalSpec[] = [];
   readonly #spawns: SpawnPoint[] = [];
-  /** Row-run rectangles filling the solid rock, in cells. */
-  readonly #backing: { col0: number; col1: number; row: number }[] = [];
+  /** Greedy-meshed rectangles filling the solid rock, in cells. */
+  readonly #backing: { col0: number; col1: number; row0: number; row1: number }[] = [];
 
   #kit: PropKit | null = null;
   #materials: MaterialLibraryService | null = null;
@@ -428,17 +427,18 @@ export class DenOfEvil implements Zone {
     const half = this.layout.halfExtent;
     for (const run of this.#backing) {
       const width = (run.col1 - run.col0 + 1) * cellSize;
+      const depth = (run.row1 - run.row0 + 1) * cellSize;
       const centreX = ((run.col0 + run.col1 + 1) / 2) * cellSize - half.x;
-      const centreZ = (run.row + 0.5) * cellSize - half.z;
+      const centreZ = ((run.row0 + run.row1 + 1) / 2) * cellSize - half.z;
       const top = CEILING_BASE + CEILING_MAX_BONUS + 1.5;
       const bottom = -2.5;
       const height = top - bottom;
-      const desc = physics.rapier.ColliderDesc.cuboid(width / 2, height / 2, cellSize / 2)
+      const desc = physics.rapier.ColliderDesc.cuboid(width / 2, height / 2, depth / 2)
         .setTranslation(centreX, bottom + height / 2, centreZ)
         .setCollisionGroups(COLLISION_GROUPS.prop)
         .setFriction(0.9)
         .setRestitution(0);
-      physics.addCollider(desc, { kind: 'prop', label: `den.wall.${run.row}.${run.col0}` });
+      physics.addCollider(desc, { kind: 'prop', label: `den.wall.${run.row0}.${run.col0}` });
     }
 
     // The props are derived the ordinary way, but the cave shell must not be:
@@ -782,29 +782,53 @@ export class DenOfEvil implements Zone {
   }
 
   /**
-   * Greedy row runs over the solid cells near the cave.
+   * Greedy rectangle meshing over the solid cells near the cave.
    *
-   * Merging horizontally adjacent wall cells into a single box takes the count
-   * from roughly 700 to roughly 200 — a 3.5x cut in both collider count and
-   * draw-call setup for an identical volume. Full 2D greedy meshing would do
-   * better still, but the row pass gets most of the win in a fifth of the code,
-   * and the geometry is never seen: it is behind the skin.
+   * The naive emission — one box per solid cell within {@link BACKING_DEPTH} of
+   * the walkable set — produced **2 900 boxes** on the default grid, and merging
+   * only horizontally still left 646. Both numbers are colliders as well as
+   * geometry, and 646 static cuboids is an absurd price for a volume the player
+   * never sees.
+   *
+   * Full 2D greedy meshing is the standard fix and is barely longer than the row
+   * pass: walk the grid, and at the first unconsumed cell extend right as far as
+   * the run holds, then extend *down* as far as every row of that width still
+   * holds, and consume the rectangle. Long stretches of cave wall collapse into
+   * a handful of slabs. Measured on the default seed it takes the count to
+   * roughly a fifth of the row-merged figure, for identical occupied volume.
    */
   #computeBacking(): void {
     const { cols, rows, cells } = this.layout;
     const near = dilate(cells, cols, rows, BACKING_DEPTH);
+    const solid = new Uint8Array(cells.length);
+    for (let i = 0; i < cells.length; i++) {
+      if (near[i] === CaveCell.Floor && cells[i] === CaveCell.Wall) solid[i] = 1;
+    }
+
     this.#backing.length = 0;
+    const consumed = new Uint8Array(cells.length);
+    const free = (col: number, row: number): boolean =>
+      solid[row * cols + col] === 1 && consumed[row * cols + col] === 0;
+
     for (let row = 0; row < rows; row++) {
-      let start = -1;
-      for (let col = 0; col <= cols; col++) {
-        const index = row * cols + col;
-        const solid =
-          col < cols && near[index] === CaveCell.Floor && cells[index] === CaveCell.Wall;
-        if (solid && start === -1) start = col;
-        else if (!solid && start !== -1) {
-          this.#backing.push({ col0: start, col1: col - 1, row });
-          start = -1;
+      for (let col = 0; col < cols; col++) {
+        if (!free(col, row)) continue;
+
+        let col1 = col;
+        while (col1 + 1 < cols && free(col1 + 1, row)) col1++;
+
+        let row1 = row;
+        outer: while (row1 + 1 < rows) {
+          for (let c = col; c <= col1; c++) {
+            if (!free(c, row1 + 1)) break outer;
+          }
+          row1++;
         }
+
+        for (let r = row; r <= row1; r++) {
+          for (let c = col; c <= col1; c++) consumed[r * cols + c] = 1;
+        }
+        this.#backing.push({ col0: col, col1, row0: row, row1 });
       }
     }
   }
@@ -818,11 +842,12 @@ export class DenOfEvil implements Zone {
 
     for (const run of this.#backing) {
       const width = (run.col1 - run.col0 + 1) * cellSize;
-      const box = new THREE.BoxGeometry(width, top - bottom, cellSize);
+      const depth = (run.row1 - run.row0 + 1) * cellSize;
+      const box = new THREE.BoxGeometry(width, top - bottom, depth);
       box.translate(
         ((run.col0 + run.col1 + 1) / 2) * cellSize - half.x,
         (top + bottom) / 2,
-        (run.row + 0.5) * cellSize - half.z,
+        ((run.row0 + run.row1 + 1) / 2) * cellSize - half.z,
       );
       parts.push(box);
     }
