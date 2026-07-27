@@ -28,8 +28,10 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { chromium } from 'playwright';
+import sharp from 'sharp';
 
 import { CHROMIUM_ARGS, ROOT, findChromium } from './capture/cli.mjs';
+import { guardImageFile } from './capture/frame-guard.mjs';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const OUT = args[0] ?? '/tmp/camera-arm';
@@ -191,22 +193,38 @@ const probe = () =>
   });
 
 const shoot = async (name) => {
-  if (!SHOTS) return;
+  if (!SHOTS) return null;
   const startedAt = Date.now();
+  // `captureFrame` hands back tightly packed RGBA bytes, not an encoded image —
+  // writing them straight to a `.png` produces a file no decoder will open, and
+  // the failure is silent. sharp does the encoding, and `guardImageFile` then
+  // decodes it back off disk, because a capture tool that can write a blank or
+  // unreadable frame is worse than one that does not capture at all.
   const frame = await page.evaluate(
     async ([w, h]) => {
       const ctx = window.__d2rim.ctx;
       const shot = await ctx.renderer.captureFrame(ctx.scene, ctx.camera, w, h);
       let binary = '';
-      const bytes = new Uint8Array(shot);
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      return btoa(binary);
+      for (let i = 0; i < shot.pixels.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, shot.pixels.subarray(i, i + 0x8000));
+      }
+      return { width: shot.width, height: shot.height, data: btoa(binary) };
     },
     [WIDTH, HEIGHT],
   );
   const file = join(OUT, `${name}.png`);
-  writeFileSync(file, Buffer.from(frame, 'base64'));
-  say(`  ...wrote ${file} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+  await sharp(Buffer.from(frame.data, 'base64'), {
+    raw: { width: frame.width, height: frame.height, channels: 4 },
+  })
+    .png()
+    .toFile(file);
+  const guard = await guardImageFile(file);
+  say(
+    `  ...wrote ${file} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s ` +
+      `(${guard.ok ? 'not blank' : `BLANK: ${guard.failures.join('; ')}`})`,
+  );
+  if (!guard.ok) failures.push(`${name} capture is blank`);
+  return file;
 };
 
 const results = {};

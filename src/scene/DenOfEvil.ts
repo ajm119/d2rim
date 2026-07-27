@@ -611,7 +611,10 @@ export class DenOfEvil implements Zone {
   #buildNavigationPoints(): void {
     const layout = this.layout;
     const mouth = layout.entranceWorld;
-    const inner = cellAtDepth(layout, 6) ?? layout.entrance;
+    // `openCellAtDepth`, not `cellAtDepth`: the arrival point is a place a
+    // character stands and a camera orbits, so it needs room around it and not
+    // merely floor under it. See the note on `cellAtDepth`.
+    const inner = openCellAtDepth(layout, 6) ?? layout.entrance;
     const innerWorld = worldOfCell(layout, inner.col, inner.row);
     const floorY = (x: number, z: number): number => this.field.heightAt(x, z);
 
@@ -1423,14 +1426,28 @@ function nearestFloorCell(
  *
  * Used to place the arrival point a fixed distance inside the mouth, and to
  * backfill torch positions when the cave has fewer chambers than torches.
+ *
+ * `minClearance` filters to cells at least that far (in cells) from the nearest
+ * wall, and it matters for anything a *character* is put on. Depth alone picks
+ * whichever cell the scan reaches first, which in a cave built out of corridors
+ * is usually one pressed against a wall: the arrival point landed the player
+ * 0.5 m off `den.wall.70.43`, close enough that the camera's shoulder-offset
+ * pivot started inside the masonry and the arm collapsed to its floor on the
+ * frame the player arrives. Standing a character somewhere is a claim about the
+ * space around them, not just about where their feet go.
  */
-export function cellAtDepth(layout: DungeonLayout, depth: number): GridPoint | null {
+export function cellAtDepth(
+  layout: DungeonLayout,
+  depth: number,
+  minClearance = 0,
+): GridPoint | null {
   let best: GridPoint | null = null;
   let bestError = Infinity;
   for (let i = 0; i < layout.cells.length; i++) {
     if (layout.cells[i] !== CaveCell.Floor) continue;
     const d = layout.distance[i] as number;
     if (d < 0) continue;
+    if ((layout.clearance[i] as number) < minClearance) continue;
     const error = Math.abs(d - depth);
     if (error < bestError) {
       bestError = error;
@@ -1440,6 +1457,21 @@ export function cellAtDepth(layout: DungeonLayout, depth: number): GridPoint | n
     }
   }
   return best;
+}
+
+/**
+ * The most open cell near a target depth, degrading gracefully.
+ *
+ * A generated cave cannot promise a 2 m-clear cell exists at depth six, so this
+ * asks for the roomiest and settles for less rather than returning null — an
+ * arrival point that does not exist is a worse outcome than a snug one.
+ */
+export function openCellAtDepth(layout: DungeonLayout, depth: number): GridPoint | null {
+  for (const clearance of [2.2, 1.8, 1.4, 1.0, 0]) {
+    const cell = cellAtDepth(layout, depth, clearance);
+    if (cell !== null) return cell;
+  }
+  return null;
 }
 
 /**
