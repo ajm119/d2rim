@@ -340,6 +340,50 @@ describe('pull-in and recovery', () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Teleports                                                                  */
+/* -------------------------------------------------------------------------- */
+
+describe('zone travel', () => {
+  it('snaps the pivot instead of flying the camera across the world', () => {
+    run(10);
+    const before = ctx.camera.position.clone();
+    // A zone transition: same rig, entirely different coordinates.
+    player.placeAt(6, -0.9, 11.5, 0);
+    run(1);
+    expect(ctx.camera.position.distanceTo(before)).toBeGreaterThan(3);
+    // One frame later the camera is already framing the new position properly,
+    // rather than a second of travel away from it.
+    expect(separation()).toBeGreaterThan(rig.restLength * 0.9);
+  });
+
+  it('arrives at rest length even if the previous zone left the arm collapsed', () => {
+    physics.hit = { distance: 0, kind: 'prop', label: 'old-zone-wall' };
+    run(20);
+    expect(rig.armLength).toBeCloseTo(rig.minLength, 6);
+    physics.hit = null;
+    player.placeAt(-1.5, -0.03, 31.5, 0);
+    run(1);
+    expect(rig.armLength).toBeCloseTo(rig.restLength, 4);
+  });
+
+  it('does not mistake ordinary sprinting for a teleport', () => {
+    // The teleport branch resets the arm to rest length, so a collapsed arm is
+    // the cleanest probe for whether it fired: hold the camera against a wall
+    // and sprint. 7 m/s is 0.12 m per frame, nowhere near the threshold, so the
+    // arm must stay pinned all the way along.
+    physics.hit = { distance: 0.5, kind: 'prop', label: 'corridor' };
+    run(20);
+    const pinned = rig.armLength;
+    player.velocity.set(0, 0, -7);
+    for (let i = 0; i < 60; i++) {
+      player.placeAt(0, 0, player.object.position.z - 7 / 60, 0);
+      rig.lateUpdate(ctx, 1 / 60);
+    }
+    expect(rig.armLength).toBeCloseTo(pinned, 6);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* Mode blend                                                                 */
 /* -------------------------------------------------------------------------- */
 

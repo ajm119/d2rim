@@ -378,9 +378,27 @@ export class CameraRig implements GameModule {
     this.#lookAhead.z = damp(this.#lookAhead.z, this.#scratch.z, 5, dt);
     this.#pivot.add(this.#lookAhead);
 
-    if (!this.#initialised) {
+    // A teleport is not a movement, and following it is wrong twice over.
+    //
+    // Zone travel puts the player down somewhere else entirely, and a pivot that
+    // damps toward the new position spends the next half-second in the air
+    // between the two — sweeping the arm through the whole world on the way, so
+    // the probe reports a contact every frame and the camera arrives collapsed.
+    // The measured symptom on a Blood Moor arrival was an arm of 0.33 m on the
+    // first frame recovering over the following second, which is precisely the
+    // window a player is looking hardest at a new area.
+    //
+    // Detected by distance rather than by an event, so it also covers a debug
+    // warp, a future respawn, and anything else that moves the character
+    // without asking the camera first.
+    const jumped = this.#initialised && this.#smoothPivot.distanceToSquared(this.#pivot) > 9;
+    if (!this.#initialised || jumped) {
       this.#smoothPivot.copy(this.#pivot);
       this.#initialised = true;
+      // Arriving at rest length rather than at whatever the last zone left
+      // behind: the new area gets a clean frame, and the probe below is still
+      // free to pull the arm in if the new area really is tight.
+      this.#arm = this.#distance;
       return;
     }
     const lambda = this.#options.followDamping;
