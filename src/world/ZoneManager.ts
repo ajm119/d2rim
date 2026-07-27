@@ -48,8 +48,8 @@
  * problem, because by then everything is up.
  */
 
-import { EnemyDirector, type SpawnPoint } from '../ai/EnemyDirector';
-import { CombatKey, type CombatSystem } from '../combat/CombatSystem';
+import { EnemyDirector } from '../ai/EnemyDirector';
+import { CombatKey } from '../combat/CombatSystem';
 import { serviceKey } from '../core/ServiceLocator';
 import type { GameContext, GameModule } from '../core/types';
 import { PhysicsWorldKey, type ColliderRecord, type PhysicsWorld } from '../physics/PhysicsWorld';
@@ -132,11 +132,14 @@ export class ZoneManager implements GameModule {
   #zoneColliders: ColliderRecord[] = [];
   #fade: HTMLElement | null = null;
   #travelling: Promise<void> | null = null;
-  #report: ZoneLoadReport | null = null;
+  #report: Omit<ZoneLoadReport, 'enemies'> | null = null;
   /** Set when a zone loaded before `CombatSystem` existed; see the module header. */
-  #pendingEnemies: readonly SpawnPoint[] | null = null;
+  #pendingEnemies = false;
   #pendingEntry: ZoneEntryPoint | null = null;
   #disposed = false;
+  /** Resolves when the active zone's encounter is placed. See `enemiesReady`. */
+  #enemiesReady: Promise<void> = Promise.resolve();
+  #resolveEnemies: (() => void) | null = null;
 
   constructor(options: ZoneManagerOptions = {}) {
     this.#options = {
@@ -163,9 +166,34 @@ export class ZoneManager implements GameModule {
     return Array.from(this.#factories.keys());
   }
 
-  /** What the last completed load produced. */
+  /**
+   * What the last completed load produced.
+   *
+   * `enemies` is read live rather than snapshotted at the end of the load. It
+   * used to be snapshotted, and on the boot path — where spawning is deferred
+   * until `CombatSystem` exists — the snapshot was taken before a single
+   * skeleton had been placed, so the moor permanently reported `0 enemies`
+   * while six of them were walking around in it.
+   */
   get report(): ZoneLoadReport | null {
-    return this.#report;
+    if (this.#report === null) return null;
+    return { ...this.#report, enemies: this.#director?.enemies.length ?? 0 };
+  }
+
+  /**
+   * Resolves when the active zone's encounter has been placed.
+   *
+   * The thing a caller needs and could not previously get. Enemy models are
+   * fetched over the network, and a fetch completes on a *macrotask*; a harness
+   * that drives the world with `await engine.stepFrames(1)` in a loop only ever
+   * yields microtasks, so the load could not finish for as long as it kept
+   * stepping. Awaiting this promise unwinds the stack and lets the fetch land.
+   *
+   * Already resolved for a zone with no encounter table, so awaiting it is
+   * always safe.
+   */
+  get enemiesReady(): Promise<void> {
+    return this.#enemiesReady;
   }
 
   /** Whether a `travelTo` is in flight. */
@@ -235,12 +263,20 @@ export class ZoneManager implements GameModule {
   }
 
   update(ctx: GameContext, dt: number): void {
-    // The start zone's enemies could not be spawned during `init` because
-    // `CombatSystem` had not registered yet. This is the first moment it has.
-    if (this.#pendingEnemies !== null) {
-      const spawns = this.#pendingEnemies;
-      this.#pendingEnemies = null;
-      void this.#spawnEnemies(spawns);
+    // The start zone's enemies could not be placed during `init` because
+    // `CombatSystem` had not registered yet, and their models may still have
+    // been in flight. `populate` is idempotent and returns false until both are
+    // true, so this retries rather than firing once and hoping.
+    //
+    // It used to fire once, as `void this.#spawnEnemies(spawns)` — an unawaited
+    // promise nothing could observe. When it worked, nothing said so; when it
+    // did not, nothing said that either.
+    if (this.#pendingEnemies) {
+      const director = this.#director;
+      if (director === null || director.populate()) {
+        this.#pendingEnemies = false;
+        this.#settleEnemies();
+      }
     }
     if (this.#pendingEntry !== null) {
       const entry = this.#pendingEntry;
@@ -375,8 +411,36 @@ export class ZoneManager implements GameModule {
 
     const spawns = zone.enemySpawns ?? [];
     if (this.#options.enemies && spawns.length > 0) {
-      if (ctx.services.has(CombatKey)) await this.#spawnEnemies(spawns);
-      else this.#pendingEnemies = spawns;
+      // The director is constructed and its models are requested here whether
+      // or not `CombatSystem` exists yet: the download is by far the slowest
+      // part of entering a populated zone and it needs nothing but the asset
+      // manager. Only the *placing* waits.
+      const director = new EnemyDirector({ spawns });
+      this.#director = director;
+      this.#enemiesReady = new Promise<void>((resolve) => {
+        this.#resolveEnemies = resolve;
+      });
+      const load = director.init(ctx).catch((error: unknown) => {
+        console.error(`[ZoneManager] "${zoneId}" could not load its enemies:`, error);
+      });
+      if (ctx.services.has(CombatKey)) {
+        await load;
+        this.#settleEnemies();
+      } else {
+        this.#pendingEnemies = true;
+        // The models usually land *after* `CombatSystem` has registered, in
+        // which case the director places the encounter at the end of its own
+        // `init` and there is nothing left for `update` to retry. Settle here
+        // rather than making a caller step another frame to be told so — a
+        // harness that awaits `enemiesReady` without stepping would otherwise
+        // wait for a frame that is itself waiting for the await.
+        void load.then(() => {
+          if (this.#director === director && director.ready) {
+            this.#pendingEnemies = false;
+            this.#settleEnemies();
+          }
+        });
+      }
     }
 
     const measured = measureZone(zone.root);
@@ -386,7 +450,6 @@ export class ZoneManager implements GameModule {
       colliders,
       renderables: measured.renderables,
       triangles: measured.triangles,
-      enemies: this.#director?.enemies.length ?? 0,
     };
     progress('ready', 1);
     ctx.events.emit('zone:loaded', {
@@ -397,7 +460,8 @@ export class ZoneManager implements GameModule {
     console.info(
       `[ZoneManager] "${zoneId}" ready in ${this.#report.millis} ms: ` +
         `${measured.renderables} meshes, ${measured.triangles} tris, ` +
-        `${colliders} colliders, ${this.#report.enemies} enemies`,
+        `${colliders} colliders, ${this.#director?.enemies.length ?? 0} enemies` +
+        (this.#pendingEnemies ? ' (placing deferred until combat is up)' : ''),
     );
   }
 
@@ -432,7 +496,9 @@ export class ZoneManager implements GameModule {
     const disposed = disposeZoneTree(zone.root);
 
     this.#zone = null;
-    this.#pendingEnemies = null;
+    this.#pendingEnemies = false;
+    this.#settleEnemies();
+    this.#enemiesReady = Promise.resolve();
     this.#pendingEntry = null;
     ctx.events.emit('zone:unloaded', {
       zoneId: zone.zoneId,
@@ -443,17 +509,15 @@ export class ZoneManager implements GameModule {
 
   /* -- helpers ------------------------------------------------------------ */
 
-  async #spawnEnemies(spawns: readonly SpawnPoint[]): Promise<void> {
-    const ctx = this.#ctx;
-    if (ctx === null || this.#disposed) return;
-    const combat = ctx.services.tryGet<CombatSystem>(CombatKey);
-    if (combat === undefined) {
-      console.warn('[ZoneManager] no combat system; the zone will be unpopulated');
-      return;
-    }
-    const director = new EnemyDirector({ spawns });
-    this.#director = director;
-    await director.init(ctx);
+  /**
+   * Release anything awaiting {@link enemiesReady}.
+   *
+   * Called on success *and* on unload: a caller that awaits the encounter of a
+   * zone the player has already left must not wait forever.
+   */
+  #settleEnemies(): void {
+    this.#resolveEnemies?.();
+    this.#resolveEnemies = null;
   }
 
   /**

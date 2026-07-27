@@ -48,7 +48,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three/webgpu';
 
 import { COLLISION_GROUPS, CollisionLayer, layerMask } from './Layers';
-import type { PhysicsWorld } from './PhysicsWorld';
+import type { ColliderRecord, PhysicsWorld } from './PhysicsWorld';
 
 /* -------------------------------------------------------------------------- */
 /* Pure policy                                                                */
@@ -247,6 +247,8 @@ export class CharacterController {
   #controller: RAPIER.KinematicCharacterController;
   #body: RAPIER.RigidBody;
   #collider: RAPIER.Collider;
+  /** Kept so `dispose` can unregister it; see the note there. */
+  #record: ColliderRecord;
 
   #verticalVelocity = 0;
   #grounded = false;
@@ -297,6 +299,7 @@ export class CharacterController {
       this.#body,
     );
     this.#collider = record.collider;
+    this.#record = record;
 
     this.#controller = world.createCharacterController(this.#options.skinWidth);
     this.#controller.setUp({ x: 0, y: 1, z: 0 });
@@ -508,6 +511,17 @@ export class CharacterController {
     const world = this.#physics.ready ? this.#physics.world : null;
     if (world !== null) {
       world.removeCharacterController(this.#controller);
+      // Order matters. `removeRigidBody` frees the attached capsule collider
+      // inside Rapier, so the registry entry has to be dropped by hand — and it
+      // has to be dropped with `forgetCollider`, not `removeCollider`, because
+      // after the body is gone there is no collider left for Rapier to remove.
+      // Dropping it *first* keeps the invariant "every record in the registry
+      // points at a live collider" true at every instant, including inside any
+      // callback `removeRigidBody` might run.
+      //
+      // Missing this leaked one `character` record per despawned enemy: 32
+      // across a single zone lap, all of them pointing at freed colliders.
+      this.#physics.forgetCollider(this.#record);
       world.removeRigidBody(this.#body);
     }
   }

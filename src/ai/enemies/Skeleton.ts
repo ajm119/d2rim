@@ -75,10 +75,17 @@ import {
 const CHOP: EnemyAttack = {
   id: 'skeleton.chop',
   action: 'attack.slice',
-  speed: 0.9,
+  speed: 1.1,
   // 1H_Melee_Attack_Slice_Diagonal reaches 1.40 m or better from 0.10 to 0.38.
   window: [0.12, 0.36],
-  recovery: 0.82,
+  // `recovery` is the fraction of the clip the skeleton stays committed for,
+  // and it was the largest single term in the attack cycle: 0.82 of a two-second
+  // clip at 0.9 speed is 1.9 s of a four-second cycle, nearly all of it spent
+  // watching the axe come to rest. Trimmed to end shortly after the damage
+  // window closes at 0.36, which is what the recovery is *for*. Measured, the
+  // whole cycle goes from about 4.0 s to about 2.0 s, and a skeleton that
+  // swings once every four seconds is not a fight.
+  recovery: 0.66,
   telegraph: 0.34,
   reachDuringWindow: 1.4,
   modifiers: { damageScale: 1, knockback: 2, staggerScale: 1 },
@@ -90,7 +97,7 @@ const SLICE: EnemyAttack = {
   speed: 1,
   // 1H_Melee_Attack_Slice_Horizontal reaches 0.90 m at 0.07 and peaks at 1.42.
   window: [0.08, 0.2],
-  recovery: 0.75,
+  recovery: 0.6,
   telegraph: 0.24,
   reachDuringWindow: 0.9,
   modifiers: { damageScale: 0.85, knockback: 1.6, attackRatingBonus: 20 },
@@ -103,7 +110,7 @@ const THRUST: EnemyAttack = {
   // 1H_Melee_Attack_Stab holds 1.54 m or better from 0.28 all the way to 0.50:
   // the longest and most reliable contact window on the rig.
   window: [0.28, 0.5],
-  recovery: 0.72,
+  recovery: 0.6,
   telegraph: 0.3,
   reachDuringWindow: 1.5,
   modifiers: { damageScale: 1.1, knockback: 2.4, attackRatingBonus: 30 },
@@ -112,12 +119,12 @@ const THRUST: EnemyAttack = {
 const HEAVY: EnemyAttack = {
   id: 'skeleton.heavy',
   action: 'attack.heavy',
-  speed: 0.8,
+  speed: 0.9,
   // 2H_Melee_Attack_Chop clears 0.84 m from 0.42 and peaks at 1.56 by 0.47.
   // Trimmed at 0.52 rather than the old 0.64: past that the axe is at rest
   // beside the body and the window was paying out on the follow-through.
   window: [0.42, 0.52],
-  recovery: 0.9,
+  recovery: 0.75,
   // A long, obvious wind-up on a hit that hurts. The contract with the player
   // is that the biggest hits are always the most readable ones.
   telegraph: 0.55,
@@ -129,19 +136,64 @@ const HEAVY: EnemyAttack = {
 /* Variants                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Radius of the player's hit capsule, from `PlayerCombatant.hitRadius`.
+ *
+ * Declared here rather than beside `standoffRadius` below, because
+ * `attackRangeFor` runs while `SKELETON_PROFILES` is being built and a `const`
+ * declared later in the module is in its temporal dead zone at that point — a
+ * `ReferenceError` at import time, which takes the whole game with it.
+ */
+const PLAYER_HIT_RADIUS = 0.4;
+
+/**
+ * The distance at which a skeleton may commit to a swing, given its attacks.
+ *
+ * Derived rather than authored, because the authored number was wrong and
+ * wrong in a way nothing could see: every variant declared `attackRange: 1.85`
+ * or more, while a warrior's heavy chop only clears 0.84 m during its damage
+ * window. A warrior would therefore decide to attack from 1.8 m, hold facing
+ * through the telegraph — the swing action holds position, it does not close —
+ * and put the axe through the air 0.5 m short. Measured before this: one landed
+ * hit in sixteen seconds of a warrior standing next to a passive player, for a
+ * projected time to kill of eight minutes.
+ *
+ * The shortest reach across the variant's attacks is the one that has to work,
+ * and the player's own hit capsule extends the contact by its radius.
+ *
+ * @param attacks the variant's attack table
+ * @param margin slack, metres. Zero by default, and deliberately not positive:
+ *   any margin is by definition a distance from which the enemy commits to a
+ *   swing that cannot connect, which is the defect this function replaced. The
+ *   pursuit closes to a 0.70 m stand-off anyway, so the edge of the range is
+ *   where the decision is made, not where the fight happens.
+ */
+export function attackRangeFor(attacks: readonly EnemyAttack[], margin = 0): number {
+  const shortest = Math.min(...attacks.map((attack) => attack.reachDuringWindow));
+  return Math.max(1, shortest + PLAYER_HIT_RADIUS + margin);
+}
+
 function profile(overrides: Partial<EnemyProfile> & Pick<EnemyProfile, 'variant' | 'asset'>): EnemyProfile {
+  const attacks = overrides.attacks ?? [CHOP];
   return {
     maxHealth: 60,
     height: 1.78,
     capsuleRadius: 0.3,
     walkSpeed: 1.1,
     chaseSpeed: 3.1,
-    attackRange: 1.85,
+    attackRange: attackRangeFor(attacks),
     reach: 0.8,
     offense: {
       level: 2,
-      attackRating: 90,
-      damage: { physical: { min: 5, max: 11 } },
+      // Attack rating and damage both raised, and the two are separate levers
+      // doing separate jobs. Against the player (defence 60, level 2) 90 landed
+      // 60% of rolls, which is fine; the damage was the problem. 5–11 physical
+      // against a 120-point pool, through 5% reduction and 1 flat, is 6.6 a hit
+      // — 5% of the player's health for a swing he had to stand still through.
+      // 10–19 lands at about 12.8, which is a tenth of the pool and reads as a
+      // wound rather than as chip.
+      attackRating: 120,
+      damage: { physical: { min: 10, max: 19 } },
       criticalChance: 0.04,
     },
     defense: {
@@ -160,8 +212,13 @@ function profile(overrides: Partial<EnemyProfile> & Pick<EnemyProfile, 'variant'
       noiseMultiplier: 1.8,
       loseRange: 26,
     },
-    attacks: [CHOP],
-    attackCooldown: 2,
+    attacks,
+    // Breathing room *after* the swing has finished — see `bt.Cooldown`. Two
+    // seconds on top of a two-second swing gave a skeleton one attack every
+    // four seconds, and a passive player ninety seconds to live. Half a second
+    // is still a readable gap between blows; it is the difference between an
+    // enemy that is pressing you and one that is taking turns with you.
+    attackCooldown: 0.5,
     staggerTime: 0.45,
     telegraphColor: 0xff3a1e,
     ...overrides,
@@ -180,14 +237,26 @@ export const SKELETON_PROFILES: Readonly<Record<string, EnemyProfile>> = {
   warrior: profile({
     variant: 'warrior',
     asset: 'enemy.skeleton.warrior',
-    maxHealth: 84,
+    // 84 needed sixteen swings to put down, which is twice the minion and past
+    // the point where a fight stops being a fight. Sixty-eight, against a
+    // defence lowered to 40, lands around twelve — tougher than a minion,
+    // recognisably the same genre.
+    maxHealth: 68,
     height: 1.82,
     chaseSpeed: 2.9,
     attacks: [CHOP, HEAVY],
-    attackCooldown: 2.2,
+    // The longest gap of the four: this one alternates a heavy chop with a
+    // 0.55 s telegraph, and its job is to be the blow you have to move for.
+    attackCooldown: 0.9,
+    offense: {
+      level: 3,
+      attackRating: 120,
+      damage: { physical: { min: 11, max: 20 } },
+      criticalChance: 0.05,
+    },
     defense: {
       level: 3,
-      defense: 46,
+      defense: 40,
       resistances: { poison: 100, cold: -25 },
       maxResistances: { poison: 100 },
       blockChance: 0.2,
@@ -202,7 +271,7 @@ export const SKELETON_PROFILES: Readonly<Record<string, EnemyProfile>> = {
     maxHealth: 46,
     height: 1.68,
     chaseSpeed: 3.35,
-    attackCooldown: 1.7,
+    attackCooldown: 0.35,
     staggerTime: 0.55,
   }),
   rogue: profile({
@@ -211,14 +280,16 @@ export const SKELETON_PROFILES: Readonly<Record<string, EnemyProfile>> = {
     maxHealth: 58,
     height: 1.74,
     chaseSpeed: 3.8,
-    attackRange: 2,
     reach: 0.95,
     attacks: [SLICE, THRUST],
-    attackCooldown: 1.4,
+    // The fastest of the four, and the one whose individual hits stay under the
+    // player's poise: a rogue does not interrupt what you were doing, it just
+    // keeps taking pieces off you while something bigger sets up.
+    attackCooldown: 0.3,
     offense: {
       level: 3,
-      attackRating: 130,
-      damage: { physical: { min: 4, max: 9 } },
+      attackRating: 150,
+      damage: { physical: { min: 6, max: 12 } },
       criticalChance: 0.12,
     },
   }),
@@ -228,14 +299,14 @@ export const SKELETON_PROFILES: Readonly<Record<string, EnemyProfile>> = {
     maxHealth: 52,
     height: 1.76,
     chaseSpeed: 2.5,
-    attackRange: 2.1,
-    attackCooldown: 2.6,
+    attackCooldown: 1.1,
     offense: {
       level: 3,
-      attackRating: 95,
+      attackRating: 120,
       // Cold damage on an undead caster: the one enemy whose damage the
-      // player's fire resistance does nothing about.
-      damage: { physical: { min: 2, max: 5 }, cold: { min: 6, max: 13 } },
+      // player's fire resistance does nothing about, and the reason a cold
+      // resistance is worth buying before anything else in Act I.
+      damage: { physical: { min: 3, max: 7 }, cold: { min: 9, max: 17 } },
       criticalChance: 0.03,
     },
     telegraphColor: 0x4fc3ff,
@@ -267,9 +338,6 @@ export const ARRIVAL_EASE = 0.7;
  * wants the skeletons standing further off.
  */
 export const STANDOFF_CLEARANCE = 0;
-
-/** Radius of the player's hit capsule, from `PlayerCombatant.hitRadius`. */
-const PLAYER_HIT_RADIUS = 0.4;
 
 /**
  * Where a pursuit stops: touching distance, not overlapping distance.

@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 
 import { findBone, sanitizeBoneName } from '../src/character/BoneNames';
 import { damp, smootherstep } from '../src/character/CameraRig';
-import { solveTwoBoneAngles } from '../src/character/FootIK';
+import { isFootPlanted, shouldReleasePin, solveTwoBoneAngles } from '../src/character/FootIK';
 import { approachAngle, wrapAngle } from '../src/character/PlayerController';
 
 describe('wrapAngle', () => {
@@ -161,5 +161,147 @@ describe('bone name resolution', () => {
     bone.name = 'Upper_Leg_L';
     root.add(bone);
     expect(findBone(root, 'upperleg.l')).toBe(bone);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Foot lock                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The stance test, against numbers taken from the shipped rig.
+ *
+ * Worth stating why this exists as a pure function at all: the foot lock is
+ * only as good as its decision about *when* a foot is down, and that decision
+ * is the one thing in the module that cannot be inspected from a screenshot. A
+ * lock that plants a foot mid-swing drags the leg; one that never plants does
+ * nothing at all; and both look like "the IK is broken" from the outside.
+ *
+ * The measured shape it is calibrated against, from
+ * `tools/verify-footplant.mjs` on `Running_A`: body speed ~4 m/s, the stance
+ * foot's animated world speed ~0.6x that and the swing foot's well over 1.5x,
+ * with clearance oscillating between roughly zero and a peak of a few tens of
+ * centimetres.
+ */
+const THRESHOLDS = {
+  plantClearanceRatio: 0.22,
+  releaseClearanceRatio: 0.6,
+  plantClearanceFloor: 0.012,
+  plantSpeedRatio: 0.85,
+  plantSpeedFloor: 0.4,
+};
+
+/** A foot whose contact height sits 4 cm above zero — the rig's real bias. */
+const foot = (clearance: number, animatedSpeed: number, bodySpeed = 4) => ({
+  clearance,
+  stanceFloor: 0.04,
+  swingPeak: 0.34,
+  animatedSpeed,
+  bodySpeed,
+});
+
+describe('isFootPlanted', () => {
+  it('plants a foot that is down and slow', () => {
+    expect(isFootPlanted(foot(0.045, 2.4), THRESHOLDS)).toBe(true);
+  });
+
+  it('refuses a foot passing low over the ground at swing speed', () => {
+    // The failure mode that matters most: at the bottom of a swing the foot is
+    // briefly as low as a planted one, and pinning it there yanks the leg.
+    expect(isFootPlanted(foot(0.045, 6.4), THRESHOLDS)).toBe(false);
+  });
+
+  it('refuses a foot held still in the air', () => {
+    expect(isFootPlanted(foot(0.26, 0.1), THRESHOLDS)).toBe(false);
+  });
+
+  it('measures height from the foot own contact level, not from zero', () => {
+    // The bug this replaced. `clearance` comes from a sole offset taken in the
+    // bind pose, and this rig's is out by about 4 cm — the same order as the
+    // whole walk cycle's lift. Judged against zero, a planted foot reads as
+    // airborne and nothing ever plants.
+    const biased = { clearance: 0.04, stanceFloor: 0.04, swingPeak: 0.1, animatedSpeed: 0.2, bodySpeed: 1 };
+    expect(isFootPlanted(biased, THRESHOLDS)).toBe(true);
+    expect(isFootPlanted({ ...biased, stanceFloor: 0 }, THRESHOLDS)).toBe(false);
+  });
+
+  it('holds a planted foot past the height that would not have started it', () => {
+    // The hysteresis. Between the two ratios is the band where a foot stays
+    // planted but would not newly plant; without it the decision chatters and
+    // the lock spends its life blending.
+    const marginal = { clearance: 0.16, stanceFloor: 0.04, swingPeak: 0.34, animatedSpeed: 0.2, bodySpeed: 1 };
+    expect(isFootPlanted(marginal, THRESHOLDS, false)).toBe(false);
+    expect(isFootPlanted(marginal, THRESHOLDS, true)).toBe(true);
+  });
+
+  it('ignores animated speed once the foot is already pinned', () => {
+    // The pin is what the foot is following, so its animated speed stops being
+    // evidence about the ground. Testing it in both directions releases every
+    // pin the moment the clip accelerates underneath it.
+    const fast = foot(0.045, 9);
+    expect(isFootPlanted(fast, THRESHOLDS, false)).toBe(false);
+    expect(isFootPlanted(fast, THRESHOLDS, true)).toBe(true);
+  });
+
+  it('plants both feet of a character standing still', () => {
+    // Floor and peak have converged, so the amplitude floor decides. Without
+    // it the idle pose gets no correction at all.
+    for (const jitter of [0, 0.003]) {
+      expect(
+        isFootPlanted(
+          { clearance: jitter, stanceFloor: 0, swingPeak: 0.004, animatedSpeed: 0.03, bodySpeed: 0 },
+          THRESHOLDS,
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('scales its clearance threshold with the gait rather than fixing it', () => {
+    // 6 cm above contact is planted in a high-stepping run and airborne in a
+    // shuffle. A single absolute threshold cannot express that.
+    const low = { clearance: 0.06, stanceFloor: 0, swingPeak: 0.08, animatedSpeed: 0.2, bodySpeed: 1 };
+    const high = { clearance: 0.06, stanceFloor: 0, swingPeak: 0.5, animatedSpeed: 0.2, bodySpeed: 1 };
+    expect(isFootPlanted(low, THRESHOLDS)).toBe(false);
+    expect(isFootPlanted(high, THRESHOLDS)).toBe(true);
+  });
+
+  it('treats a missing ground ray as not planted', () => {
+    expect(
+      isFootPlanted(
+        {
+          clearance: Number.POSITIVE_INFINITY,
+          stanceFloor: 0,
+          swingPeak: 0.3,
+          animatedSpeed: 0,
+          bodySpeed: 0,
+        },
+        THRESHOLDS,
+        true,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('shouldReleasePin', () => {
+  const LEG = 0.9;
+
+  it('holds a pin that is in contact, near the foot and in reach', () => {
+    expect(shouldReleasePin(true, 0.08, 0.34, 0.7, LEG)).toBe(false);
+  });
+
+  it('releases as soon as the foot lifts', () => {
+    expect(shouldReleasePin(false, 0.02, 0.34, 0.7, LEG)).toBe(true);
+  });
+
+  it('releases a pin the animation has walked away from', () => {
+    // This is what makes turning safe: a character pivoting on the spot swings
+    // the animated foot away from the pin, and the pin goes rather than the leg
+    // fighting the rotation.
+    expect(shouldReleasePin(true, 0.4, 0.34, 0.7, LEG)).toBe(true);
+  });
+
+  it('releases before the chain has to straighten', () => {
+    expect(shouldReleasePin(true, 0.1, 0.34, LEG * 0.99, LEG)).toBe(true);
+    expect(shouldReleasePin(true, 0.1, 0.34, LEG * 0.9, LEG)).toBe(false);
   });
 });

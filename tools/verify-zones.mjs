@@ -98,7 +98,7 @@ const goto = async (query) => {
 };
 
 /**
- * Wait for the active zone's enemies to finish loading.
+ * Wait for the active zone's enemies to be placed.
  *
  * `stepFrames` is a tight async loop that only ever yields *microtasks* — on
  * WebGL2 `renderer.render` returns void, so awaiting it does not give the event
@@ -106,14 +106,25 @@ const goto = async (query) => {
  * started loading its skeleton GLBs on frame 1 cannot finish until the stepping
  * stops. Asserting on the enemy count straight after `stepFrames` therefore
  * measures the loader, not the zone.
+ *
+ * `ZoneManager.enemiesReady` is the promise that says when the encounter is
+ * actually there. Awaiting it unwinds the stack and lets the fetch land, which
+ * is what the previous `waitForFunction` poll was approximating from outside
+ * the page. On the boot path the placement is additionally deferred until
+ * `CombatSystem` registers, so a couple of frames are stepped first to give
+ * `update` a turn to run the retry.
  */
 const settleEnemies = async () => {
   const needed = await page.evaluate(() => window.__d2rim.zones.active?.enemySpawns?.length ?? 0);
   if (needed === 0) return;
   await page
-    .waitForFunction(() => window.__d2rim.zones.director?.ready === true, null, { timeout: 60_000 })
-    .catch(() => process.stdout.write('  ...enemies did not settle within 60s\n'));
-  await step(2);
+    .evaluate(async () => {
+      const d2 = window.__d2rim;
+      await d2.engine.stepFrames(2);
+      await d2.zones.enemiesReady;
+      await d2.engine.stepFrames(2);
+    })
+    .catch(() => process.stdout.write('  ...enemies did not settle\n'));
 };
 
 /** Step frames and say how long it took; on SwiftShader this is the slow part. */
@@ -158,8 +169,14 @@ const probe = () =>
       zoneTris += (verts / 3) * (object.isInstancedMesh ? object.count : 1);
     });
     const colliderKinds = {};
+    // A record whose handle Rapier no longer knows about. This is the shape the
+    // character-collider leak actually takes: the count is a symptom, a dangling
+    // record is the defect, and once Rapier reissues the handle `recordFor`
+    // starts answering with the wrong object rather than with null.
+    let staleRecords = 0;
     for (const record of physics?.colliders ?? []) {
       colliderKinds[record.kind] = (colliderKinds[record.kind] ?? 0) + 1;
+      if (physics.world.getCollider(record.collider.handle) === undefined) staleRecords++;
     }
     return {
       zoneId: zones.activeId,
@@ -171,6 +188,7 @@ const probe = () =>
       entryPoints: (zones.active?.entryPoints ?? []).map((e) => e.id),
       enemies: zones.director?.enemies.length ?? 0,
       alive: zones.director?.alive ?? 0,
+      spawnTable: zones.active?.enemySpawns?.length ?? 0,
       player: { x: pos.x, y: pos.y, z: pos.z, grounded: player?.grounded ?? false },
       ground,
       groundOffset,
@@ -183,6 +201,7 @@ const probe = () =>
       zoneOwnedColliders:
         (colliderKinds.terrain ?? 0) + (colliderKinds.prop ?? 0) + (colliderKinds.trigger ?? 0),
       characterColliders: colliderKinds.character ?? 0,
+      staleRecords,
       zoneMeshes,
       zoneTris: Math.round(zoneTris),
       geometries: info.memory?.geometries ?? -1,
@@ -316,7 +335,19 @@ for (const zone of ['encampment', 'bloodMoor', 'denOfEvil']) {
   if (zone === 'encampment') {
     check(`${zone}: is a safe zone (no enemies)`, state.enemies === 0, `${state.enemies} enemies`);
   } else {
-    check(`${zone}: spawned enemies`, state.enemies > 0, `${state.enemies} enemies`);
+    // Booting straight into a populated zone is the path that was broken: the
+    // encounter is deferred until `CombatSystem` registers, and both the
+    // placement and the load report used to be silently lost.
+    check(
+      `${zone}: spawned its whole encounter table on a direct boot`,
+      state.enemies === state.spawnTable && state.spawnTable > 0,
+      `${state.enemies} of ${state.spawnTable} declared`,
+    );
+    check(
+      `${zone}: the load report agrees with the live enemy count`,
+      state.report?.enemies === state.enemies,
+      `report ${state.report?.enemies} vs live ${state.enemies}`,
+    );
   }
 
   console.log(
@@ -436,13 +467,16 @@ check(
  * - **zone colliders** (terrain, prop, trigger) are the manager's, tracked by
  *   the before/after snapshot around `buildColliders`. These must return to
  *   baseline exactly. No tolerance.
- * - **character colliders** grow by one per despawned enemy, and the cause is
- *   `physics/CharacterController.dispose`: it calls `world.removeRigidBody`,
- *   which drops the collider inside Rapier, but never
- *   `PhysicsWorld.removeCollider`, so the `#records` map keeps a record pointing
- *   at a freed collider. Reported rather than asserted — the fix belongs in
- *   `src/physics`, and `PhysicsWorld` exposes no way to drop a record without
- *   also asking Rapier to remove an already-removed collider.
+ * - **character colliders** used to grow by one per despawned enemy — measured
+ *   at +32 across one lap, which is 6 + 20 + 6 skeletons. The cause was
+ *   `physics/CharacterController.dispose`: it called `world.removeRigidBody`,
+ *   which drops the collider inside Rapier, but never told `PhysicsWorld`, so
+ *   the `#records` map kept a record pointing at a freed collider.
+ *   `PhysicsWorld.forgetCollider` now exists for exactly this — dropping a
+ *   record without asking Rapier to remove an already-removed collider — and
+ *   this is asserted rather than reported. The player's own capsule is the one
+ *   character collider that legitimately survives a lap, so the expected value
+ *   is the baseline, exactly.
  * - **renderer geometries and textures** grow on *first* visit to a zone and
  *   should not grow again, because `AssetManager` pins shared models. So the
  *   test is a second round trip with a zero delta, not an absolute bound on the
@@ -453,10 +487,16 @@ check(
   home.zoneOwnedColliders === before.zoneOwnedColliders,
   `${before.zoneOwnedColliders} -> ${home.zoneOwnedColliders}`,
 );
-console.log(
-  `      NOTE character-collider records ${before.characterColliders} -> ` +
-    `${home.characterColliders} (physics/CharacterController.dispose does not ` +
-    'unregister its record; see the comment above)',
+check(
+  'leak: character-collider records return to baseline exactly',
+  home.characterColliders === before.characterColliders,
+  `${before.characterColliders} -> ${home.characterColliders} ` +
+    `(${toMoor.enemies + toDen.enemies + backToMoor.enemies} enemies were spawned and despawned)`,
+);
+check(
+  'leak: every collider record still points at a live collider',
+  home.staleRecords === 0,
+  `${home.staleRecords} stale of ${home.colliders}`,
 );
 const newChildren = home.sceneChildNames.filter(
   (name, i) => before.sceneChildNames.indexOf(name) === -1 || i >= before.sceneChildNames.length,

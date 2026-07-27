@@ -261,16 +261,16 @@ describe('events', () => {
 
   it('carries the reward amounts on the rewarded event', () => {
     const events = new EventBus();
-    let payload: { skillPoints: number; experience: number } | null = null;
-    events.on('quest:rewarded', (value) => (payload = value));
+    const payloads: { skillPoints: number; experience: number }[] = [];
+    events.on('quest:rewarded', (value) => payloads.push(value));
 
     const quests = system();
     quests.bindEvents(events);
     complete(quests);
     quests.turnInAndReward(QUEST.id);
-    expect(payload).not.toBeNull();
-    expect(payload?.skillPoints).toBe(1);
-    expect(payload?.experience).toBe(500);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]?.skillPoints).toBe(1);
+    expect(payloads[0]?.experience).toBe(500);
   });
 
   it('works with no bus attached at all', () => {

@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu';
 import { BLOOD_MOOR_SPAWNS, normaliseHeight } from '../src/ai/EnemyDirector';
 import {
   ARRIVAL_EASE,
+  attackRangeFor,
   SKELETON_PROFILES,
   SKELETON_VARIANTS,
   STANDOFF_CLEARANCE,
@@ -349,7 +350,19 @@ describe('a scripted duel, resolved through the shared model', () => {
     expect(chance).toBeGreaterThan(0.75);
   });
 
-  it('leaves the player able to survive a skeleton for a while', () => {
+  /**
+   * This used to assert `swings > 12` and it was measuring the wrong thing.
+   *
+   * How many *swings* a skeleton needs is not how long the player survives —
+   * what mattered was that a swing took four seconds, so twelve of them was a
+   * minute and a half of standing still to die, which is not a fight. The
+   * cadence is now the lever (see `attackCooldown` and `recovery` in
+   * `ai/enemies/Skeleton`), and the swing count is bounded from *both* sides
+   * instead: enough that a single mistake is not fatal, few enough that a
+   * skeleton is worth respecting. The wall-clock number this produces is
+   * asserted where it can actually be measured, in `tools/verify-encounter.mjs`.
+   */
+  it('needs several connecting swings to kill the player, but not a dozen', () => {
     const profile = SKELETON_PROFILES.warrior;
     expect(profile).toBeDefined();
     if (profile === undefined) return;
@@ -360,7 +373,70 @@ describe('a scripted duel, resolved through the shared model', () => {
       health -= resolveAttack(profile.offense, { ...PLAYER_DEFENSE_BASE }, rng).total;
       swings++;
     }
-    expect(swings).toBeGreaterThan(12);
+    expect(swings).toBeGreaterThanOrEqual(5);
+    expect(swings).toBeLessThanOrEqual(12);
+  });
+
+  it('makes one skeleton hit worth a tenth of the player and no more than a fifth', () => {
+    // The per-hit contract. Under 5% and a skeleton is scenery; over 20% and
+    // three of them are an unavoidable death rather than a bad decision.
+    for (const variant of ['minion', 'warrior', 'rogue', 'mage'] as const) {
+      const profile = SKELETON_PROFILES[variant];
+      if (profile === undefined) continue;
+      const roll = mulberry32(7);
+      let total = 0;
+      let landed = 0;
+      for (let i = 0; i < 400; i++) {
+        const outcome = resolveAttack(
+          profile.offense,
+          { ...PLAYER_DEFENSE_BASE },
+          roll,
+          { move: profile.attacks[i % profile.attacks.length]?.modifiers ?? {} },
+        );
+        if (outcome.total > 0) {
+          total += outcome.total;
+          landed++;
+        }
+      }
+      const share = total / Math.max(1, landed) / PLAYER_DEFENSE_BASE.maxHealth;
+      expect(share).toBeGreaterThan(0.05);
+      expect(share).toBeLessThan(0.2);
+    }
+  });
+
+  /**
+   * The warrior bug, as a unit test.
+   *
+   * Every variant declared `attackRange: 1.85` or more while a warrior's heavy
+   * chop only clears 0.84 m through its damage window, so the skeleton would
+   * commit to a swing from 1.8 m, hold position through the telegraph and put
+   * the axe through empty air. Nothing in the code disagreed with itself, so
+   * nothing failed; the only symptom was one landed hit in sixteen seconds.
+   */
+  it('never lets a skeleton commit to a swing from outside its own shortest reach', () => {
+    for (const variant of Object.keys(SKELETON_PROFILES)) {
+      const profile = SKELETON_PROFILES[variant];
+      if (profile === undefined) continue;
+      const shortest = Math.min(...profile.attacks.map((a) => a.reachDuringWindow));
+      // 0.4 is the player's hit-capsule radius: a blade that stops short of the
+      // player's centre still lands if it reaches his capsule.
+      expect(profile.attackRange).toBeLessThanOrEqual(shortest + 0.4 + 1e-6);
+      // And still outside the stand-off, or the enemy parks inside its own
+      // decision boundary and never swings at all.
+      expect(profile.attackRange).toBeGreaterThan(standoffRadius(profile));
+    }
+  });
+
+  it('derives an attack range from the attacks rather than trusting an author', () => {
+    expect(attackRangeFor([{ reachDuringWindow: 1.4 } as never], 0.1)).toBeCloseTo(1.9);
+    // A short-reach attack in the table drags the whole range in, because the
+    // range has to work for the *worst* swing the variant can pick.
+    expect(
+      attackRangeFor([{ reachDuringWindow: 1.5 } as never, { reachDuringWindow: 0.84 } as never], 0.1),
+    ).toBeCloseTo(1.34);
+    // Floored, so a hypothetical dagger does not produce a range inside the
+    // stand-off and an enemy that stands there doing nothing.
+    expect(attackRangeFor([{ reachDuringWindow: 0.1 } as never], 0)).toBe(1);
   });
 
   it('makes cold noticeably better than fire against the undead', () => {

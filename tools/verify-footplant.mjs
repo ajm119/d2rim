@@ -1,43 +1,43 @@
 /**
  * Foot-plant regression guard.
  *
- * Drives the real game and measures, per frame, the *world* speed of the
- * slower-moving foot bone. A stride-matched character has a foot at very near
- * zero world speed through every stance phase; a character whose playback rate
- * does not match its ground speed has both feet travelling with the body, and
- * that is the single most visible tell of amateur character work.
+ * Drives the real game and measures, per frame, the *world* speed of the foot
+ * bones. A character whose feet are planted has a foot at very near zero world
+ * speed through every stance; a character whose feet slide has both feet
+ * travelling with the body, and that is the single most visible tell of
+ * amateur character work.
  *
- * Reports and asserts three things per gait:
- *   - `plantedFraction`  frames where the slower foot is under PLANT_SPEED
- *   - `meanMinFootSpeed` mean over frames of the slower foot's world speed
- *   - `minMinFootSpeed`  the best plant achieved anywhere in the sample
+ * ### The two metrics, and why there are two
+ *
+ * - **`meanMinFootSpeed` / `minMinFootSpeed` / `plantedFraction`** are about
+ *   the *slower of the two feet*, whichever that is. Nothing the solver does
+ *   can game them: they are read off the bones after everything has run, and a
+ *   solver that lies about which foot is planted still has to produce a foot
+ *   that is not moving.
+ * - **`lockedFraction` / `meanLockedFootSpeed`** are about the foot the foot
+ *   lock *claims* to be holding. This is what says whether the lock is doing
+ *   its job rather than whether the result happens to be acceptable, and it is
+ *   bounded from both sides — a lock that never engages scores perfectly on
+ *   speed and fails `lockedFraction`, and a lock that pins both feet for ever
+ *   fails its ceiling.
  *
  * A run legitimately scores a lower planted fraction than a walk: it has a
  * flight phase, and during flight *both* feet are moving, correctly. So the
  * thresholds differ by gait rather than pretending one number fits.
  *
- * ### What these thresholds are, and what they are not
+ * ### History, because this took three attempts
  *
- * They are a *regression* guard set just outside today's measured behaviour.
- * They are NOT the standard a finished character should meet, and green here
- * does not mean the problem is solved. Measured on the shipped rig after the
- * stride-estimator fix:
+ * The first two passes matched the animation's playback rate to the
+ * character's ground speed, which gets the *average* stance foot velocity to
+ * zero and no further. Measured after that work: a slower foot at 0.60–0.67 of
+ * body speed and a best plant of 0.33 m/s — plainly still sliding. The residual
+ * is not a rate error. This rig's stance foot does not travel at a constant
+ * rate; over `Running_A`'s contact it covers between 1.97 and 2.37 m per cycle,
+ * so no single body speed can hold it still through the whole stance.
  *
- * | gait   | body m/s | slower foot m/s | ratio | best plant |
- * |--------|----------|-----------------|-------|------------|
- * | walk   | 0.93     | 0.62            | 0.67  | 0.35       |
- * | run    | 3.98     | 2.47            | 0.62  | 0.33       |
- * | sprint | 5.53     | 3.30            | 0.60  | 0.43       |
- *
- * against 0.85 before it. Better, and still not a plant: a finished character
- * has a foot under 0.1 m/s for most of every stance, and this one never gets
- * under 0.33. The remaining error is not in the playback rate — that is now
- * matched to within a few percent — it is that this rig's stance-phase foot
- * velocity is not *constant*: over `Running_A`'s stance the foot's backward
- * rate swings between 1.97 and 2.37 m per cycle, so no single body speed can
- * hold it still through the whole contact. Closing that needs the foot pinned
- * in world space by IK for the duration of the stance (a foot lock), which is
- * the next piece of work, not a tuning pass.
+ * The third pass pins the stance foot in world space and solves the leg to it
+ * (`character/FootIK`), which is the only thing that can hold a foot still.
+ * The thresholds below are set against what that measures.
  *
  *   node tools/verify-footplant.mjs
  *
@@ -61,9 +61,12 @@ const GAITS = [
     keys: [],
     mouse: 'right',
     frames: 96,
-    minPlantedFraction: 0,
-    maxMeanRatio: 0.75,
-    maxBestPlant: 0.45,
+    minPlantedFraction: 0.25,
+    maxMeanRatio: 0.55,
+    maxBestPlant: 0.12,
+    minLockedFraction: 0.3,
+    maxLockedFraction: 0.98,
+    maxLockedFootSpeed: 0.15,
   },
   {
     name: 'run',
@@ -73,9 +76,12 @@ const GAITS = [
     // and both are correctly moving, so a low planted fraction and a mean near
     // body speed are the right answer here; what has to be true is that the
     // stance, when it happens, is a real stance.
-    minPlantedFraction: 0,
-    maxMeanRatio: 0.7,
-    maxBestPlant: 0.42,
+    minPlantedFraction: 0.1,
+    maxMeanRatio: 0.62,
+    maxBestPlant: 0.12,
+    minLockedFraction: 0.15,
+    maxLockedFraction: 0.85,
+    maxLockedFootSpeed: 0.15,
   },
   {
     // The one gait that runs into the cadence cap, so the one that is allowed
@@ -83,9 +89,12 @@ const GAITS = [
     name: 'sprint',
     keys: ['w', 'Shift'],
     frames: 96,
-    minPlantedFraction: 0,
+    minPlantedFraction: 0.05,
     maxMeanRatio: 0.7,
-    maxBestPlant: 0.55,
+    maxBestPlant: 0.15,
+    minLockedFraction: 0.1,
+    maxLockedFraction: 0.85,
+    maxLockedFootSpeed: 0.2,
   },
 ];
 
@@ -121,6 +130,10 @@ await page.evaluate(() => {
     const n = o.name.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (n === 'footl' || n === 'footr') feet[n] = o;
   });
+  // `FootIK.#legs` is built in the order ['l', 'r'], so `debug[0]` is the left
+  // leg and `debug[1]` the right. Sampled alongside the bones so the lock state
+  // and the measured speed describe the same frame and the same foot.
+  const ik = d2.engine.getModule('character.footIK');
   window.__sample = () => {
     const V = d2.three.Vector3;
     const at = (o) => {
@@ -128,6 +141,7 @@ await page.evaluate(() => {
       o.getWorldPosition(v);
       return [v.x, v.y, v.z];
     };
+    const legs = ik?.debug ?? [];
     return {
       pos: [player.position.x, player.position.y, player.position.z],
       speed: player.speed,
@@ -135,6 +149,11 @@ await page.evaluate(() => {
       state: player.animation?.state ?? null,
       l: at(feet.footl),
       r: at(feet.footr),
+      lock: [legs[0]?.lock ?? 0, legs[1]?.lock ?? 0],
+      clearance: [legs[0]?.clearance ?? -1, legs[1]?.clearance ?? -1],
+      swingPeak: [legs[0]?.swingPeak ?? -1, legs[1]?.swingPeak ?? -1],
+      drift: [legs[0]?.drift ?? 0, legs[1]?.drift ?? 0],
+      plants: ik?.plants ?? 0,
     };
   };
 });
@@ -204,12 +223,24 @@ for (const gait of GAITS) {
   for (let i = 1; i < samples.length; i++) {
     const a = samples[i - 1];
     const b = samples[i];
+    const speedL = Math.hypot(b.l[0] - a.l[0], b.l[2] - a.l[2]) / dt;
+    const speedR = Math.hypot(b.r[0] - a.r[0], b.r[2] - a.r[2]) / dt;
+    // The foot the solver *claims* is planted, and how fast it is actually
+    // travelling. The two are reported side by side on purpose: `foot` (the
+    // slower of the pair) cannot be gamed by the lock but does not distinguish
+    // "no foot is down" from "the down foot is sliding", and `locked` says
+    // exactly what the lock is delivering while it holds. A lock that never
+    // engages scores perfectly on the second metric and terribly on the first.
+    const lockL = Math.min(a.lock[0], b.lock[0]);
+    const lockR = Math.min(a.lock[1], b.lock[1]);
+    const held = [];
+    if (lockL >= 0.5) held.push(speedL);
+    if (lockR >= 0.5) held.push(speedR);
     frames.push({
       body: Math.hypot(b.pos[0] - a.pos[0], b.pos[2] - a.pos[2]) / dt,
-      foot: Math.min(
-        Math.hypot(b.l[0] - a.l[0], b.l[2] - a.l[2]) / dt,
-        Math.hypot(b.r[0] - a.r[0], b.r[2] - a.r[2]) / dt,
-      ),
+      foot: Math.min(speedL, speedR),
+      locked: held.length === 0 ? null : Math.min(...held),
+      clearance: Math.min(b.clearance[0], b.clearance[1]),
     });
   }
 
@@ -268,6 +299,11 @@ for (const gait of GAITS) {
   // state from inside the steady window rather than from the final frame.
   const last = samples[window === null ? samples.length - 1 : window.end + 1];
 
+  const lockedSpeeds = chosen.filter((f) => f.locked !== null).map((f) => f.locked);
+  const lockedFraction = lockedSpeeds.length / (chosen.length || 1);
+  const meanLocked = lockedSpeeds.length === 0 ? Infinity : mean(lockedSpeeds);
+  const worstLocked = lockedSpeeds.length === 0 ? Infinity : Math.max(...lockedSpeeds);
+
   const row = {
     frames: slower.length,
     meanBodySpeed: +meanBody.toFixed(3),
@@ -275,6 +311,10 @@ for (const gait of GAITS) {
     meanRatio: +(meanMin / (meanBody || 1)).toFixed(3),
     minMinFootSpeed: +bestPlant.toFixed(3),
     plantedFraction: +planted.toFixed(3),
+    lockedFraction: +lockedFraction.toFixed(3),
+    meanLockedFootSpeed: +meanLocked.toFixed(3),
+    worstLockedFootSpeed: +worstLocked.toFixed(3),
+    plants: samples.at(-1).plants - samples[0].plants,
     cycleRate: +last.cycleRate.toFixed(3),
     state: last.state,
     peakBodySpeed: +Math.max(...frames.map((f) => f.body), 0).toFixed(3),
@@ -289,6 +329,20 @@ for (const gait of GAITS) {
     ['plantedFraction', planted >= gait.minPlantedFraction, `>= ${gait.minPlantedFraction}`],
     ['meanRatio', meanMin / (meanBody || 1) <= gait.maxMeanRatio, `<= ${gait.maxMeanRatio}`],
     ['minMinFootSpeed', bestPlant <= gait.maxBestPlant, `<= ${gait.maxBestPlant}`],
+    // The lock has to engage. Without this the two thresholds above can be
+    // satisfied by a solver that has been switched off, which is exactly the
+    // regression this file exists to catch.
+    ['lockedFraction', lockedFraction >= gait.minLockedFraction, `>= ${gait.minLockedFraction}`],
+    // Bounded from above as well as below. A lock that simply pins both feet
+    // for ever would score perfectly on every speed metric here and look
+    // ridiculous; a run has a flight phase and cannot legitimately have a foot
+    // pinned on most of its frames.
+    ['lockedFraction ceiling', lockedFraction <= gait.maxLockedFraction, `<= ${gait.maxLockedFraction}`],
+    [
+      'meanLockedFootSpeed',
+      meanLocked <= gait.maxLockedFootSpeed,
+      `<= ${gait.maxLockedFootSpeed}`,
+    ],
   ];
   console.log(`\n[${gait.name}]`, JSON.stringify(row));
   for (const [label, ok, want] of checks) {

@@ -16,12 +16,23 @@ import { CombatFeedback } from './combat/Feedback';
 import { Engine } from './core/Engine';
 import type { GameContext } from './core/types';
 import { PhysicsWorld } from './physics/PhysicsWorld';
+import { DenOfEvilQuest } from './quest/DenOfEvil';
+import { NpcSystem } from './quest/NPC';
+import { LootSystem } from './rpg/Loot';
+import { RpgSystem } from './rpg/RpgSystem';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
 import { BloodMoor } from './scene/BloodMoor';
 import { DenOfEvil } from './scene/DenOfEvil';
 import { RogueEncampment } from './scene/RogueEncampment';
 import { CombatHud } from './ui/CombatHud';
 import { DebugOverlay } from './ui/DebugOverlay';
+import { DialogueOverlay } from './ui/DialogueOverlay';
+import { InventoryScreen } from './ui/InventoryScreen';
+import { PauseMenu } from './ui/PauseMenu';
+import { RpgHud } from './ui/RpgHud';
+import { SkillTreeScreen } from './ui/SkillTreeScreen';
+import { UiManager } from './ui/UiManager';
+import { VendorScreen } from './ui/VendorScreen';
 import { PortalSystem } from './world/Portal';
 import type { Zone } from './world/Zone';
 import { ZoneManager } from './world/ZoneManager';
@@ -212,7 +223,26 @@ engine.add(new CombatFeedback());
 // module only owns the prompt and the interact key.
 engine.add(new PortalSystem());
 
+// The RPG layer. `RpgSystem` after combat, because it binds to the combat
+// service and resizes its vitals pools from the derived character sheet; loot
+// after that, because the drop it creates is handed to the RPG system as its
+// receiver; the quest and NPC modules last, because both resolve the quest
+// system the RPG module registered.
+engine.add(new RpgSystem());
+engine.add(new LootSystem());
+engine.add(new DenOfEvilQuest());
+engine.add(new NpcSystem());
+
+// UI. `UiManager` first: every screen registers itself with it during `init`,
+// and it owns the overlay root they attach to.
+engine.add(new UiManager());
 engine.add(new CombatHud());
+engine.add(new RpgHud());
+engine.add(new InventoryScreen());
+engine.add(new SkillTreeScreen());
+engine.add(new VendorScreen());
+engine.add(new DialogueOverlay());
+engine.add(new PauseMenu());
 engine.add(new DebugOverlay());
 
 const ready = engine.ready

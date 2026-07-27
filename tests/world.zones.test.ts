@@ -461,6 +461,165 @@ describe('Portal geometry', () => {
   });
 });
 
+/* -------------------------------------------------------------------------- */
+/* Enemy placement                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The deferral this section covers, and why it was worth a test.
+ *
+ * `ZoneManager` is registered *before* `CombatSystem` (its zones build
+ * colliders that the player needs during his own `init`), so when the start
+ * zone loads there is no combat system to register enemies with. The old code
+ * stashed the spawn table and fired `void this.#spawnEnemies(spawns)` from the
+ * first `update`: an unawaited promise with no completion signal of any kind.
+ *
+ * Two things fell out of that and both were invisible.
+ *
+ *  1. `report.enemies` was snapshotted at the end of the load — always before
+ *     a single skeleton existed — so a populated Blood Moor permanently
+ *     reported `0 enemies`.
+ *  2. Nothing could wait for the encounter. The skeleton GLBs arrive on a
+ *     *macrotask*, and a harness driving the world with `await stepFrames(1)`
+ *     only ever yields microtasks, so the fight could not appear for as long as
+ *     the harness kept asking for frames. Sixty driven frames, sixty-seven
+ *     seconds of wall clock, zero enemies — measured.
+ */
+
+/** A zone with an encounter table, and nothing else different. */
+function makeCombatZone(id: string, spawns = 3): TestZone {
+  const zone = makeZone(id);
+  return {
+    ...zone,
+    enemySpawns: Array.from({ length: spawns }, (_, i) => ({
+      variant: 'minion',
+      x: i * 2,
+      z: 0,
+    })),
+  };
+}
+
+/**
+ * Whether a promise has *already* settled, decided across a macrotask boundary.
+ *
+ * `Promise.race([p.then(...), Promise.resolve('pending')])` does not work and
+ * is worth naming: `Promise.resolve` settles a microtask earlier than any
+ * `.then` chain, so that form reports every promise as pending. A `setTimeout`
+ * runs after the microtask queue has drained, which is the question being
+ * asked.
+ */
+async function settledNow(promise: Promise<unknown>): Promise<'ready' | 'pending'> {
+  return Promise.race([
+    promise.then(() => 'ready' as const),
+    new Promise<'pending'>((resolve) => {
+      setTimeout(() => resolve('pending'), 0);
+    }),
+  ]);
+}
+
+/** Just enough `AssetManager` for the director to decide it has no models. */
+function stubAssets(): unknown {
+  return { has: () => false, loadGLTF: async () => ({ scene: null, animations: [] }), pin: () => undefined };
+}
+
+describe('ZoneManager enemy placement', () => {
+  it('resolves enemiesReady immediately for a zone with no encounter', async () => {
+    const ctx = makeContext();
+    const zones = new ZoneManager({ startZone: 'a', fadeSeconds: 0 });
+    zones.register('a', () => makeZone('a'));
+    await zones.init(ctx);
+    // Must be already resolved, not merely resolvable: a caller awaiting the
+    // encounter of a safe zone has to fall straight through.
+    await expect(settledNow(zones.enemiesReady)).resolves.toBe('ready');
+    expect(zones.director).toBeNull();
+  });
+
+  it('defers placement when combat is not up yet, and retries until it is', async () => {
+    const ctx = makeContext();
+    ctx.services.register('assets', stubAssets());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    const zones = new ZoneManager({ startZone: 'a', fadeSeconds: 0 });
+    zones.register('a', () => makeCombatZone('a'));
+    await zones.init(ctx);
+
+    // The director exists and its models have been asked for, but nothing is
+    // placed: this is the state the boot path is always in.
+    expect(zones.director).not.toBeNull();
+    expect(zones.director?.loaded).toBe(true);
+    expect(zones.director?.ready).toBe(false);
+    expect(zones.report?.enemies).toBe(0);
+
+    // Ticking with combat still missing must not consume the deferral. The old
+    // code fired once and gave up silently.
+    zones.update(ctx, 1 / 60);
+    expect(zones.director?.ready).toBe(false);
+
+    ctx.services.register('physics.world', {});
+    ctx.services.register('combat', {});
+    zones.update(ctx, 1 / 60);
+    expect(zones.director?.ready).toBe(true);
+    await expect(settledNow(zones.enemiesReady)).resolves.toBe('ready');
+
+    warn.mockRestore();
+    info.mockRestore();
+  });
+
+  it('places immediately, and awaits placement, when combat already exists', async () => {
+    const ctx = makeContext();
+    ctx.services.register('assets', stubAssets());
+    ctx.services.register('physics.world', {});
+    ctx.services.register('combat', {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    const zones = new ZoneManager({ startZone: 'a', fadeSeconds: 0 });
+    zones.register('a', () => makeCombatZone('a'));
+    await zones.init(ctx);
+
+    // This is the travel path, and it is the one that already worked.
+    expect(zones.director?.ready).toBe(true);
+    await expect(settledNow(zones.enemiesReady)).resolves.toBe('ready');
+
+    warn.mockRestore();
+    info.mockRestore();
+  });
+
+  it('releases a pending enemiesReady when the zone is unloaded underneath it', async () => {
+    const ctx = makeContext();
+    ctx.services.register('assets', stubAssets());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    const zones = new ZoneManager({ startZone: 'a', fadeSeconds: 0 });
+    zones.register('a', () => makeCombatZone('a'));
+    zones.register('b', () => makeZone('b'));
+    await zones.init(ctx);
+    const waited = zones.enemiesReady;
+
+    // A player who walks straight back out of the moor. Whoever was awaiting
+    // that zone's encounter must not wait for ever.
+    await zones.travelTo('b');
+    await expect(settledNow(waited)).resolves.toBe('ready');
+
+    warn.mockRestore();
+    info.mockRestore();
+  });
+
+  it('skips enemies entirely when the manager is told to', async () => {
+    const ctx = makeContext();
+    ctx.services.register('assets', stubAssets());
+    ctx.services.register('physics.world', {});
+    ctx.services.register('combat', {});
+    const zones = new ZoneManager({ startZone: 'a', fadeSeconds: 0, enemies: false });
+    zones.register('a', () => makeCombatZone('a'));
+    await zones.init(ctx);
+    expect(zones.director).toBeNull();
+    expect(zones.report?.enemies).toBe(0);
+  });
+});
+
 describe('fireFlicker', () => {
   it('stays close to unity so a fire never reads as a strobe', () => {
     let min = Infinity;

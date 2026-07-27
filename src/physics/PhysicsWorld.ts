@@ -317,6 +317,35 @@ export class PhysicsWorld implements GameModule {
     this.world.removeCollider(record.collider, false);
   }
 
+  /**
+   * Drop a record for a collider Rapier has *already* freed.
+   *
+   * Removing a rigid body removes the colliders attached to it, inside Rapier,
+   * without going through {@link removeCollider} — so the owner of that body
+   * has no way to keep the registry honest. It cannot call `removeCollider`:
+   * that would ask Rapier to remove a collider whose handle is already dead,
+   * which in a WASM build is a trap rather than an exception. And leaving the
+   * record is not harmless: `#records` is what turns a raycast hit back into
+   * "what did I hit", it is what the zone-leak assertions count, and a record
+   * whose handle has since been *reissued* to a different collider makes
+   * `recordFor` return the wrong answer rather than no answer.
+   *
+   * Measured before this existed: +32 stale `character` records across one
+   * encampment → moor → den → moor → encampment lap, one per despawned enemy.
+   *
+   * @returns whether a record was actually dropped.
+   */
+  forgetCollider(record: ColliderRecord | null | undefined): boolean {
+    if (record === null || record === undefined) return false;
+    const known = this.#records.get(record.collider.handle);
+    // Handle equality is not enough on its own — Rapier reuses handles — so the
+    // record identity is checked too. A reissued handle belongs to somebody
+    // else and must not be dropped on this caller's behalf.
+    if (known !== record) return false;
+    this.#records.delete(record.collider.handle);
+    return true;
+  }
+
   /* -- world construction ------------------------------------------------- */
 
   /**

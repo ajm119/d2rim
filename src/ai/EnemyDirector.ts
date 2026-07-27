@@ -76,8 +76,12 @@ export class EnemyDirector implements GameModule {
   readonly #options: Required<EnemyDirectorOptions>;
   readonly #enemies: EnemyBase[] = [];
   readonly #neighbours = (): readonly EnemyBase[] => this.#enemies;
+  /** One loaded model per variant, cloned per spawn. Populated by `init`. */
+  readonly #sources = new Map<string, { scene: THREE.Object3D; clips: THREE.AnimationClip[] }>();
 
   #ctx: GameContext | null = null;
+  #loaded = false;
+  #placed = 0;
   #ready = false;
 
   constructor(options: EnemyDirectorOptions = {}) {
@@ -91,8 +95,26 @@ export class EnemyDirector implements GameModule {
     return this.#enemies;
   }
 
+  /**
+   * Whether the encounter table has been fully placed.
+   *
+   * This used to mean "the model load resolved", which is not the same thing
+   * and is the weaker of the two: on the boot path the load resolves *before*
+   * `CombatSystem` exists, so a director could be `ready` with an empty moor.
+   * It now means what a caller actually wants to know — the fight is there.
+   */
   get ready(): boolean {
     return this.#ready;
+  }
+
+  /** Whether the skeleton models have finished downloading. */
+  get loaded(): boolean {
+    return this.#loaded;
+  }
+
+  /** Declared spawns that have not been placed yet. */
+  get pending(): number {
+    return Math.max(0, this.#options.spawns.length - this.#placed);
   }
 
   /** Live enemies, for the debug readout and the drive harness. */
@@ -100,24 +122,35 @@ export class EnemyDirector implements GameModule {
     return this.#enemies.filter((enemy) => enemy.alive).length;
   }
 
+  /**
+   * Download the models, then place the encounter.
+   *
+   * Split in two on purpose. The download needs only the {@link AssetManager};
+   * placing needs `PhysicsWorld` *and* `CombatSystem`, and on the boot path the
+   * combat system has not registered yet when the start zone loads. Fusing the
+   * two meant the boot path silently produced an empty zone — the load
+   * completed, `ready` went true, and nothing was there. Now the download runs
+   * as early as it can and {@link populate} is retried until it takes.
+   */
   async init(ctx: GameContext): Promise<void> {
     this.#ctx = ctx;
     ctx.services.register(EnemyDirectorKey, this);
     if (!this.#options.enabled) {
+      this.#loaded = true;
       this.#ready = true;
       return;
     }
 
     const assets = ctx.services.tryGet<AssetManager>(AssetManagerKey);
     if (assets === undefined) {
-      console.warn('[ai] no AssetManager; the moor will be empty');
+      console.warn('[ai] no AssetManager; the zone will be empty');
+      this.#loaded = true;
       this.#ready = true;
       return;
     }
 
     // Load each distinct variant once, then clone per spawn.
     const wanted = new Set(this.#options.spawns.map((spawn) => spawn.variant));
-    const sources = new Map<string, { scene: THREE.Object3D; clips: THREE.AnimationClip[] }>();
     for (const variant of wanted) {
       const key = SKELETON_PROFILES[variant]?.asset;
       if (key === undefined || !assets.has(key)) {
@@ -127,22 +160,49 @@ export class EnemyDirector implements GameModule {
       try {
         const gltf = await assets.loadGLTF(key);
         assets.pin(key);
-        sources.set(variant, { scene: gltf.scene, clips: [...gltf.animations] });
+        this.#sources.set(variant, { scene: gltf.scene, clips: [...gltf.animations] });
       } catch (error) {
         console.error(`[ai] could not load ${key}:`, error);
       }
     }
+    // The director may have been disposed while the GLBs were in flight — a
+    // player who walks straight back out of the moor does exactly that.
+    if (this.#ctx === null) return;
+    this.#loaded = true;
+    this.populate();
+  }
 
-    for (const spawn of this.#options.spawns) {
-      const source = sources.get(spawn.variant);
+  /**
+   * Place every declared spawn whose model has arrived.
+   *
+   * Idempotent and cheap to call every frame: it returns immediately until the
+   * models are down and the services it needs exist, and once it has placed the
+   * table it never places it again.
+   *
+   * @returns true once the encounter is fully placed.
+   */
+  populate(): boolean {
+    if (this.#ready) return true;
+    const ctx = this.#ctx;
+    if (!this.#loaded || ctx === null) return false;
+    // Both are required by `spawn`; without them it would refuse per enemy and
+    // burn the whole table on the first frame.
+    if (!ctx.services.has(PhysicsWorldKey) || !ctx.services.has(CombatKey)) return false;
+
+    const spawns = this.#options.spawns;
+    for (; this.#placed < spawns.length; this.#placed++) {
+      const point = spawns[this.#placed];
+      if (point === undefined) continue;
+      const source = this.#sources.get(point.variant);
       if (source === undefined) continue;
-      this.spawn(spawn, source.scene, source.clips);
+      this.spawn(point, source.scene, source.clips);
     }
     this.#ready = true;
     console.info(
-      `[ai] Blood Moor populated: ${this.#enemies.length} skeletons ` +
-        `(${SKELETON_VARIANTS.filter((v) => sources.has(v)).join(', ')})`,
+      `[ai] zone populated: ${this.#enemies.length} of ${spawns.length} skeletons ` +
+        `(${SKELETON_VARIANTS.filter((v) => this.#sources.has(v)).join(', ')})`,
     );
+    return true;
   }
 
   fixedUpdate(_ctx: GameContext, dt: number): void {
@@ -161,6 +221,7 @@ export class EnemyDirector implements GameModule {
   dispose(): void {
     for (const enemy of this.#enemies) this.#detach(enemy);
     this.#enemies.length = 0;
+    this.#sources.clear();
     this.#ctx?.services.unregister(EnemyDirectorKey);
     this.#ctx = null;
   }

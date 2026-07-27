@@ -435,7 +435,11 @@ export class ComboMachine {
 export const PLAYER_OFFENSE: OffenseStats = {
   level: 2,
   attackRating: 150,
-  damage: { physical: { min: 9, max: 17 } },
+  // Nudged from 9–17. Driven, a Barbarian needed eight swings for a minion and
+  // sixteen for a warrior; sixteen is past the point where a fight stops being
+  // a fight and becomes an errand. Most of that was fixed on the skeletons'
+  // side (the warrior's pool came down with it), and the rest here.
+  damage: { physical: { min: 10, max: 19 } },
   criticalChance: 0.09,
   criticalMultiplier: 2,
 };
@@ -449,7 +453,17 @@ export const PLAYER_DEFENSE_BASE = {
   physicalReduction: 0.05,
   flatReduction: 1,
   maxHealth: DEFAULT_VITALS.health.max,
-  poise: 3,
+  /**
+   * Damage a blow has to do before it interrupts what the player was doing.
+   *
+   * Raised from 3, which was effectively zero — every skeleton hit cancelled
+   * the player's combo — and that mattered much more once the skeletons started
+   * swinging twice as often. At 8 the rogue's slice (about 6 through the
+   * player's mitigation) does not interrupt and everything heavier does, which
+   * gives the fast enemy a job that is not "cancel the player forever" and
+   * keeps being staggered a readable consequence of taking a real hit.
+   */
+  poise: 8,
 } as const;
 
 /* -------------------------------------------------------------------------- */
