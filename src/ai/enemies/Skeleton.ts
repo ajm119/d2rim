@@ -205,6 +205,36 @@ export type SkeletonVariant = keyof typeof SKELETON_PROFILES;
 /** Every variant key, in spawn-rotation order. */
 export const SKELETON_VARIANTS: readonly string[] = ['warrior', 'minion', 'rogue', 'mage'];
 
+/** Metres over which a pursuit eases from full chase speed down to a halt. */
+export const ARRIVAL_EASE = 0.7;
+
+/**
+ * Chase speed for an enemy `distance` from its target, holding a `ring`
+ * stand-off.
+ *
+ * Enemy capsules deliberately do not collide with the player's, so nothing
+ * physically stops a pursuit: steering straight at the player's feet does not
+ * halt at his chest, it walks *through* him and settles on top of him. The
+ * player then cannot see what is hitting him, and the camera has a skeleton
+ * inside its near plane. So the approach is given an arrival radius and eased
+ * to zero across `ease` metres, which also stops the steering jittering on the
+ * boundary the way a hard stop/go test would.
+ *
+ * @returns metres per second, or 0 once the stand-off is reached.
+ */
+export function pursuitSpeed(
+  distance: number,
+  ring: number,
+  chaseSpeed: number,
+  ease: number = ARRIVAL_EASE,
+): number {
+  const gap = distance - ring;
+  if (gap <= 0.05) return 0;
+  const span = Math.max(1e-3, ease);
+  // Floored at a quarter speed so the last few centimetres are not a crawl.
+  return chaseSpeed * THREE.MathUtils.clamp(gap / span, 0.25, 1);
+}
+
 /* -------------------------------------------------------------------------- */
 /* The enemy                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -299,7 +329,15 @@ export class Skeleton extends EnemyBase {
     // an arc. Inside the ring, close the last step straight on.
     const ring = Math.max(0.6, this.profile.attackRange * 0.8);
     if (blackboard.distance > ring + 0.8) this.approachPoint(this.#point, ring, this.#point);
-    this.moveToward(this.#point, this.profile.chaseSpeed);
+    const speed = pursuitSpeed(blackboard.distance, ring, this.profile.chaseSpeed);
+    // Arrived: stand at the ring and keep facing him. `ring` is inside
+    // `attackRange`, so the attack branch still fires from here — the skeleton
+    // waits out its cooldown at sword's length instead of climbing into him.
+    if (speed <= 0) {
+      this.holdFacing(this.#point);
+      return 'running';
+    }
+    this.moveToward(this.#point, speed);
     return 'running';
   }
 

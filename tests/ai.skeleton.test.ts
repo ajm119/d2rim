@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 
 import { BLOOD_MOOR_SPAWNS, normaliseHeight } from '../src/ai/EnemyDirector';
-import { SKELETON_PROFILES, SKELETON_VARIANTS } from '../src/ai/enemies/Skeleton';
+import {
+  ARRIVAL_EASE,
+  SKELETON_PROFILES,
+  SKELETON_VARIANTS,
+  pursuitSpeed,
+} from '../src/ai/enemies/Skeleton';
 import { CombatantRegistry, isFlashable, type Combatant } from '../src/combat/Combatant';
 import { hitChance, resolveAttack, mulberry32 } from '../src/combat/DamageModel';
 import { PLAYER_DEFENSE_BASE, PLAYER_OFFENSE } from '../src/combat/CombatSystem';
@@ -73,6 +78,45 @@ describe('skeleton profiles', () => {
       expect(p?.loseRange).toBeGreaterThan(p?.visionRange ?? 0);
       expect(p?.visionHalfAngle).toBeLessThan(Math.PI);
     }
+  });
+});
+
+describe('pursuitSpeed', () => {
+  it('runs at full speed while the target is far away', () => {
+    expect(pursuitSpeed(9, 1.48, 3.1)).toBeCloseTo(3.1);
+  });
+
+  it('stops once the stand-off ring is reached, so the enemy never enters the player', () => {
+    expect(pursuitSpeed(1.48, 1.48, 3.1)).toBe(0);
+    expect(pursuitSpeed(1.0, 1.48, 3.1)).toBe(0);
+    expect(pursuitSpeed(0, 1.48, 3.1)).toBe(0);
+  });
+
+  it('eases down over the last stretch instead of stopping dead on the boundary', () => {
+    const far = pursuitSpeed(1.48 + ARRIVAL_EASE, 1.48, 3.1);
+    const near = pursuitSpeed(1.48 + ARRIVAL_EASE * 0.5, 1.48, 3.1);
+    expect(far).toBeGreaterThan(near);
+    expect(near).toBeGreaterThan(0);
+  });
+
+  it('never crawls: the floor is a quarter of the chase speed', () => {
+    expect(pursuitSpeed(1.53, 1.48, 3.1)).toBeCloseTo(3.1 * 0.25);
+  });
+
+  it('holds the ring inside every variant own attack range, or it could never swing', () => {
+    for (const variant of SKELETON_VARIANTS) {
+      const profile = SKELETON_PROFILES[variant];
+      expect(profile).toBeDefined();
+      if (profile === undefined) continue;
+      const ring = Math.max(0.6, profile.attackRange * 0.8);
+      expect(ring).toBeLessThan(profile.attackRange);
+      expect(pursuitSpeed(ring, ring, profile.chaseSpeed)).toBe(0);
+      expect(pursuitSpeed(ring + 2, ring, profile.chaseSpeed)).toBeCloseTo(profile.chaseSpeed);
+    }
+  });
+
+  it('tolerates a degenerate ease without dividing by zero', () => {
+    expect(Number.isFinite(pursuitSpeed(2, 1.48, 3.1, 0))).toBe(true);
   });
 });
 
