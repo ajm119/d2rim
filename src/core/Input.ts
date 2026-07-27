@@ -178,6 +178,31 @@ export class Input {
     return { x: this.#mouseX, y: this.#mouseY };
   }
 
+  /**
+   * Add synthetic pointer motion to this frame's accumulated delta.
+   *
+   * This is the mouse, moved by something other than a hand. It exists because
+   * a headless harness cannot aim: `mousemove` under pointer lock reports
+   * `movementX`, and pointer lock needs a user gesture that a scripted run does
+   * not have. Everything downstream — {@link mouseDelta}, `PlayerController`'s
+   * look accumulator, the camera rig — is untouched, so a harness that turns
+   * the player with this is exercising the same code path as a player who
+   * turns with a mouse, at whatever rate it chooses to feed.
+   *
+   * Deliberately *not* a yaw setter. A setter would let a harness snap the
+   * character to a facing no hand could produce, and any time-to-kill measured
+   * that way would be a measurement of the harness. Feeding pixels keeps the
+   * turn subject to the same sensitivity, the same per-frame accumulation and
+   * the same `turnRate` limit on the body catching up to the camera.
+   *
+   * Cleared by {@link endFrame} like any other delta, so it must be fed on the
+   * frame it is meant to apply to.
+   */
+  nudgePointer(dx: number, dy = 0): void {
+    this.#mouseDX += dx;
+    this.#mouseDY += dy;
+  }
+
   /** Accumulated wheel movement for this frame. Positive scrolls away. */
   get wheelDelta(): number {
     return this.#wheel;
