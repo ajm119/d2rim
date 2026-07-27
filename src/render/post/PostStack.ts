@@ -429,10 +429,19 @@ interface TierProfile {
   /**
    * Whether the bloom pyramid runs at all.
    *
-   * Off at `low`. A 4-mip pyramid is four downsample passes and four upsample
-   * passes over its own chain of half-float targets; `CompositePass` already
-   * handles a disabled bloom by compositing without it, so this is a clean
-   * delete rather than a zero-intensity no-op.
+   * **On at every tier, and that is a correctness constraint rather than an art
+   * call.** Disabling it was tried: `CompositePass` does guard the intensity
+   * (`bloomTexture === null` sets it to 0), but its material's bloom uniform is
+   * then never assigned a texture at all, and the composite compiles against an
+   * unbound sampler. The result is not a slightly flatter image, it is a black
+   * frame — verified by capture at `?quality=low`, which came back 89% pure
+   * black with the sky gone.
+   *
+   * The pyramid is cheap where it matters anyway: `low` runs 4 mips, and mip 0
+   * is already quarter-area, so the whole chain is about a third of one
+   * full-screen pass. It is kept as a knob because a future `bloom.enabled`
+   * that binds a 1x1 black placeholder would make it safe, and that is the fix
+   * this field is waiting for.
    */
   readonly bloom: boolean;
   readonly autoExposure: boolean;
@@ -448,7 +457,7 @@ const TIERS: Readonly<Record<QualityTier, TierProfile>> = {
     velocity: false,
     jitterSamples: 8,
     bloomMips: 4,
-    bloom: false,
+    bloom: true,
     autoExposure: false,
     grain: false,
     chromaticAberration: false,

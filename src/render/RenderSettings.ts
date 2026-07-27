@@ -21,8 +21,8 @@
  * | | low | medium | high | ultra |
  * |---|---|---|---|---|
  * | post / AA | FXAA, 0.75 scale | FXAA | TAA 8 | TAA 16 + sharpen |
- * | bloom | **off** | 5 mips | 6 mips | 7 mips |
- * | shadow cascades × size | **1 × 1024** | **2 × 1280** | 4 × 2048 | 4 × 3072 |
+ * | bloom | 4 mips | 5 mips | 6 mips | 7 mips |
+ * | shadow cascades × size | 2 × 1024 | **2 × 1280** | 4 × 2048 | 4 × 3072 |
  * | GTAO | off | **off** | medium (½ res) | high (full res) |
  * | SSR | off | off | medium (½ res) | high (½ res) |
  * | light shafts | **off** | **off** | on | on |
@@ -32,9 +32,11 @@
  * | DPR cap | 1 | 1.5 | 2 | 2 |
  *
  * `low` deletes work rather than shrinking it — no AO pass, no SSR pass, no
- * bloom pyramid, no shaft buffers, no velocity attachment — because on a weak
+ * shaft buffers, no velocity attachment, one shadow cascade — because on a weak
  * GPU the win comes from the render targets that stop being allocated at all,
- * not from a smaller radius.
+ * not from a smaller radius. (Bloom is the exception and stays on everywhere;
+ * see `TierProfile.bloom` in `post/PostStack` for why turning it off produces a
+ * black frame rather than a flatter one.)
  *
  * ### The medium tier was rebuilt for a fanless laptop
  *
@@ -170,10 +172,11 @@ export interface RenderTier {
 }
 
 export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
-  // `low` is a genuine potato mode, not a slightly cheaper `medium`. One
-  // shadow cascade, no ambient occlusion, no light shafts, no bloom, no
-  // velocity buffer, 0.75 render scale, DPR 1. What is left is: draw the world,
-  // tone-map it, antialias it, present it. It is meant to run on anything.
+  // `low` is a genuine potato mode, not a slightly cheaper `medium`. No ambient
+  // occlusion, no light shafts, no velocity buffer, half the fog march steps,
+  // a 70 m shadow range, 0.75 render scale, DPR 1, and a terrain material that
+  // samples no texture. What is left is: draw the world, bloom it, tone-map it,
+  // antialias it, present it. It is meant to run on anything.
   low: {
     post: 'low',
     materials: 'low',
@@ -182,12 +185,16 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     ssr: 'off',
     ssrScale: 0.5,
     volumetrics: 'low',
-    // One cascade, not two. A cascade is a *whole extra shadow render of the
-    // scene* — at 687 draw calls in the encampment, dropping a cascade drops
-    // roughly a third of them, which is the largest single draw-call lever the
-    // tier table has. One 1024 map over 70 m is coarse; it is also the
-    // difference between the game running and not running.
-    shadowCascades: 1,
+    // Two cascades, and **one was tried and does not work**. A cascade is a
+    // whole extra shadow render of the scene, so dropping to one is the single
+    // largest draw-call lever the tier table has — but captured at
+    // `?quality=low` it produced an 89%-black frame with the sky gone, not a
+    // coarser shadow. `CascadedShadowMaps` clamps the count to [1, 4] and its
+    // selection graph has an explicit `cascades - 1` path, so the degenerate
+    // single-cascade case is reachable and broken; finding out why is worth
+    // doing, and guessing at it here is not. The saving is taken from the range
+    // instead: 70 m rather than 90 m, which the fog closes down anyway.
+    shadowCascades: 2,
     shadowMapSize: 1024,
     shadowDistance: 70,
     skyViewWidth: 128,
