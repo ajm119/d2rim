@@ -209,6 +209,40 @@ export const SKELETON_VARIANTS: readonly string[] = ['warrior', 'minion', 'rogue
 export const ARRIVAL_EASE = 0.7;
 
 /**
+ * Clearance held between the player's hit capsule and the enemy's, in metres.
+ *
+ * Zero: the hit capsules stop exactly touching. That is not a stylistic
+ * choice. Measured on the real rig, the closest point of a skeleton's swinging
+ * arm to the player's hit capsule is its *elbow*, not its blade — the authored
+ * window covers a part of the clip where the forearm is not pointing at the
+ * target — so contact happens only in the last few centimetres. Any positive
+ * clearance here disarms the enemy entirely. The physical capsules are smaller
+ * than the hit capsules (0.30 + 0.30 against 0.40 + 0.30), so touching hit
+ * capsules still leaves the bodies 0.1 m apart and nothing interpenetrates.
+ *
+ * The real repair is to anchor the hitbox to the skeletons' weapon meshes, or
+ * to re-author the windows onto the part of the swing that actually travels
+ * through the target. Until then this is the widest stand-off that keeps the
+ * fight two-sided.
+ */
+export const STANDOFF_CLEARANCE = 0;
+
+/** Radius of the player's hit capsule, from `PlayerCombatant.hitRadius`. */
+const PLAYER_HIT_RADIUS = 0.4;
+
+/**
+ * Where a pursuit stops: touching distance, not overlapping distance.
+ *
+ * Deliberately *not* derived from `attackRange`. That number is the distance at
+ * which the skeleton decides to swing, and it is authored well outside its
+ * reach on purpose so the enemy has to commit to closing. Stopping there would
+ * park the skeleton permanently outside its own weapon.
+ */
+export function standoffRadius(profile: EnemyProfile): number {
+  return PLAYER_HIT_RADIUS + profile.capsuleRadius + STANDOFF_CLEARANCE;
+}
+
+/**
  * Chase speed for an enemy `distance` from its target, holding a `ring`
  * stand-off.
  *
@@ -329,10 +363,11 @@ export class Skeleton extends EnemyBase {
     // an arc. Inside the ring, close the last step straight on.
     const ring = Math.max(0.6, this.profile.attackRange * 0.8);
     if (blackboard.distance > ring + 0.8) this.approachPoint(this.#point, ring, this.#point);
-    const speed = pursuitSpeed(blackboard.distance, ring, this.profile.chaseSpeed);
-    // Arrived: stand at the ring and keep facing him. `ring` is inside
-    // `attackRange`, so the attack branch still fires from here — the skeleton
-    // waits out its cooldown at sword's length instead of climbing into him.
+    const standoff = standoffRadius(this.profile);
+    const speed = pursuitSpeed(blackboard.distance, standoff, this.profile.chaseSpeed);
+    // Arrived: hold at touching distance and keep facing him. Well inside
+    // `attackRange`, so the attack branch keeps firing — the skeleton waits out
+    // its cooldown at sword's length instead of climbing into him.
     if (speed <= 0) {
       this.holdFacing(this.#point);
       return 'running';

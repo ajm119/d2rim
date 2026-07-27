@@ -6,7 +6,9 @@ import {
   ARRIVAL_EASE,
   SKELETON_PROFILES,
   SKELETON_VARIANTS,
+  STANDOFF_CLEARANCE,
   pursuitSpeed,
+  standoffRadius,
 } from '../src/ai/enemies/Skeleton';
 import { CombatantRegistry, isFlashable, type Combatant } from '../src/combat/Combatant';
 import { hitChance, resolveAttack, mulberry32 } from '../src/combat/DamageModel';
@@ -103,20 +105,60 @@ describe('pursuitSpeed', () => {
     expect(pursuitSpeed(1.53, 1.48, 3.1)).toBeCloseTo(3.1 * 0.25);
   });
 
-  it('holds the ring inside every variant own attack range, or it could never swing', () => {
+  it('tolerates a degenerate ease without dividing by zero', () => {
+    expect(Number.isFinite(pursuitSpeed(2, 1.48, 3.1, 0))).toBe(true);
+  });
+});
+
+describe('standoffRadius', () => {
+  const PLAYER_HIT_RADIUS = 0.4;
+
+  it('leaves the two capsules clear of each other rather than overlapping', () => {
     for (const variant of SKELETON_VARIANTS) {
       const profile = SKELETON_PROFILES[variant];
       expect(profile).toBeDefined();
       if (profile === undefined) continue;
-      const ring = Math.max(0.6, profile.attackRange * 0.8);
-      expect(ring).toBeLessThan(profile.attackRange);
-      expect(pursuitSpeed(ring, ring, profile.chaseSpeed)).toBe(0);
-      expect(pursuitSpeed(ring + 2, ring, profile.chaseSpeed)).toBeCloseTo(profile.chaseSpeed);
+      const gap = standoffRadius(profile) - PLAYER_HIT_RADIUS - profile.capsuleRadius;
+      expect(gap).toBeCloseTo(STANDOFF_CLEARANCE);
+      expect(gap).toBeGreaterThanOrEqual(-1e-9);
+      // The *physical* capsules are smaller than the hit capsules, so touching
+      // hit capsules still leaves daylight between the two bodies.
+      const PLAYER_BODY_RADIUS = 0.304;
+      expect(standoffRadius(profile) - PLAYER_BODY_RADIUS - profile.capsuleRadius).toBeGreaterThan(0);
     }
   });
 
-  it('tolerates a degenerate ease without dividing by zero', () => {
-    expect(Number.isFinite(pursuitSpeed(2, 1.48, 3.1, 0))).toBe(true);
+  it('stops the pursuit before the enemy can enter the player', () => {
+    for (const variant of SKELETON_VARIANTS) {
+      const profile = SKELETON_PROFILES[variant];
+      if (profile === undefined) continue;
+      const standoff = standoffRadius(profile);
+      expect(pursuitSpeed(standoff, standoff, profile.chaseSpeed)).toBe(0);
+      expect(pursuitSpeed(standoff - 0.5, standoff, profile.chaseSpeed)).toBe(0);
+    }
+  });
+
+  it('parks the enemy well inside its own attack range, so it keeps swinging', () => {
+    for (const variant of SKELETON_VARIANTS) {
+      const profile = SKELETON_PROFILES[variant];
+      if (profile === undefined) continue;
+      expect(standoffRadius(profile)).toBeLessThan(profile.attackRange);
+    }
+  });
+
+  it('stops no further out than the swing can actually reach', () => {
+    // Measured against the real rig: during the authored window the nearest
+    // point of a skeleton's swinging arm sits 0.25 m outside the player's hit
+    // capsule at a 1.10 m separation, and lengthening the blade does not move
+    // it — the closest point is the elbow. So contact needs a stand-off of
+    // about 0.85 m or less. A regression that widens this disarms the enemy,
+    // which is invisible in a screenshot and fatal to the fight.
+    const CONTACT_LIMIT = 1.1 - 0.25;
+    for (const variant of SKELETON_VARIANTS) {
+      const profile = SKELETON_PROFILES[variant];
+      if (profile === undefined) continue;
+      expect(standoffRadius(profile)).toBeLessThanOrEqual(CONTACT_LIMIT);
+    }
   });
 });
 
