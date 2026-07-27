@@ -2251,9 +2251,18 @@ export class BloodMoor implements Zone {
     // on the frame that is supposed to show him the moor. A spoil heap outside
     // a mine is exactly the right dressing for this spot; a spoil heap *on the
     // doorstep* is not, and the fix is the doorstep, not the heap.
-    const clearX = DEN_MOUTH.approach.x - x;
-    const clearZ = DEN_MOUTH.approach.y - z;
-    const CLEAR_RADIUS = 2.2;
+    //
+    // The group is *rotated* to face the player's approach, so the world-space
+    // offset has to be turned back into the group's frame before it can be
+    // compared with a sample's local position. Skipping that rotation is the
+    // kind of mistake that produces a filter which runs, rejects samples, and
+    // clears the wrong patch of ground — measured once already.
+    const yaw = group.rotation.y;
+    const dx = DEN_MOUTH.approach.x - x;
+    const dz = DEN_MOUTH.approach.y - z;
+    const clearX = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+    const clearZ = dx * Math.sin(yaw) + dz * Math.cos(yaw);
+    const CLEAR_RADIUS = 2.4;
 
     const spoil: ScatterSample[] = [];
     // Attempts, not iterations: rejecting a sample must not cost a rock, or
