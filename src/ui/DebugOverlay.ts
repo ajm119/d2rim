@@ -139,6 +139,9 @@ export class DebugOverlay implements GameModule {
   #height = 0;
   #pixelRatio = 1;
   #unsubscribeResize: (() => void) | null = null;
+  #unsubscribeFrame: (() => void) | null = null;
+  #drawCalls = 0;
+  #triangles = 0;
 
   // Cached memory figures, refreshed on the slow cadence.
   #textureMb = '—';
@@ -172,6 +175,21 @@ export class DebugOverlay implements GameModule {
       // Force a redraw on the next update so a resize shows immediately.
       this.#sinceRefresh = REFRESH_INTERVAL;
     });
+
+    // Draw calls and triangles have to be sampled *after* the render, and a
+    // module's `update`/`lateUpdate` both run before it. `Engine` resets the
+    // counters at the top of each frame and emits `engine:frame` once the
+    // render has been awaited, so this is the only moment in the frame when
+    // they hold a complete, current total. Reading them from `update` instead
+    // reports zero, every time, which is how the previous version of this
+    // overlay would have lied about the second most important number on it.
+    if (this.#stats) {
+      this.#unsubscribeFrame = ctx.events.on('engine:frame', () => {
+        const render = (ctx.renderer.three as unknown as RendererSizeProbe).info?.render;
+        this.#drawCalls = render?.drawCalls ?? 0;
+        this.#triangles = Math.round(render?.triangles ?? 0);
+      });
+    }
   }
 
   update(ctx: GameContext, dt: number): void {
@@ -211,6 +229,8 @@ export class DebugOverlay implements GameModule {
   dispose(): void {
     this.#unsubscribeResize?.();
     this.#unsubscribeResize = null;
+    this.#unsubscribeFrame?.();
+    this.#unsubscribeFrame = null;
     this.#element?.remove();
     this.#element = null;
   }
@@ -238,11 +258,9 @@ export class DebugOverlay implements GameModule {
       return lines.join('\n');
     }
 
-    const probe = ctx.renderer.three as unknown as RendererSizeProbe;
-    const render = probe.info?.render;
     lines.push(
-      `draws  ${render?.drawCalls ?? 0}`,
-      `tris   ${(render?.triangles ?? 0).toLocaleString('en-US')}`,
+      `draws  ${this.#drawCalls}`,
+      `tris   ${this.#triangles.toLocaleString('en-US')}`,
       `tex    ${this.#textureMb} MB`,
       `rt     ${this.#targetMb} MB`,
     );

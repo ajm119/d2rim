@@ -192,6 +192,16 @@ function configureRenderer(renderer: THREE.Renderer, exposure: number): void {
   // textures) is decoded to linear on the way in.
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+  // This engine drives its own frame loop (see `core/Engine`), so three's
+  // internal `Animation` must not be the thing that resets the render
+  // counters — it runs on the browser's rAF, which is not in step with our
+  // frames, and it was zeroing `info.render` between the last `render()` and
+  // any attempt to read the numbers. `Engine.#stepOnce` resets them instead,
+  // once per engine frame, which is exactly what three's own documentation
+  // prescribes for an app with its own loop.
+  const info = (renderer as unknown as { info?: { autoReset?: boolean } }).info;
+  if (info !== undefined) info.autoReset = false;
+
   renderer.shadowMap.enabled = true;
   // PCF-soft is the best quality/cost point that both backends support.
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
