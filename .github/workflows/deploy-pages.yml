@@ -27,14 +27,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+
+      # public/assets/* is gitignored — the ~80 MB of textures, models and HDRIs
+      # are fetched from npm and GitHub rather than committed. Both the test
+      # suite (which decodes real EXR plates) and the build need them on disk.
+      # The fetcher is idempotent and verifies every file by SHA-256, so a warm
+      # cache is re-verified rather than blindly trusted.
+      - name: Cache fetched assets
+        uses: actions/cache@v4
+        with:
+          path: public/assets
+          key: assets-${{ hashFiles('tools/assets/manifest.json') }}
+
+      - name: Fetch assets
+        run: npm run assets
 
       # Guard the deploy: a red build or a failing suite should not ship.
       - run: npm test

@@ -1862,4 +1862,4 @@ These assets are reachable and technically useful but their redistribution right
 
 ---
 
-Generated 2026-07-26T02:08:09.817Z by `tools/assets/fetch-assets.mjs`.
+Generated 2026-07-27T12:12:11.875Z by `tools/assets/fetch-assets.mjs`.
