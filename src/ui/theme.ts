@@ -71,6 +71,23 @@ export function hasDom(): boolean {
   return typeof document !== 'undefined';
 }
 
+/**
+ * A screen's root element, or an inert stand-in when there is no DOM.
+ *
+ * The unit-test environment is Node: `document` does not exist, and a screen
+ * module must still be constructible so that the parts of it that are not DOM
+ * can be imported and exercised. The stand-in carries only the `style` object,
+ * which is the entire surface `UiManager` touches before a screen's `init`
+ * decides there is nothing to build.
+ *
+ * The cast is a genuine environment boundary and is deliberately confined to
+ * this one function rather than repeated in every screen.
+ */
+export function screenRoot(style: string): HTMLElement {
+  if (!hasDom()) return { style: {} } as unknown as HTMLElement;
+  return el('div', style);
+}
+
 /** Create an element with an inline style string and optional text. */
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,

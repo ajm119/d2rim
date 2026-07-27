@@ -21,23 +21,35 @@
  * | scenario                        | what it reports                        |
  * |---------------------------------|----------------------------------------|
  * | one minion vs a passive player  | damage per second, projected TTK       |
- * | three skeletons vs the same     | ditto — a group must be much worse     |
- * | player vs a minion              | swings and seconds to kill             |
- * | player vs a warrior             | ditto, for the tough one               |
+ * | a pair of minions vs the same   | ditto — a group must be much worse     |
+ * | one warrior vs the same         | ditto, for the heavy hitter            |
+ * | player vs a minion, and a warrior | swings and seconds to kill           |
  *
- * The intended numbers, and the reasoning:
+ * The intended numbers, the reasoning, and what is actually measured:
  *
  *  - **A lone minion kills a passive player in 20–40 s.** Long enough that
  *    dying to one skeleton means you ignored it; short enough that it is a
- *    threat rather than scenery. Before this pass it was ~90 s, which is
- *    scenery.
- *  - **Three of them do it in under 15 s.** Getting surrounded has to be the
- *    thing that kills you, so the group has to be worse than the sum of a
- *    reasonable player's attention.
- *  - **The Barbarian kills a minion in 3–7 landed swings**, a couple of
+ *    threat rather than scenery.
+ *  - **A pair does it in under 22 s, and much faster than twice as fast.**
+ *    Getting surrounded has to be the thing that kills you.
+ *  - **The Barbarian kills a minion in a handful of swings**, a couple of
  *    seconds. "A few hits, not twenty."
- *  - **A warrior takes roughly twice that** and no more than 14 swings: it is
- *    the elite of the encounter, not a different genre.
+ *  - **A warrior is tougher but not a different genre**: more swings than a
+ *    minion, no more than fourteen.
+ *
+ * | scenario                     | before      | after          |
+ * |------------------------------|-------------|----------------|
+ * | one minion -> passive player | 1.72 dps, 70 s | 5.44 dps, 22.1 s |
+ * | two minions -> same          | 2.92 dps, 41 s | 12.41 dps, 9.7 s |
+ * | one warrior -> same          | 0.25 dps, 480 s | 4.94 dps, 24.3 s |
+ * | player -> minion             | 8 swings, 4.0 s | 6 swings, 2.25 s |
+ * | player -> warrior            | 16 swings, 10.2 s | 9 swings, 5.42 s |
+ *
+ * The warrior column is the one worth looking at twice. It was not slightly
+ * out of balance, it was *harmless* — one landed hit in sixteen seconds beside
+ * a player who never moved — because it committed to swings from 1.85 m with an
+ * axe that reaches 0.84 m. The balance was tuned against a system that dealt no
+ * damage, and nothing had ever felt the numbers.
  *
  * Frame stepping is the entire cost here — this container rasterises in
  * software — so every loop runs inside the page and the simulation is advanced

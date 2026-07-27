@@ -394,9 +394,7 @@ export class LootSystem implements GameModule {
       this.spawnGold(roll.gold, position, 0);
     }
     let index = roll.gold > 0 ? 1 : 0;
-    for (const item of roll.items) {
-      this.spawnItem(item, position, index++);
-      }
+    for (const item of roll.items) this.spawnItem(item, position, index++);
     return roll;
   }
 

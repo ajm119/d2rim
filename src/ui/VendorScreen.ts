@@ -19,7 +19,7 @@ import type { GameContext, GameModule } from '../core/types';
 import { describeItem, itemColour, type Item } from '../rpg/ItemGenerator';
 import { RpgSystemKey, type RpgSystem } from '../rpg/RpgSystem';
 import type { Vendor } from '../rpg/Vendor';
-import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, UI, Z } from './theme';
+import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, screenRoot, UI, Z } from './theme';
 import { UiManagerKey, type UiManager, type UiScreen } from './UiManager';
 
 export class VendorScreen implements GameModule, UiScreen {
@@ -38,9 +38,7 @@ export class VendorScreen implements GameModule, UiScreen {
   readonly #disposers: Array<() => void> = [];
 
   constructor() {
-    this.root = hasDom()
-      ? el('div', scrimStyle(Z.screen))
-      : ({ style: {} } as unknown as HTMLElement);
+    this.root = screenRoot(scrimStyle(Z.screen));
   }
 
   init(ctx: GameContext): void {
@@ -86,8 +84,6 @@ export class VendorScreen implements GameModule, UiScreen {
   /* -- construction -------------------------------------------------------- */
 
   #build(): void {
-    this.root.style.display = 'none';
-
     const panel = el(
       'div',
       panelStyle('width:min(900px,94vw);max-height:90vh;overflow:auto;padding:20px 22px;'),
@@ -206,7 +202,14 @@ export class VendorScreen implements GameModule, UiScreen {
 
     const info = el('div', 'flex:1;min-width:0;');
     info.appendChild(el('div', `color:${itemColour(item)};font:600 13px/1.4 ${UI.font};`, item.name));
-    const lines = describeItem(item).slice(0, 3).join(' · ');
+    // Durability and requirements are the least informative lines an item has,
+    // and on a magic item they crowd out the affixes — which are the whole
+    // reason the name is blue. Drop them from the one-line summary; the full
+    // list is still in the inventory tooltip.
+    const lines = describeItem(item)
+      .filter((line) => !line.startsWith('Durability') && !line.startsWith('Required'))
+      .slice(0, 4)
+      .join(' · ');
     if (lines.length > 0) {
       info.appendChild(
         el(

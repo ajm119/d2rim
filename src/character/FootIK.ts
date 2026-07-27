@@ -260,8 +260,17 @@ interface Leg {
   stanceFloor: number;
   /** Consecutive frames the plant test has passed. Debounces a one-frame dip. */
   contactFrames: number;
-  /** World position the sole is pinned to while planted, or null. */
+  /**
+   * World position the sole is pinned to.
+   *
+   * Retained through the blend *out* as well as the hold, because releasing it
+   * on the frame the foot lifts is a pop: the pin is by then up to
+   * `maxPinDrift` behind the animated pose, and dropping it in one frame pays
+   * that whole error back instantly. Cleared only once `lock` has reached zero.
+   */
   pin: THREE.Vector3 | null;
+  /** Whether the foot is currently held. Distinct from `pin`, which outlives it. */
+  pinned: boolean;
   /** How much of the pin is blended in, `0..1`. */
   lock: number;
   /** Diagnostics: clearance and animated world speed from the last frame. */
@@ -279,6 +288,8 @@ export interface FootIKLegDebug {
   readonly lock: number;
   /** How far the pin has drifted from the animated foot, metres. */
   readonly drift: number;
+  /** Pinned *and* fully blended in — the foot is being held still right now. */
+  readonly held: boolean;
 }
 
 export interface FootIKOptions {
@@ -290,6 +301,20 @@ export interface FootIKOptions {
   readonly maxHipDrop?: number;
   /** Smoothing rate for corrections. Higher is snappier. Default 12. */
   readonly damping?: number;
+  /**
+   * Passes of the analytic solve per leg per frame. Default 3.
+   *
+   * One pass leaves a residual, and it is not a rounding error: the solve
+   * swings the chain onto the target line and *then* opens the knee about a
+   * bend axis taken from the pose before the swing, so the second rotation
+   * moves the foot slightly off the line the first one put it on. Feeding the
+   * result back in converges it, and the convergence is worth several passes:
+   * the residual is largest exactly where a stance ends, with the leg near full
+   * extension, which is where a run spends most of its contact. The measured
+   * effect on the shipped rig is recorded in the header of
+   * `tools/verify-footplant.mjs`.
+   */
+  readonly solveIterations?: number;
   /** Run at all. Default true. */
   readonly enabled?: boolean;
 
@@ -299,7 +324,11 @@ export interface FootIKOptions {
   readonly footLock?: boolean;
   /**
    * Fraction of a foot's recent clearance *amplitude*, above its own contact
-   * height, under which it counts as newly down. Default 0.22.
+   * height, under which it counts as newly down. Default 0.28.
+   *
+   * Sized off the run rather than the walk, which is the tighter constraint: a
+   * run's contact is about ten frames long, and the plant has to start early
+   * enough in it that the blend has somewhere to finish.
    */
   readonly plantClearanceRatio?: number;
   /**
@@ -337,7 +366,10 @@ export interface FootIKOptions {
    * pose within a blend.
    */
   readonly maxPinDrift?: number;
-  /** Seconds the pin blends in and out over. Default 0.05. */
+  /**
+   * Seconds the pin blends in and out over. Default 0.035 — two frames at
+   * 60 Hz, which is as slow as a run's short contact can afford.
+   */
   readonly lockBlend?: number;
   /**
    * Frames the plant test must pass consecutively before a pin is taken.
@@ -367,15 +399,16 @@ export class FootIK implements GameModule {
       maxLift: options.maxLift ?? 0.42,
       maxHipDrop: options.maxHipDrop ?? 0.3,
       damping: options.damping ?? 12,
+      solveIterations: Math.max(1, options.solveIterations ?? 3),
       enabled: options.enabled ?? true,
       footLock: options.footLock ?? true,
-      plantClearanceRatio: options.plantClearanceRatio ?? 0.22,
+      plantClearanceRatio: options.plantClearanceRatio ?? 0.28,
       releaseClearanceRatio: options.releaseClearanceRatio ?? 0.6,
       plantClearanceFloor: options.plantClearanceFloor ?? 0.012,
       plantSpeedRatio: options.plantSpeedRatio ?? 0.85,
       plantSpeedFloor: options.plantSpeedFloor ?? 0.4,
       maxPinDrift: options.maxPinDrift ?? 0.42,
-      lockBlend: options.lockBlend ?? 0.05,
+      lockBlend: options.lockBlend ?? 0.035,
       plantDebounce: options.plantDebounce ?? 2,
     };
   }
@@ -390,12 +423,17 @@ export class FootIK implements GameModule {
       animatedSpeed: leg.animatedSpeed,
       swingPeak: leg.swingPeak,
       stanceFloor: leg.stanceFloor,
-      locked: leg.pin !== null,
+      locked: leg.pinned,
       lock: leg.lock,
       drift:
         leg.pin === null
           ? 0
           : Math.hypot(leg.pin.x - leg.previous.x, leg.pin.z - leg.previous.z),
+      // Frames at full lock, which is the only state in which the foot is
+      // genuinely being held still. Blending in or out, it is moving, and
+      // saying otherwise would be the measurement lying about the thing it
+      // exists to measure.
+      held: leg.pinned && leg.lock >= 0.999,
     }));
   }
 
@@ -438,6 +476,7 @@ export class FootIK implements GameModule {
         stanceFloor: 0,
         contactFrames: 0,
         pin: null,
+        pinned: false,
         lock: 0,
         clearance: 0,
         animatedSpeed: 0,
@@ -573,7 +612,9 @@ export class FootIK implements GameModule {
       const blend = leg.pin === null ? 0 : leg.lock * this.#weight;
       aim.copy(free);
       if (blend > 0 && leg.pin !== null) aim.lerp(leg.pin, blend);
-      this.#solveLeg(leg, aim);
+      for (let pass = 0; pass < this.#options.solveIterations; pass++) {
+        this.#solveLeg(leg, aim);
+      }
     }
   }
 
@@ -601,8 +642,9 @@ export class FootIK implements GameModule {
     const rate = Math.min(1, dt / Math.max(1e-3, options.lockBlend));
 
     if (!options.footLock || ground === null) {
-      leg.pin = null;
-      leg.lock = Math.max(0, leg.lock - rate);
+      leg.pinned = false;
+      leg.contactFrames = 0;
+      this.#blend(leg, rate);
       return;
     }
 
@@ -613,11 +655,10 @@ export class FootIK implements GameModule {
       animatedSpeed: leg.animatedSpeed,
       bodySpeed,
     };
-    const planted = leg.pin !== null;
-    const contact = isFootPlanted(sample, options, planted);
+    const contact = isFootPlanted(sample, options, leg.pinned);
     leg.contactFrames = isFootPlanted(sample, options, false) ? leg.contactFrames + 1 : 0;
 
-    if (leg.pin !== null) {
+    if (leg.pinned && leg.pin !== null) {
       // The bone lengths of the rig, not of the target: how far this leg can
       // reach is a property of the skeleton and must not be read off wherever
       // the foot happens to be being asked to go.
@@ -625,28 +666,37 @@ export class FootIK implements GameModule {
       const knee = leg.lower.getWorldPosition(new THREE.Vector3());
       const ankle = leg.foot.getWorldPosition(new THREE.Vector3());
       const legLength = hip.distanceTo(knee) + knee.distanceTo(ankle);
-      const released = shouldReleasePin(
-        contact,
-        Math.hypot(leg.pin.x - free.x, leg.pin.z - free.z),
-        options.maxPinDrift,
-        hip.distanceTo(leg.pin),
-        legLength,
-      );
-      if (released) leg.pin = null;
+      if (
+        shouldReleasePin(
+          contact,
+          Math.hypot(leg.pin.x - free.x, leg.pin.z - free.z),
+          options.maxPinDrift,
+          hip.distanceTo(leg.pin),
+          legLength,
+        )
+      ) {
+        leg.pinned = false;
+        leg.contactFrames = 0;
+      }
     }
 
-    if (leg.pin === null && leg.contactFrames >= options.plantDebounce) {
+    if (!leg.pinned && leg.contactFrames >= options.plantDebounce) {
       // Plant. The pin is taken from the *corrected* pose, so the foot is
-      // pinned where it is standing rather than where the clip put it.
+      // pinned where it is standing rather than where the clip put it — and
+      // because pin and pose coincide at this instant, `lock` can carry over
+      // from a blend that was still running instead of restarting.
       leg.pin = free.clone();
-      leg.lock = 0;
+      leg.pinned = true;
       this.#plants++;
     }
 
-    leg.lock =
-      leg.pin === null
-        ? Math.max(0, leg.lock - rate)
-        : Math.min(1, leg.lock + rate);
+    this.#blend(leg, rate);
+  }
+
+  /** Advance the pin's blend weight, and drop a spent pin. */
+  #blend(leg: Leg, rate: number): void {
+    leg.lock = leg.pinned ? Math.min(1, leg.lock + rate) : Math.max(0, leg.lock - rate);
+    if (!leg.pinned && leg.lock <= 0) leg.pin = null;
   }
 
   /* -- internals ---------------------------------------------------------- */
@@ -675,6 +725,7 @@ export class FootIK implements GameModule {
     for (const leg of this.#legs) {
       leg.offset = 0;
       leg.pin = null;
+      leg.pinned = false;
       leg.lock = 0;
       leg.hasPrevious = false;
       leg.swingPeak = 0;

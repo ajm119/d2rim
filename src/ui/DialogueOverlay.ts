@@ -21,7 +21,7 @@
 import type { GameContext, GameModule } from '../core/types';
 import { NpcSystemKey, type NpcSystem } from '../quest/NPC';
 import type { DialogueView } from '../quest/Dialogue';
-import { clearChildren, el, hasDom, panelStyle, UI, Z } from './theme';
+import { clearChildren, el, hasDom, panelStyle, screenRoot, UI, Z } from './theme';
 import { UiManagerKey, type UiManager, type UiScreen } from './UiManager';
 
 export class DialogueOverlay implements GameModule, UiScreen {
@@ -38,14 +38,11 @@ export class DialogueOverlay implements GameModule, UiScreen {
   readonly #disposers: Array<() => void> = [];
 
   constructor() {
-    this.root = hasDom()
-      ? el(
-          'div',
-          `position:fixed;inset:0;z-index:${Z.dialogue};pointer-events:auto;` +
-            'display:flex;align-items:flex-end;justify-content:center;padding-bottom:6vh;' +
-            'background:linear-gradient(to bottom,rgba(0,0,0,0) 40%,rgba(4,3,2,0.55) 100%);',
-        )
-      : ({ style: {} } as unknown as HTMLElement);
+    this.root = screenRoot(
+      `position:fixed;inset:0;z-index:${Z.dialogue};pointer-events:auto;` +
+        'display:flex;align-items:flex-end;justify-content:center;padding-bottom:6vh;' +
+        'background:linear-gradient(to bottom,rgba(0,0,0,0) 40%,rgba(4,3,2,0.55) 100%);',
+    );
   }
 
   init(ctx: GameContext): void {
@@ -85,8 +82,6 @@ export class DialogueOverlay implements GameModule, UiScreen {
   /* -- construction -------------------------------------------------------- */
 
   #build(): void {
-    this.root.style.display = 'none';
-
     const panel = el(
       'div',
       panelStyle('width:min(760px,92vw);padding:18px 22px 16px;'),

@@ -201,11 +201,6 @@ export class RpgSystem implements GameModule, LootReceiver {
     this.#playTime += dt;
     this.#bind(ctx);
 
-    if (ctx.input.wasPressed('SkillTree')) {
-      // The tree screen owns the key; cycling is a shift-modified press handled
-      // by the UI. Nothing to do here — kept as the documented seam.
-    }
-
     if (this.character.version !== this.#lastVersion) {
       this.#lastVersion = this.character.version;
       this.#applyDerivedPools(false);

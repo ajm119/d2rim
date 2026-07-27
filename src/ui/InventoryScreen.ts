@@ -52,6 +52,7 @@ import {
   headingStyle,
   panelStyle,
   scrimStyle,
+  screenRoot,
   UI,
   Z,
 } from './theme';
@@ -86,9 +87,7 @@ export class InventoryScreen implements GameModule, UiScreen {
   readonly #disposers: Array<() => void> = [];
 
   constructor() {
-    this.root = hasDom()
-      ? el('div', scrimStyle(Z.screen))
-      : ({ style: {} } as unknown as HTMLElement);
+    this.root = screenRoot(scrimStyle(Z.screen));
   }
 
   init(ctx: GameContext): void {
@@ -112,6 +111,7 @@ export class InventoryScreen implements GameModule, UiScreen {
     for (const off of this.#disposers) off();
     this.#disposers.length = 0;
     this.#cursor?.remove();
+    this.#tooltip?.remove();
     this.root.remove();
     this.#ctx = null;
   }
@@ -124,6 +124,11 @@ export class InventoryScreen implements GameModule, UiScreen {
     // An item left on the cursor when the panel closes has to go somewhere, and
     // the floor is not it: put it back where it came from, or anywhere it fits.
     this.#returnHeld();
+    // The tooltip lives on `document.body`, outside the panel the manager
+    // hides, so it has to be dismissed explicitly. `clearChildren` during a
+    // rebuild can also remove the node the pointer is over without firing
+    // `pointerleave`, which would otherwise strand a tooltip on screen.
+    this.#hideTooltip();
   }
 
   refresh(): void {
@@ -131,6 +136,7 @@ export class InventoryScreen implements GameModule, UiScreen {
     if (rpg === null || !hasDom()) return;
     if (rpg.character.version === this.#lastVersion) return;
     this.#lastVersion = rpg.character.version;
+    this.#hideTooltip();
     this.#renderStats(rpg);
     this.#renderDoll(rpg);
     this.#renderGrid(rpg);
@@ -139,8 +145,6 @@ export class InventoryScreen implements GameModule, UiScreen {
   /* -- construction -------------------------------------------------------- */
 
   #build(): void {
-    this.root.style.display = 'none';
-
     const panel = el(
       'div',
       panelStyle(
@@ -148,6 +152,7 @@ export class InventoryScreen implements GameModule, UiScreen {
           'display:grid;grid-template-columns:210px 1fr;gap:20px;',
       ),
     );
+    panel.dataset['d2rim'] = 'inventory-panel';
 
     const left = el('div', '');
     left.appendChild(el('div', headingStyle(), 'Character'));
@@ -368,6 +373,10 @@ export class InventoryScreen implements GameModule, UiScreen {
           `border:1px solid ${colour};border-radius:3px;` +
           'display:flex;align-items:center;justify-content:center;padding:3px;' +
           `color:${colour};font:600 10px/1.2 ${UI.font};text-align:center;overflow:hidden;` +
+          // Long names on narrow items ("Leather Gloves" in a 2-cell box) must
+          // wrap rather than clip; a clipped name is a name the player cannot
+          // read at exactly the moment they are deciding whether to keep it.
+          'word-break:break-word;' +
           `${isBroken(item) ? 'opacity:0.55;' : ''}`,
         item.name,
       );

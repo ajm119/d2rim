@@ -26,7 +26,7 @@ import type { GameContext, GameModule } from '../core/types';
 import { QuestSystemKey, type QuestSystem } from '../quest/QuestSystem';
 import { RpgSystemKey, type RpgSystem } from '../rpg/RpgSystem';
 import { AUTOSAVE_SLOT } from '../rpg/SaveGame';
-import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, UI, Z } from './theme';
+import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, screenRoot, UI, Z } from './theme';
 import { UiManagerKey, type UiManager, type UiScreen } from './UiManager';
 
 export class PauseMenu implements GameModule, UiScreen {
@@ -41,9 +41,7 @@ export class PauseMenu implements GameModule, UiScreen {
   #savedScale = 1;
 
   constructor() {
-    this.root = hasDom()
-      ? el('div', scrimStyle(Z.menu))
-      : ({ style: {} } as unknown as HTMLElement);
+    this.root = screenRoot(scrimStyle(Z.menu));
   }
 
   init(ctx: GameContext): void {
@@ -106,8 +104,6 @@ export class PauseMenu implements GameModule, UiScreen {
   /* -- construction -------------------------------------------------------- */
 
   #build(): void {
-    this.root.style.display = 'none';
-
     const panel = el(
       'div',
       panelStyle('width:min(560px,92vw);padding:24px 26px;display:flex;flex-direction:column;gap:14px;'),

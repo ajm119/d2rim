@@ -323,7 +323,10 @@ export class RpgHud implements GameModule {
   #buildGold(): HTMLDivElement {
     const node = el(
       'div',
-      `position:absolute;right:18px;bottom:44px;color:${UI.accent};` +
+      // Clear of the mana orb, which `ui/CombatHud` puts at `right:18px` with a
+      // 96 px diameter rising from `bottom:14px` — the first capture of this HUD
+      // had the gold readout printed straight across it.
+      `position:absolute;right:18px;bottom:118px;color:${UI.accent};` +
         `font:600 13px/1 ${UI.font};letter-spacing:0.06em;text-shadow:0 1px 3px #000;`,
       '0 gold',
     );
@@ -360,7 +363,10 @@ export class RpgHud implements GameModule {
           el(
             'div',
             `color:${done ? UI.ok : UI.text};font:13px/1.5 ${UI.font};` +
-              `${done ? 'text-decoration:line-through;opacity:0.75;' : ''}`,
+              // Struck through but not dimmed much: at 0.75 the completed lines
+            // were only just readable against the Den's near-black walls, and a
+            // completed objective is still information the player wants.
+            `${done ? 'text-decoration:line-through;opacity:0.9;' : ''}`,
             `${done ? '✓' : '·'} ${objective.description}${count}`,
           ),
         );

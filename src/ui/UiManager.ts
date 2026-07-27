@@ -60,11 +60,29 @@ export interface UiScreen {
 
 export const UiManagerKey = serviceKey<UiManager>('ui');
 
+/**
+ * The `display` value a screen should be *opened* into, given whatever it
+ * declared.
+ *
+ * Pure and exported so the rule can be pinned by a test, because it has now
+ * been got wrong twice in two different ways. The first attempt restored
+ * `display: ''`, which drops the screen's own `display: flex` and leaves every
+ * panel jammed into the top-left corner. The second captured the declared value
+ * but ran after the screen had already hidden itself in its constructor, so it
+ * captured `'none'` and opened every panel into a zero-sized box. Both were
+ * visible only in a screenshot, and both are now one function.
+ */
+export function displayModeFor(declared: string): string {
+  return declared === '' || declared === 'none' ? 'flex' : declared;
+}
+
 export class UiManager implements GameModule {
   readonly name = 'ui.manager';
 
   readonly #screens = new Map<ScreenId, UiScreen>();
   readonly #stack: ScreenId[] = [];
+  /** Each screen's own `display` value, captured at registration. */
+  readonly #display = new Map<ScreenId, string>();
   readonly #disposers: Array<() => void> = [];
 
   #ctx: GameContext | null = null;
@@ -125,9 +143,26 @@ export class UiManager implements GameModule {
 
   /* -- registration -------------------------------------------------------- */
 
-  /** Attach a screen. Its root is hidden until the screen is opened. */
+  /**
+   * Attach a screen. Its root is hidden until the screen is opened.
+   *
+   * The screen's own `display` is captured *before* it is hidden, and restored
+   * on open. This is not defensive coding — it is a bug fix. Every screen sets
+   * `display: flex` in its inline style to centre its panel; writing
+   * `style.display = 'none'` overwrites that same inline declaration, and the
+   * obvious way back, `style.display = ''`, removes the property entirely and
+   * leaves the scrim as a plain block. The visible symptom is every panel in
+   * the game rendering hard against the top-left corner instead of centred,
+   * which is exactly what the first capture of this UI showed.
+   */
   register(screen: UiScreen): void {
     this.#screens.set(screen.id, screen);
+    // `'none'` is not a display mode a screen would ever want to be opened
+    // into, so it is read as "not declared" rather than trusted. That guard is
+    // what stops a screen that hides itself during construction from being
+    // registered as permanently invisible — the first version of this fix did
+    // exactly that, and every panel opened to a zero-sized box.
+    this.#display.set(screen.id, displayModeFor(screen.root.style.display));
     screen.root.style.display = 'none';
     this.#root?.appendChild(screen.root);
   }
@@ -135,6 +170,7 @@ export class UiManager implements GameModule {
   unregister(id: ScreenId): void {
     this.close(id);
     this.#screens.delete(id);
+    this.#display.delete(id);
   }
 
   screen(id: ScreenId): UiScreen | null {
@@ -153,7 +189,7 @@ export class UiManager implements GameModule {
     if (EXCLUSIVE.has(id)) this.closeAll();
 
     this.#stack.push(id);
-    screen.root.style.display = '';
+    screen.root.style.display = this.#display.get(id) ?? 'flex';
     screen.onOpen?.();
     screen.refresh?.();
     this.#applyInputState();

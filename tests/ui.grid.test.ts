@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CELL_SIZE, cellFromPoint, fraction, grabOffset, UI, Z } from '../src/ui/theme';
+import { displayModeFor } from '../src/ui/UiManager';
 
 const RECT = { left: 137, top: 291 };
 
@@ -136,5 +137,23 @@ describe('fraction', () => {
     expect(fraction(-5, 10)).toBe(0);
     expect(fraction(5, 0)).toBe(0);
     expect(fraction(Number.NaN, 10)).toBe(0);
+  });
+});
+
+describe('screen visibility', () => {
+  it('never opens a screen into "none" or into the browser default', () => {
+    // Both halves of this are regressions. Restoring `''` drops the screen's own
+    // `display: flex` and jams every panel into the top-left corner; capturing
+    // `'none'` from a screen that hid itself during construction opens every
+    // panel into a zero-sized box. Both shipped, both were caught only by
+    // reading a screenshot, and both are pinned here.
+    expect(displayModeFor('')).toBe('flex');
+    expect(displayModeFor('none')).toBe('flex');
+  });
+
+  it('honours a display mode the screen really did declare', () => {
+    expect(displayModeFor('flex')).toBe('flex');
+    expect(displayModeFor('grid')).toBe('grid');
+    expect(displayModeFor('block')).toBe('block');
   });
 });

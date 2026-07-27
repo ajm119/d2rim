@@ -150,6 +150,7 @@ await page.evaluate(() => {
       l: at(feet.footl),
       r: at(feet.footr),
       lock: [legs[0]?.lock ?? 0, legs[1]?.lock ?? 0],
+      held: [legs[0]?.held ?? false, legs[1]?.held ?? false],
       clearance: [legs[0]?.clearance ?? -1, legs[1]?.clearance ?? -1],
       swingPeak: [legs[0]?.swingPeak ?? -1, legs[1]?.swingPeak ?? -1],
       drift: [legs[0]?.drift ?? 0, legs[1]?.drift ?? 0],
@@ -231,11 +232,15 @@ for (const gait of GAITS) {
     // "no foot is down" from "the down foot is sliding", and `locked` says
     // exactly what the lock is delivering while it holds. A lock that never
     // engages scores perfectly on the second metric and terribly on the first.
-    const lockL = Math.min(a.lock[0], b.lock[0]);
-    const lockR = Math.min(a.lock[1], b.lock[1]);
+    // `held` means pinned *and* fully blended in, at both ends of the interval.
+    // Blending in or out the foot is legitimately moving — the pin is up to
+    // `maxPinDrift` behind the animated pose by lift-off and that error is paid
+    // back during the blend, which is what the swing phase is for. Counting
+    // those frames as "planted" would make the metric measure the transition
+    // rather than the plant.
     const held = [];
-    if (lockL >= 0.5) held.push(speedL);
-    if (lockR >= 0.5) held.push(speedR);
+    if (a.held[0] && b.held[0]) held.push(speedL);
+    if (a.held[1] && b.held[1]) held.push(speedR);
     frames.push({
       body: Math.hypot(b.pos[0] - a.pos[0], b.pos[2] - a.pos[2]) / dt,
       foot: Math.min(speedL, speedR),

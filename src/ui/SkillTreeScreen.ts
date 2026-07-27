@@ -27,7 +27,7 @@
 import type { GameContext, GameModule } from '../core/types';
 import { RpgSystemKey, type RpgSystem } from '../rpg/RpgSystem';
 import { findSkill, type SkillDefinition } from '../rpg/SkillTree';
-import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, UI, Z } from './theme';
+import { buttonStyle, clearChildren, el, hasDom, headingStyle, panelStyle, scrimStyle, screenRoot, UI, Z } from './theme';
 import { UiManagerKey, type UiManager, type UiScreen } from './UiManager';
 
 export class SkillTreeScreen implements GameModule, UiScreen {
@@ -42,9 +42,7 @@ export class SkillTreeScreen implements GameModule, UiScreen {
   readonly #disposers: Array<() => void> = [];
 
   constructor() {
-    this.root = hasDom()
-      ? el('div', scrimStyle(Z.screen))
-      : ({ style: {} } as unknown as HTMLElement);
+    this.root = screenRoot(scrimStyle(Z.screen));
   }
 
   init(ctx: GameContext): void {
@@ -103,8 +101,6 @@ export class SkillTreeScreen implements GameModule, UiScreen {
   /* -- construction -------------------------------------------------------- */
 
   #build(): void {
-    this.root.style.display = 'none';
-
     const panel = el(
       'div',
       panelStyle('width:min(680px,94vw);max-height:92vh;overflow:auto;padding:22px 24px;'),
