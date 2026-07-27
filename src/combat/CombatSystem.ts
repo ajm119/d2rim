@@ -432,6 +432,47 @@ export class ComboMachine {
  * them rather than as a dice roll. Whiffing is a positioning outcome here, not
  * a statistical one.
  */
+/* -------------------------------------------------------------------------- */
+/* The RPG bridge                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The character sheet's live statistics, when there is a character sheet.
+ *
+ * Declared here rather than imported from `rpg/RpgSystem` on purpose: that
+ * module already imports this one, so importing back would be a cycle. Service
+ * keys resolve by string id, so two declarations of the same id are the same
+ * key, and the direction of the dependency stays one way.
+ *
+ * The contract is deliberately narrow — two getters returning the same value
+ * types this module already uses — so that the RPG layer stays optional.
+ * Everything below falls back to {@link PLAYER_OFFENSE} and
+ * {@link PLAYER_DEFENSE_BASE} when nothing is registered, and the game is
+ * fully playable in that state.
+ *
+ * ### What adopting these fixed
+ *
+ * Before, this module resolved every player swing against the `PLAYER_OFFENSE`
+ * constant, and the RPG layer compensated by delivering the *difference*
+ * between the character's real offence and that constant as a second damage
+ * packet. Three things were wrong with that, and none of them were visible:
+ *
+ * 1. **Attack rating from gear could not rescue a miss.** The base roll had
+ *    already happened against the constant's 150; a ring of +40 attack rating
+ *    added damage to hits that landed and did nothing at all to the ones that
+ *    did not, which is the opposite of what the stat means.
+ * 2. **Defence was cosmetic.** Defence rating, resistances and block were on
+ *    the sheet and never reached a roll, because incoming hits resolved against
+ *    `PLAYER_DEFENSE_BASE`. Armour did nothing.
+ * 3. **The seeded encounter diverged.** The compensating packets drew from this
+ *    module's shared RNG, so the same seed replayed differently depending on
+ *    whether the RPG layer was loaded.
+ */
+export const RpgOffenseKey = serviceKey<{ offense(): OffenseStats }>('rpg.offense');
+
+/** The character sheet's live defensive statistics. See {@link RpgOffenseKey}. */
+export const RpgDefenseKey = serviceKey<{ defense(): DefenseStats }>('rpg.defense');
+
 export const PLAYER_OFFENSE: OffenseStats = {
   level: 2,
   attackRating: 150,
@@ -519,8 +560,20 @@ class PlayerCombatant implements Combatant {
   }
 
   get defense(): DefenseStats {
+    // The character sheet when there is one, the constant when there is not.
+    // Three fields are always this module's, whichever it is:
+    //
+    // - `blocking` is a live input state, not a statistic.
+    // - `maxHealth` comes off the live pool, which the RPG layer resizes; the
+    //   sheet's own number can be a frame stale after a level-up.
+    // - `poise` is a *combat* tuning value — the damage a blow has to do before
+    //   it interrupts the player — measured against what the skeletons actually
+    //   hit for. The sheet currently passes through the old value of 3, which
+    //   would silently undo that tuning whenever the RPG layer is loaded.
+    const sheet = this.#system.characterDefense();
     return {
-      ...PLAYER_DEFENSE_BASE,
+      ...(sheet ?? PLAYER_DEFENSE_BASE),
+      poise: PLAYER_DEFENSE_BASE.poise,
       blocking: this.#system.blocking,
       maxHealth: this.vitals.health.max,
     };
@@ -623,6 +676,30 @@ export class CombatSystem implements GameModule {
   /** Whether the player's damage window is open right now. */
   get hitWindowOpen(): boolean {
     return this.#activeHitbox?.isOpen ?? false;
+  }
+
+  /* -- the player's live statistics ---------------------------------------- */
+
+  /**
+   * The offence every player swing is resolved with.
+   *
+   * The character sheet's, when an RPG layer has registered one; the
+   * {@link PLAYER_OFFENSE} constant otherwise. Public because the drive
+   * harnesses and the debug readout need to see the same number the swing used
+   * — a balance figure you cannot read back is a balance figure nobody checks.
+   */
+  playerOffense(): OffenseStats {
+    return this.#ctx?.services.tryGet(RpgOffenseKey)?.offense() ?? PLAYER_OFFENSE;
+  }
+
+  /**
+   * The character sheet's defence, or `null` when there is no sheet.
+   *
+   * Null rather than the constant, so the one caller can tell the two cases
+   * apart and keep the fields that belong to combat rather than to the sheet.
+   */
+  characterDefense(): DefenseStats | null {
+    return this.#ctx?.services.tryGet(RpgDefenseKey)?.defense() ?? null;
   }
 
   /**
@@ -753,7 +830,9 @@ export class CombatSystem implements GameModule {
     for (const contact of hitbox.track(targets)) {
       const hit: IncomingHit = {
         source: self,
-        offense: PLAYER_OFFENSE,
+        // The character's real offence, so gear and skills are inside the hit
+        // roll rather than bolted onto its result. See `RpgOffenseKey`.
+        offense: this.playerOffense(),
         move: { id: move.id, ...move.modifiers },
         point: contact.point,
         normal: contact.normal,

@@ -556,6 +556,17 @@ export class BloodMoor implements Zone {
 
   dispose(): void {
     this.#fireLight?.release();
+    // The scatter glow is the one object this zone parents to `ctx.scene`
+    // rather than to its own root, because it lives on a layer the camera does
+    // not render and `RenderBridges` gathers it by walking the scene. Being
+    // outside the root means `disposeZoneTree` cannot see it, so it has to be
+    // reclaimed by hand — measured as two orphaned `campfire.scatter` lights
+    // on the scene after two visits to the moor.
+    if (this.#fireGlow !== null) {
+      this.#fireGlow.removeFromParent();
+      this.#fireGlow.dispose();
+      this.#fireGlow = null;
+    }
     this.#root.removeFromParent();
     disposeTree(this.#root);
     for (const disposable of this.#disposables) disposable.dispose();

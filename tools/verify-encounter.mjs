@@ -474,6 +474,164 @@ console.log(
     `warrior ${vsWarrior.simSeconds}s (${vsWarrior.swings} swings)`,
 );
 
+/* -------------------------------------------------------------------------- */
+/* 3. the character sheet reaches the dice                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The seam this closes.
+ *
+ * `CombatSystem` used to resolve every player swing against its own
+ * `PLAYER_OFFENSE` constant, and the RPG layer compensated by sending the
+ * *difference* between the character's real offence and that constant as a
+ * second damage packet. Damage therefore worked and nothing else did: attack
+ * rating from gear could not rescue a base miss, because the roll had already
+ * happened against the constant; and defence, resistances and block were
+ * sheet-only, because incoming blows resolved against `PLAYER_DEFENSE_BASE`.
+ *
+ * Both are now read through `rpg.offense` / `rpg.defense`, and both halves are
+ * measured here against `AttackOutcome.hitChance` — the chance the roll was
+ * actually made against, reported by the damage model itself, so this cannot be
+ * satisfied by a number that merely exists on a sheet somewhere.
+ *
+ * Skipped, not failed, when the RPG layer is absent: combat has to keep working
+ * standalone and this file is the encounter harness, not the RPG one.
+ */
+console.log('\n=== the character sheet reaches the dice ===');
+const sheet = await page.evaluate(() => {
+  const d2 = window.__d2rim;
+  const svc = d2.ctx.services;
+  const rpg = svc.tryGet('rpg');
+  const combat = svc.get('combat');
+  if (rpg === undefined) return { present: false };
+
+  // 1. Combat is reading the sheet, not the constant.
+  const adopted =
+    JSON.stringify(combat.playerOffense()) === JSON.stringify(rpg.offense()) &&
+    combat.self.defense.defense === rpg.defense().defense;
+
+  const beforeOffense = combat.playerOffense();
+  const beforeDefense = combat.self.defense;
+
+  // 2. Equip something with modifiers, through the game's own drop table.
+  const loot = svc.get('rpg.loot');
+  let equipped = null;
+  for (let seed = 1; seed < 400 && equipped === null; seed++) {
+    for (const item of loot.onEnemyDeath(4000 + seed, 'warrior#0').items) {
+      if (!rpg.character.canEquip(item)) continue;
+      if ((item.mods.attackRating ?? 0) <= 0 && (item.mods.defense ?? 0) <= 0) continue;
+      rpg.character.acquire(item);
+      if (rpg.character.equip(item).equipped) {
+        equipped = { name: item.name, quality: item.quality, mods: item.mods };
+        break;
+      }
+    }
+  }
+  loot.clear();
+
+  return {
+    present: true,
+    adopted,
+    equipped,
+    beforeAr: beforeOffense.attackRating,
+    afterAr: combat.playerOffense().attackRating,
+    beforeDef: beforeDefense.defense,
+    afterDef: combat.self.defense.defense,
+    // Poise is combat's, not the sheet's; it must survive the adoption.
+    poise: combat.self.defense.poise,
+    resistances: combat.self.defense.resistances ?? {},
+  };
+});
+
+if (!sheet.present) {
+  console.log('  no RPG layer registered; skipping (combat must work standalone)');
+} else {
+  console.log('  sheet:', JSON.stringify(sheet));
+  check('sheet: combat resolves the player against the character sheet', sheet.adopted === true);
+  check(
+    'sheet: gear that grants attack rating or defence was equipped',
+    sheet.equipped !== null,
+    sheet.equipped === null ? 'none found in 400 drops' : JSON.stringify(sheet.equipped.mods),
+  );
+  check(
+    "sheet: combat's poise stays combat's after adoption",
+    sheet.poise === 8,
+    `poise ${sheet.poise}`,
+  );
+
+  // 3. The rolls themselves. `hitChance` is the number the die was compared
+  //    against, so a change in it is proof the stat entered the roll rather
+  //    than being applied to its result.
+  const rolls = await page.evaluate(async ([step]) => {
+    const d2 = window.__d2rim;
+    const svc = d2.ctx.services;
+    const rpg = svc.get('rpg');
+    const combat = svc.get('combat');
+
+    const seen = { player: [], enemy: [] };
+    const off = d2.ctx.events.on('combat:hit', (e) => {
+      (e.targetLabel === 'player' ? seen.player : seen.enemy).push(+e.outcome.hitChance.toFixed(4));
+    });
+
+    /** Swing at a staged minion until a roll is reported, and return it. */
+    const swingAt = async (label) => {
+      window.__stage.reset();
+      await d2.engine.stepFrames(2, step);
+      window.__stage.ring('minion', 1, 1.35);
+      seen.enemy.length = 0;
+      seen.player.length = 0;
+      for (let i = 0; i < 90 && seen.enemy.length < 2; i++) {
+        combat.press('light');
+        await d2.engine.stepFrames(1, step);
+      }
+      // The enemy is swinging back on its own the whole time.
+      for (let i = 0; i < 120 && seen.player.length < 1; i++) {
+        await d2.engine.stepFrames(1, step);
+      }
+      return { label, onEnemy: seen.enemy[0] ?? null, onPlayer: seen.player[0] ?? null };
+    };
+
+    const geared = await swingAt('geared');
+    const gearedAr = rpg.offense().attackRating;
+    const gearedDef = rpg.defense().defense;
+
+    // Strip everything off and re-roll. Bare-handed is the honest control: it
+    // is the same code path with different numbers on the sheet.
+    for (const item of [...rpg.character.equipment.items()]) {
+      const slot = rpg.character.equipment.slotOf(item);
+      if (slot !== null) rpg.character.unequip(slot);
+    }
+    const bare = await swingAt('bare');
+
+    off();
+    return {
+      geared,
+      bare,
+      gearedAr,
+      bareAr: rpg.offense().attackRating,
+      gearedDef,
+      bareDef: rpg.defense().defense,
+    };
+  }, [STEP]);
+  mark('drove the geared and bare rolls');
+  console.log('  rolls:', JSON.stringify(rolls));
+
+  check(
+    "sheet: gear changes the player's real chance to hit",
+    rolls.geared.onEnemy !== null &&
+      rolls.bare.onEnemy !== null &&
+      rolls.geared.onEnemy > rolls.bare.onEnemy,
+    `geared ${rolls.geared.onEnemy} vs bare ${rolls.bare.onEnemy}`,
+  );
+  check(
+    "sheet: armour changes the enemy's chance to hit the player",
+    rolls.geared.onPlayer !== null &&
+      rolls.bare.onPlayer !== null &&
+      rolls.geared.onPlayer < rolls.bare.onPlayer,
+    `geared ${rolls.geared.onPlayer} vs bare ${rolls.bare.onPlayer}`,
+  );
+}
+
 if (errors.length > 0) {
   console.log('pageErrors:', errors.slice(0, 5));
   failures.push('page errors');

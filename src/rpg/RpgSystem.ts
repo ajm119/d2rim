@@ -507,15 +507,23 @@ export class RpgSystem implements GameModule, LootReceiver {
     const effect = this.#skillArmed ? this.character.skills.activeEffect() : NO_SKILL_EFFECT;
     const mine = this.#skillArmed ? this.offense() : this.character.offense(PLAYER_OFFENSE.criticalChance);
 
-    // The packet is the *difference* between what the character should have
-    // dealt and what the combat system already dealt on its baseline.
-    const bonus = differenceSpread(mine.damage, PLAYER_OFFENSE.damage);
-    if (bonus !== null) {
-      this.#deliver(combat, self, target, mine, bonus, 'skill.bonus');
-    }
+    // There used to be a third packet here: the *difference* between what the
+    // character should have dealt and what `CombatSystem` had already dealt
+    // resolving the swing against its `PLAYER_OFFENSE` constant. It was a
+    // workaround for combat not being able to see the character sheet, and it
+    // cost three things — gear attack rating could not rescue a base miss,
+    // because the roll had already happened; the extra `resolve` drew from
+    // combat's shared RNG, so a seeded encounter replayed differently with the
+    // RPG layer loaded than without it; and every landed blow arrived as two
+    // damage numbers.
+    //
+    // `CombatSystem` now resolves the player's swing against
+    // `RpgOffenseKey.offense()` directly, so the base hit already carries the
+    // character's real damage, attack rating and critical chance. Sending the
+    // difference on top would double-count all of it.
 
-    // Extra strikes are whole packets, not differences: Double Swing's second
-    // blow is a blow, and it should read as one.
+    // Extra strikes remain, because they are not augmentation: Double Swing's
+    // second blow is a blow, and it should read as one.
     for (let i = 0; i < effect.extraHits; i++) {
       this.#deliver(combat, self, target, mine, mine.damage, 'skill.extra');
     }
