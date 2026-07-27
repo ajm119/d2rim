@@ -45,41 +45,83 @@ import {
 /* -------------------------------------------------------------------------- */
 
 /**
- * The standard skeleton swing.
+ * ### Why every window below is pinned to a measured number
  *
- * `telegraph: 0.34` plus the clip's own lead-in at 0.85 speed gives the player
- * roughly three quarters of a second of visible wind-up — long enough to read
- * and step out of, short enough that standing still is still fatal.
+ * Each `window` is the span of the clip over which that clip's blade genuinely
+ * passes through a player-sized capsule standing in front of the skeleton, and
+ * `reachDuringWindow` is the smallest such contact distance across all four
+ * variant rigs. Both come from `tools/measure-enemy-reach.mjs`, which walks the
+ * GLB, samples the hand and forearm bones at 40 points per clip, extends the
+ * implied blade exactly the way `Hitbox.LimbAnchor` does, and sweeps a capsule
+ * outward to find the furthest separation that still touches.
+ *
+ * That measurement is the whole reason these attacks look the way they do. The
+ * previous table authored every skeleton's standard swing onto
+ * `1H_Melee_Attack_Chop`, whose implied blade never gets further than 0.66 m
+ * from the enemy's centre on *any* variant — inside a 0.70 m stand-off, so the
+ * hit window opened on schedule, the sweep ran, and it swept empty air. The
+ * clips that reach are the ones that extend the arm *away* from the body, and
+ * those are the slices and the stab.
+ */
+
+/**
+ * The standard skeleton swing: a diagonal slice across the body.
+ *
+ * `telegraph: 0.34` plus the clip's own lead-in gives the player roughly three
+ * quarters of a second of visible wind-up — long enough to read and step out
+ * of, short enough that standing still is still fatal. The window opens early
+ * in the clip because the wind-up has already been paid for in the telegraph.
  */
 const CHOP: EnemyAttack = {
   id: 'skeleton.chop',
-  action: 'attack',
-  speed: 0.85,
-  window: [0.34, 0.56],
+  action: 'attack.slice',
+  speed: 0.9,
+  // 1H_Melee_Attack_Slice_Diagonal reaches 1.40 m or better from 0.10 to 0.38.
+  window: [0.12, 0.36],
   recovery: 0.82,
   telegraph: 0.34,
+  reachDuringWindow: 1.4,
   modifiers: { damageScale: 1, knockback: 2, staggerScale: 1 },
 };
 
 const SLICE: EnemyAttack = {
   id: 'skeleton.slice',
-  action: 'attack.slice',
+  action: 'attack.sweep',
   speed: 1,
-  window: [0.28, 0.5],
-  recovery: 0.78,
+  // 1H_Melee_Attack_Slice_Horizontal reaches 0.90 m at 0.07 and peaks at 1.42.
+  window: [0.08, 0.2],
+  recovery: 0.75,
   telegraph: 0.24,
+  reachDuringWindow: 0.9,
   modifiers: { damageScale: 0.85, knockback: 1.6, attackRatingBonus: 20 },
+};
+
+const THRUST: EnemyAttack = {
+  id: 'skeleton.thrust',
+  action: 'attack.stab',
+  speed: 1,
+  // 1H_Melee_Attack_Stab holds 1.54 m or better from 0.28 all the way to 0.50:
+  // the longest and most reliable contact window on the rig.
+  window: [0.28, 0.5],
+  recovery: 0.72,
+  telegraph: 0.3,
+  reachDuringWindow: 1.5,
+  modifiers: { damageScale: 1.1, knockback: 2.4, attackRatingBonus: 30 },
 };
 
 const HEAVY: EnemyAttack = {
   id: 'skeleton.heavy',
   action: 'attack.heavy',
   speed: 0.8,
-  window: [0.42, 0.64],
+  // 2H_Melee_Attack_Chop clears 0.84 m from 0.42 and peaks at 1.56 by 0.47.
+  // Trimmed at 0.52 rather than the old 0.64: past that the axe is at rest
+  // beside the body and the window was paying out on the follow-through.
+  window: [0.42, 0.52],
   recovery: 0.9,
   // A long, obvious wind-up on a hit that hurts. The contract with the player
   // is that the biggest hits are always the most readable ones.
   telegraph: 0.55,
+  reachDuringWindow: 0.84,
   modifiers: { damageScale: 1.7, knockback: 4, staggerScale: 1.6 },
 };
 
@@ -171,7 +213,7 @@ export const SKELETON_PROFILES: Readonly<Record<string, EnemyProfile>> = {
     chaseSpeed: 3.8,
     attackRange: 2,
     reach: 0.95,
-    attacks: [SLICE, CHOP],
+    attacks: [SLICE, THRUST],
     attackCooldown: 1.4,
     offense: {
       level: 3,
@@ -211,19 +253,18 @@ export const ARRIVAL_EASE = 0.7;
 /**
  * Clearance held between the player's hit capsule and the enemy's, in metres.
  *
- * Zero: the hit capsules stop exactly touching. That is not a stylistic
- * choice. Measured on the real rig, the closest point of a skeleton's swinging
- * arm to the player's hit capsule is its *elbow*, not its blade — the authored
- * window covers a part of the clip where the forearm is not pointing at the
- * target — so contact happens only in the last few centimetres. Any positive
- * clearance here disarms the enemy entirely. The physical capsules are smaller
- * than the hit capsules (0.30 + 0.30 against 0.40 + 0.30), so touching hit
- * capsules still leaves the bodies 0.1 m apart and nothing interpenetrates.
+ * Zero: the hit capsules stop exactly touching. The physical capsules are
+ * smaller than the hit capsules (0.30 + 0.30 against 0.40 + 0.30), so touching
+ * hit capsules still leaves the bodies 0.1 m apart and nothing interpenetrates.
  *
- * The real repair is to anchor the hitbox to the skeletons' weapon meshes, or
- * to re-author the windows onto the part of the swing that actually travels
- * through the target. Until then this is the widest stand-off that keeps the
- * fight two-sided.
+ * This used to carry an apology explaining that any positive clearance disarmed
+ * the enemy, because the closest point of the swinging arm to the player was
+ * its elbow. That was true, and it was a symptom rather than a cause: the
+ * windows were authored onto a clip that never reaches. They are now authored
+ * onto clips that do — see `reachDuringWindow` on each attack, all of which
+ * clear 0.70 m by at least 0.14 m — so the stand-off is a positioning choice
+ * again rather than a workaround, and it has headroom to grow if a designer
+ * wants the skeletons standing further off.
  */
 export const STANDOFF_CLEARANCE = 0;
 

@@ -25,7 +25,11 @@
  *    mean editing `src/physics`, which is not this module's to edit.
  * 2. **No weapon mesh.** The skeleton GLBs carry no weapon geometry at all
  *    (verified by decoding the GLB node list), so their blade is the forearm
- *    extended past the fist. Reach is a stat rather than a measurement.
+ *    extended past the fist. `EnemyProfile.reach` is therefore a stat — how far
+ *    past the knuckles the implied weapon goes — but the distance a given
+ *    *swing* can actually cover is not, and must not be guessed: see
+ *    `EnemyAttack.reachDuringWindow`, and the phase-3 blocker that made the
+ *    difference matter.
  */
 
 import * as THREE from 'three/webgpu';
@@ -69,6 +73,25 @@ export interface EnemyAttack {
    */
   readonly telegraph: number;
   readonly modifiers: MoveModifiers;
+  /**
+   * Metres from the enemy's own centre at which this swing can still touch a
+   * player capsule, *measured over the authored window* — not the reach of the
+   * arm, and not the length of the clip's biggest gesture.
+   *
+   * This exists because the phase-3 build shipped with every skeleton's
+   * standard attack authored onto `1H_Melee_Attack_Chop`, a vertical chop whose
+   * implied blade comes down beside the hip. Over the whole clip its furthest
+   * contact against a player capsule is 0.52–0.66 m depending on variant, while
+   * the AI holds a 0.70 m stand-off: the swing could not connect at any point
+   * in the animation, on any variant, ever. Combat was one-directional for a
+   * whole phase and nothing in the codebase could notice, because reach was a
+   * property of the *art* and no number anywhere claimed what it was.
+   *
+   * So it is a number now, taken from `tools/measure-enemy-reach.mjs`, and
+   * `tests/ai.skeleton.test.ts` asserts it clears the stand-off. Re-run that
+   * tool whenever a window or an action changes.
+   */
+  readonly reachDuringWindow: number;
 }
 
 export interface EnemyPerception {
@@ -229,6 +252,25 @@ export abstract class EnemyBase implements Combatant {
         ? new AnimationGraph(options.root, options.clips, { verbose: false })
         : null;
 
+    // Same reasoning as `PlayerController.#calibrate`: ramp the run ring to the
+    // speed the run clip natively covers, not to the enemy's top chase speed.
+    // Otherwise a skeleton spends its entire pursuit in a walk-and-run blend,
+    // which plants worse than either clip alone — and a crowd of sliding
+    // skeletons is more visible than one sliding player, because the player is
+    // usually looking at them.
+    if (this.graph !== null) {
+      const natural = this.graph.naturalSpeedForState('run.forward');
+      const walk = Math.max(0.2, options.profile.walkSpeed);
+      this.graph.setBlendParams({
+        idleThreshold: Math.min(0.12, walk * 0.12),
+        walkSpeed: walk,
+        runSpeed:
+          natural > 0
+            ? THREE.MathUtils.clamp(natural, walk * 1.5, Math.max(walk * 1.5, options.profile.chaseSpeed))
+            : options.profile.chaseSpeed,
+      });
+    }
+
     this.controller = new CharacterController(options.physics, {
       radius: options.profile.capsuleRadius,
       height: options.profile.height,
@@ -243,7 +285,11 @@ export abstract class EnemyBase implements Combatant {
     options.root.rotation.set(0, this.#yaw, 0);
 
     const anchor = resolveWeaponAnchor(options.root, { reach: options.profile.reach });
-    this.#hitbox = anchor === null ? null : new WeaponHitbox(anchor, { radius: 0.13 });
+    // `overreach` is pure forgiveness: the measured contact distances in
+    // `enemies/Skeleton.ts` were taken *without* it, so every centimetre here
+    // is margin on top of a window that already connects.
+    this.#hitbox =
+      anchor === null ? null : new WeaponHitbox(anchor, { radius: 0.13, overreach: 0.1 });
     if (anchor === null) {
       console.warn(`[ai] ${this.label} has no arm bones; it will never land a hit`);
     }

@@ -5,8 +5,10 @@ import {
   AnimationGraph,
   filterClipTracks,
   measureRootMotion,
+  plantedTravelPerCycle,
   splitTrackName,
   stripRootMotion,
+  type FootSample,
 } from '../src/character/AnimationGraph';
 
 /* -------------------------------------------------------------------------- */
@@ -188,9 +190,91 @@ describe('AnimationGraph construction', () => {
 
   it('recovers each clip stride from the motion of its planted feet', () => {
     // Two 0.75 m steps per cycle for the walk, two 1.7 m for the run.
+    // NB these fixtures have each foot down for exactly half the cycle, which
+    // is the one duty factor at which the old peak-to-peak estimator and the
+    // stance-travel estimator agree — see `plantedTravelPerCycle`. That is
+    // precisely why this suite passed while the real rig slid; the flight-phase
+    // cases below are the ones that tell the two estimators apart.
     expect(graph.strideTable.get('Walking_A') ?? 0).toBeCloseTo(1.5, 2);
     expect(graph.strideTable.get('Running_A') ?? 0).toBeCloseTo(3.4, 2);
     expect(graph.strideTable.get('Running_Strafe_Left') ?? 0).toBeCloseTo(2.4, 2);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Stride estimation                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One cycle of a single foot, in body space.
+ *
+ * The foot is on the ground for `duty` of the cycle, travelling backwards at a
+ * constant `stride` metres per unit phase, then swings forward with a lift. The
+ * body therefore has to cover exactly `stride` metres per cycle for this foot
+ * to stand still in the world — *whatever* `duty` is, which is the whole point.
+ */
+function footTrace(stride: number, duty: number, samples = 48, lift = 0.3): FootSample[] {
+  const out: FootSample[] = [];
+  for (let s = 0; s <= samples; s++) {
+    const phi = s / samples;
+    if (phi <= duty) {
+      out.push({ x: 0, y: 0, z: (duty / 2 - phi) * stride });
+    } else {
+      const t = (phi - duty) / (1 - duty);
+      out.push({ x: 0, y: Math.sin(Math.PI * t) * lift, z: (-duty / 2 + t * duty) * stride });
+    }
+  }
+  return out;
+}
+
+/** Rotate a trace in the ground plane, so direction-independence is testable. */
+function rotated(trace: readonly FootSample[], radians: number): FootSample[] {
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return trace.map((s) => ({ x: s.x * cos - s.z * sin, y: s.y, z: s.x * sin + s.z * cos }));
+}
+
+describe('plantedTravelPerCycle', () => {
+  it('recovers the ground a cycle covers from a plain 50% duty gait', () => {
+    expect(plantedTravelPerCycle(footTrace(1.5, 0.5))).toBeCloseTo(1.5, 2);
+  });
+
+  it('is not fooled by a flight phase, which is what broke the run', () => {
+    // A run: each foot is down for a quarter of the cycle and travels 0.5 m
+    // while it is, but the body covers 2.0 m — the rest is spent airborne.
+    // Peak-to-peak excursion summed over two feet would report 2 * 0.5 = 1.0,
+    // half the truth, and the mixer would then run at twice the needed rate.
+    const trace = footTrace(2, 0.25);
+    expect(plantedTravelPerCycle(trace)).toBeCloseTo(2, 1);
+
+    let excursion = 0;
+    for (const a of trace) for (const b of trace) excursion = Math.max(excursion, Math.abs(b.z - a.z));
+    expect(excursion * 2).toBeLessThan(1.2);
+  });
+
+  it('reports the same number however the clip is oriented', () => {
+    const forward = plantedTravelPerCycle(footTrace(1.5, 0.45));
+    for (const angle of [Math.PI / 2, Math.PI, -Math.PI * 0.75, 0.37]) {
+      expect(plantedTravelPerCycle(rotated(footTrace(1.5, 0.45), angle))).toBeCloseTo(forward, 3);
+    }
+  });
+
+  it('scales linearly with the ground a cycle covers', () => {
+    const one = plantedTravelPerCycle(footTrace(1, 0.4));
+    const three = plantedTravelPerCycle(footTrace(3, 0.4));
+    expect(three / one).toBeCloseTo(3, 1);
+  });
+
+  it('tolerates a threshold-straddling plant rather than averaging it away', () => {
+    // A tiny lift puts most of the swing inside the plant band. The median is
+    // what keeps those samples from dragging the answer; a mean would not.
+    expect(plantedTravelPerCycle(footTrace(1.5, 0.5, 48, 0.02))).toBeCloseTo(1.5, 1);
+  });
+
+  it('gives up rather than guessing on a foot that never moves', () => {
+    const still: FootSample[] = Array.from({ length: 24 }, () => ({ x: 0, y: 0, z: 0 }));
+    expect(plantedTravelPerCycle(still)).toBe(0);
+    expect(plantedTravelPerCycle([{ x: 0, y: 0, z: 0 }])).toBe(0);
   });
 });
 

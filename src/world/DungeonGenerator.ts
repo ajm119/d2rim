@@ -355,6 +355,19 @@ function discOffsets(radius: number): Int16Array {
  */
 export function generateDungeon(options: DungeonOptions = {}): DungeonLayout {
   const config: Required<DungeonOptions> = { ...DEFAULTS, ...options };
+
+  // Fail here, with the numbers, rather than eight attempts later with a
+  // generic "no valid cave": a grid this small is a caller bug, not bad luck.
+  const span = Math.min(config.cols, config.rows) - config.marginCells * 2;
+  const needed = (config.corridorRadiusCells + 2) * 2 + 2;
+  if (span < needed) {
+    throw new Error(
+      `[DungeonGenerator] grid too small: ${config.cols}x${config.rows} with a ` +
+        `${config.marginCells}-cell margin leaves ${span} cells, and the entrance ` +
+        `chamber alone needs ${needed}`,
+    );
+  }
+
   const interior =
     (config.cols - config.marginCells * 2) * (config.rows - config.marginCells * 2);
   const wanted = interior * config.minFloorFraction;
@@ -421,7 +434,7 @@ function generateAttempt(config: Required<DungeonOptions>, attempt: number): Dun
     col: Math.floor(cols / 2),
     row: rows - 1 - margin - entranceRadius,
   };
-  carveDisc(cells, cols, rows, margin, entrance.col, entrance.row, entranceRadius);
+  carveChamber(cells, cols, rows, margin, radius, entrance.col, entrance.row, entranceRadius);
 
   const approach = nearestCell(main, cols, entrance);
   if (approach !== null) {
@@ -762,6 +775,34 @@ function carveDisc(
 }
 
 /**
+ * Carve an open area of `radius` as a *union of brush-sized discs*.
+ *
+ * Not one big disc, and the difference is not cosmetic. The width guarantee is
+ * "every walkable cell sits inside a wholly walkable disc of the brush radius",
+ * and on a continuous plane a big disc trivially satisfies it. On an integer
+ * grid it does not: rasterised discs are not nested at the rim, so the four
+ * cells at the extreme of a radius-(R+2) disc have no wholly-walkable radius-R
+ * disc containing them, and the audit — correctly — flags them. Sweeping the
+ * brush over a smaller disc of centres is morphological dilation, and it makes
+ * the invariant true by construction at every radius.
+ */
+function carveChamber(
+  cells: Uint8Array,
+  cols: number,
+  rows: number,
+  margin: number,
+  brush: number,
+  col: number,
+  row: number,
+  radius: number,
+): void {
+  const centres = discOffsets(Math.max(0, radius - brush));
+  for (let k = 0; k < centres.length; k += 2) {
+    carveDisc(cells, cols, rows, margin, col + (centres[k] ?? 0), row + (centres[k + 1] ?? 0), brush);
+  }
+}
+
+/**
  * Carve a passage between two cells with a radius-R disc brush.
  *
  * Two segments through a jittered midpoint rather than one straight line: a
@@ -982,10 +1023,29 @@ function findChambers(
     if (groups.length >= 2) break;
   }
 
+  // The far end is always a chamber, whether or not it is wide.
+  //
+  // Chambers are detected by width, and the deepest *wide* place is not always
+  // the deepest place: a cave can trail off into a long narrow passage, and then
+  // `deepestChamber` — where the quest objective goes — lands a third of the way
+  // in while the player walks past it to the actual end. So when no detected
+  // chamber reaches the back of the cave, the terminal region (everything within
+  // 15% of the maximum depth) is admitted as a chamber in its own right.
+  const FAR_BAND = 0.85;
+  const reachesBack = groups.some((group) =>
+    group.some((index) => (distance[index] ?? -1) >= maxDepth * FAR_BAND),
+  );
+  if (!reachesBack && maxDepth > 0) {
+    const far: number[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      if (cells[i] === CaveCell.Floor && (distance[i] as number) >= maxDepth * FAR_BAND) far.push(i);
+    }
+    if (far.length > 0) groups.push(far);
+  }
+
   if (groups.length === 0) {
-    // Degenerate cave: one chamber at the entrance, one at the far end.
-    const far = deepestCell(cells, distance);
-    groups = [[far]];
+    // Degenerate cave: a single chamber at the far end is still a valid answer.
+    groups = [[deepestCell(cells, distance)]];
   }
 
   const chambers = groups.map((group, id) => {

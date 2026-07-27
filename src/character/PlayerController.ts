@@ -67,15 +67,19 @@ export interface PlayerControllerOptions {
    */
   readonly height?: number;
   /**
-   * Derive the three gait speeds from the animation's measured stride instead
-   * of using the constants below. Default true — see {@link PlayerController}.
+   * Measure the model at load and hand the animation graph the blend and
+   * cadence policy that matches the gait speeds below. Default true — see
+   * {@link PlayerController}.
+   *
+   * This used to mean the opposite: derive the gait speeds *from* the clips.
+   * See `#calibrate` for why that was backwards.
    */
   readonly calibrateToAnimation?: boolean;
-  /** Default ground speed with no modifier held, m/s. Default 4.2. */
+  /** Default ground speed with no modifier held, m/s. Default 4.4. */
   readonly runSpeed?: number;
-  /** Speed while `Block` is held, m/s. Default 1.7. */
+  /** Speed while `Block` is held, m/s. Default 1.25. */
   readonly walkSpeed?: number;
-  /** Speed while `Sprint` is held and stamina remains, m/s. Default 6.4. */
+  /** Speed while `Sprint` is held and stamina remains, m/s. Default 6.0. */
   readonly sprintSpeed?: number;
   /** Backpedal speed as a fraction of the current gait. Default 0.55. */
   readonly backFactor?: number;
@@ -108,9 +112,14 @@ const DEFAULTS = {
   spawn: { x: 1.1, z: 0.4 },
   height: 0,
   calibrateToAnimation: true,
-  runSpeed: 4.2,
-  walkSpeed: 1.7,
-  sprintSpeed: 6.4,
+  // Chosen for feel and then imposed on the animation, not read off it. See
+  // `#calibrate`. 4.4 m/s is a committed third-person action-RPG jog; 6.0 is a
+  // sprint that outruns a skeleton (chase 2.5–3.8) without turning the camera
+  // into a blur; 1.25 is the shuffle while a block is up, deliberately slow
+  // enough that holding block is a decision.
+  runSpeed: 4.4,
+  walkSpeed: 1.25,
+  sprintSpeed: 6.0,
   backFactor: 0.55,
   strafeFactor: 0.82,
   acceleration: 26,
@@ -440,17 +449,29 @@ export class PlayerController implements GameModule {
    *   axe, a shield and a mug to the hand sockets, so a `Box3` over the whole
    *   scene — which is what the scene module uses to normalise the figure —
    *   measures the props, not the Barbarian.
-   * - **Gait speeds** come from the stride the animation graph measured. This
-   *   is the part that actually eliminates foot sliding, and it is the right
-   *   way round: the clips are fixed, the numbers in a config file are not. A
-   *   run speed picked to feel good and then imposed on a clip whose stride
-   *   cannot support it *will* slide, no matter how the playback rate is bent.
+   * - **Blend thresholds** are handed *to* the graph from the gait speeds, so
+   *   the walk ring is fully in at the walk speed and the run ring at the run
+   *   speed, whatever those speeds happen to be.
    *
-   * The multipliers below are cadences in cycles per second — 1.9 for a run,
-   * 1.55 for a walk — chosen at the brisk end of plausible so the character
-   * still covers ground. Sprint deliberately overruns the cadence cap: sliding
-   * a little at the top of the speed range is a better trade than having no
-   * sprint at all, and it is the only place in the system that slides.
+   * ### Which way round this dependency goes
+   *
+   * It used to run the other way: the gait speeds were computed from the
+   * measured stride (`walkStride * 1.55`, `runStride * 1.9`). The reasoning was
+   * that clips are fixed and config numbers are not, so the clip should win.
+   *
+   * That produced walk 0.95, run 1.76, sprint 2.46 m/s — a sprint slower than a
+   * human jog — because this rig's clips are authored tiny (its run cycle
+   * carries the body 1.97 m at an authored 1.25 cycles/s, i.e. 2.46 m/s). The
+   * game was asset-locked to a plod, and no amount of level design or camera
+   * work fixes a character who cannot move.
+   *
+   * Game feel is the requirement; the animation is the material. So the speeds
+   * are authored, and the graph is told to *time-scale* the clips to meet them:
+   * at 4.4 m/s the run clip runs at 2.23 cycles per second against an authored
+   * 1.25, i.e. 1.8× rate. A faster cadence is the correct and normal cost of
+   * this trade — a character with this rig's short legs genuinely does take
+   * more steps per metre — and the cadence cap below is what stops it becoming
+   * a cartoon at the top of the range.
    *
    * Pass explicit speeds to override all of this.
    */
@@ -461,28 +482,38 @@ export class PlayerController implements GameModule {
     if (this.#options.height > 0) this.#height = this.#options.height;
 
     if (graph === null || !this.#options.calibrateToAnimation) return;
-    const walkStride = graph.strideForState('walk.forward');
-    const runStride = graph.strideForState('run.forward');
-    if (walkStride <= 0 || runStride <= 0) {
-      console.warn('[PlayerController] no measured stride; keeping the configured speeds');
-      return;
-    }
 
-    this.#gait.walk = walkStride * 1.55;
-    this.#gait.run = runStride * 1.9;
-    this.#gait.sprint = this.#gait.run * 1.4;
-
+    // The run *ring* reaches full weight at the speed the run clip natively
+    // covers, not at the gait's top speed. Those are different numbers and
+    // conflating them was costing plants: a ramp from 1.25 to 4.4 m/s left the
+    // character in a walk-and-run blend for three quarters of his speed range,
+    // and the two clips plant on different beats with different duty factors,
+    // so the blended stance is smeared and neither clip's plant survives. Ramp
+    // to the run clip's own 2.46 m/s instead and everything above it is one
+    // clean pose, time-scaled.
+    const runNatural = graph.naturalSpeedForState('run.forward');
+    const runRing =
+      runNatural > 0
+        ? THREE.MathUtils.clamp(runNatural, this.#gait.walk * 1.5, this.#gait.run)
+        : this.#gait.run;
     graph.setBlendParams({
       idleThreshold: Math.min(0.12, this.#gait.walk * 0.12),
       walkSpeed: this.#gait.walk,
-      runSpeed: this.#gait.run,
+      runSpeed: runRing,
     });
 
+    const walkStride = graph.strideForState('walk.forward');
+    const runStride = graph.strideForState('run.forward');
+    const cadence = (speed: number, stride: number): string =>
+      stride > 0 ? `${(speed / stride).toFixed(2)} c/s` : 'unmeasured';
     console.info(
-      `[PlayerController] calibrated to the asset: height ${this.#height.toFixed(2)} m, ` +
-        `stride walk ${walkStride.toFixed(2)} / run ${runStride.toFixed(2)} m per cycle -> ` +
-        `walk ${this.#gait.walk.toFixed(2)}, run ${this.#gait.run.toFixed(2)}, ` +
-        `sprint ${this.#gait.sprint.toFixed(2)} m/s`,
+      `[PlayerController] height ${this.#height.toFixed(2)} m; gaits walk ` +
+        `${this.#gait.walk.toFixed(2)} / run ${this.#gait.run.toFixed(2)} / sprint ` +
+        `${this.#gait.sprint.toFixed(2)} m/s against measured strides walk ` +
+        `${walkStride.toFixed(2)} / run ${runStride.toFixed(2)} m per cycle -> cadence ` +
+        `${cadence(this.#gait.walk, walkStride)} walking, ` +
+        `${cadence(this.#gait.run, runStride)} running, ` +
+        `${cadence(this.#gait.sprint, runStride)} sprinting`,
     );
   }
 

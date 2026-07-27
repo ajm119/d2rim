@@ -98,7 +98,6 @@
 import * as THREE from 'three/webgpu';
 import {
   float,
-  luminance,
   mix,
   mx_noise_float,
   normalView,
@@ -111,7 +110,6 @@ import {
   saturate,
   sin,
   smoothstep,
-  texture,
   uniform,
   vec3,
   vec4,
@@ -126,7 +124,10 @@ import {
   scatter,
   type ScatterSample,
 } from '../assets/Procedural';
-import type { GameContext, GameModule } from '../core/types';
+import { BLOOD_MOOR_SPAWNS } from '../ai/EnemyDirector';
+import type { GameContext } from '../core/types';
+import type { PhysicsWorld } from '../physics/PhysicsWorld';
+import type { PortalSpec, Zone, ZoneEntryPoint } from '../world/Zone';
 import { SCATTER_SEED, auditServices } from '../render/FrameGraph';
 import { IBLKey, type IBLService } from '../render/IBL';
 import { LightingKey, type LightHandle, type LightingService } from '../render/Lighting';
@@ -135,6 +136,7 @@ import type { SurfaceSpec } from '../render/materials/types';
 import { VolumetricsKey, type VolumetricsService } from '../render/Volumetrics';
 import type { RenderSettings } from '../render/RenderSettings';
 import { DEAD_TREE_VARIANTS, generateDeadTreeGeometry } from './DeadTree';
+import { weatherMaterial, type WeatheringGrade } from './Weathering';
 
 /* -------------------------------------------------------------------------- */
 /* Terrain                                                                    */
@@ -288,6 +290,35 @@ const TRACK: readonly [THREE.Vector2, THREE.Vector2, THREE.Vector2] = [
 /** Where the Barbarian stands: between the camera and the fire, off-centre. */
 const HERO = new THREE.Vector2(1.1, 0.4);
 
+/**
+ * The moor's two doors, and the ground around them.
+ *
+ * Both are placed by the same rule: **off the composition's sightline, and out
+ * of the encounter**. The wide establishing shot looks north-north-west from
+ * (roughly) the south-east, past the fire to the ridge; a cave mouth or a gate
+ * marker sitting in that corridor would compete with the fire for the eye and
+ * would be the first thing every capture in `tools/capture/shots.json` framed.
+ *
+ * `BLOOD_MOOR_SPAWNS` puts skeletons between z = -15 and z = +5, mostly west
+ * and north. The camp door is therefore south-east at (7, 17), well behind the
+ * player's spawn, and the arrival point is 6 m short of it — a player stepping
+ * out of the gate gets to see the moor before the moor sees him.
+ *
+ * The den is the opposite: it is the objective, so it is *past* the encounter,
+ * out on the west bank at (-21, -4) where the escarpment already gives the
+ * terrain a face for an opening to be cut into.
+ */
+const DEN_MOUTH = {
+  /** Centre of the cave-mouth geometry, and of its portal volume. */
+  portal: new THREE.Vector2(-21, -4),
+  /** Where a player arriving from the Den lands: outside the mouth, facing east. */
+  approach: new THREE.Vector2(-17.6, -3.2),
+  /** The way back to the camp. */
+  campPortal: new THREE.Vector2(7, 17),
+  /** Where a player arriving from the camp lands. */
+  campApproach: new THREE.Vector2(6, 11.5),
+} as const;
+
 /** The ruined wall's heading, radians. Shared by the wall and its supply stack. */
 const WALL_YAW = THREE.MathUtils.degToRad(24);
 
@@ -370,12 +401,25 @@ export interface BloodMoorOptions {
    * on one skeleton is the one arrangement that cannot work.
    */
   readonly controlHero?: boolean;
+  /**
+   * Load, scale and weather the Barbarian. Default true.
+   *
+   * `false` when the scene is hosted by `world/ZoneManager`: the player module
+   * loads its own figure and keeps it across zone transitions, so building a
+   * second one here produces two Barbarians standing in the same mud.
+   */
+  readonly loadHero?: boolean;
 }
 
-export class BloodMoor implements GameModule {
+export class BloodMoor implements Zone {
   readonly name = 'scene.bloodMoor';
+  readonly zoneId = 'bloodMoor';
+  readonly displayName = 'The Blood Moor';
 
   readonly field = new TerrainField();
+
+  /** The moor's encounter table, owned by `ai/EnemyDirector`. */
+  readonly enemySpawns = BLOOD_MOOR_SPAWNS;
 
   readonly #options: BloodMoorOptions;
   readonly #root = new THREE.Group();
@@ -452,6 +496,7 @@ export class BloodMoor implements GameModule {
     this.#buildLightRig();
     this.#buildTerrain();
     this.#buildEscarpment();
+    this.#buildDenMouth();
     this.#buildRuinedWall();
     this.#buildCampfire(ctx);
 
@@ -460,7 +505,11 @@ export class BloodMoor implements GameModule {
     this.#placeDeadTrees();
 
     await this.#loadProps();
-    await this.#loadHero();
+    // The hero is the *player's*, not the zone's, and he survives travel. When
+    // the zone system is driving, `PlayerController` owns him outright and a
+    // second copy built here would stand motionless next to the one being
+    // played. See {@link BloodMoorOptions.loadHero}.
+    if (this.#options.loadHero !== false) await this.#loadHero();
 
     // Fold the AO service into every material this scene owns. Materials the
     // library made are not automatically hooked up: `IBLService.applyOcclusion`
@@ -1968,6 +2017,214 @@ export class BloodMoor implements GameModule {
     });
   }
 
+  /**
+   * The cave mouth on the west bank: the way down into the Den of Evil.
+   *
+   * A hole in a hillside is one of the hardest things to make read, because
+   * "dark" and "hole" look identical until something tells the eye which it is.
+   * Four elements do that here, and none of them is optional:
+   *
+   * - a **jamb** of two heavy boulders, close enough together to frame a gap
+   *   narrower than the player is tall. Scale is the whole cue: an opening wider
+   *   than it is high reads as a gully, not as a mouth.
+   * - a **lintel** boulder bridging them, so the top edge is a hard line. An
+   *   opening with a soft top edge reads as a shadow on a slope.
+   * - a **throat**: a near-black recessed box set back 3 m behind the jamb, with
+   *   its own material at 0.012 albedo. It is what makes the gap read as
+   *   *depth* rather than as a dark patch of the same rock.
+   * - **spoil**, a scatter of small rock around the base, because a cave mouth
+   *   is a place material came out of.
+   *
+   * The whole assembly is turned to face east-south-east, toward the player's
+   * approach across the moor, so the opening is visible from the spawn rather
+   * than only from directly in front of it.
+   */
+  #buildDenMouth(): void {
+    const materials = this.#materials;
+    const x = DEN_MOUTH.portal.x;
+    const z = DEN_MOUTH.portal.y;
+    const base = this.field.heightAt(x, z);
+
+    const group = new THREE.Group();
+    group.name = 'moor.denMouth';
+    group.position.set(x, base, z);
+    // Facing the player's approach, not an axis.
+    group.rotation.y = Math.atan2(HERO.x - x, HERO.y - z);
+    this.#root.add(group);
+
+    const rock =
+      materials?.create('rock', {
+        albedoTint: [0.115, 0.112, 0.115],
+        roughnessRange: [0.7, 1],
+      }) ?? new THREE.MeshStandardNodeMaterial({ color: 0x1a1a1a, roughness: 0.95 });
+    rock.name = 'moor.denMouth.rock';
+    this.#disposables.push(rock);
+
+    const rng = createRng(`${SCATTER_SEED}.denmouth`);
+    const jamb: { dx: number; dz: number; scale: [number, number, number]; radius: number }[] = [
+      { dx: -2.5, dz: 0.35, scale: [1.15, 2.5, 1.35], radius: 1.5 },
+      { dx: 2.55, dz: 0.15, scale: [1.2, 2.35, 1.3], radius: 1.55 },
+      { dx: -1.1, dz: -2.4, scale: [1.5, 1.9, 1.2], radius: 1.7 },
+      { dx: 1.35, dz: -2.6, scale: [1.45, 2.0, 1.25], radius: 1.65 },
+    ];
+    for (const [index, block] of jamb.entries()) {
+      const geometry = generateRockGeometry({
+        seed: `${SCATTER_SEED}.denmouth.${index}`,
+        detail: 3,
+        radius: block.radius,
+        displacement: 0.4,
+        scale: block.scale,
+        flattenBase: 0.3,
+      });
+      this.#disposables.push(geometry);
+      const mesh = new THREE.Mesh(geometry, rock);
+      mesh.name = `moor.denMouth.jamb.${index}`;
+      mesh.position.set(block.dx, this.field.heightAt(x + block.dx, z + block.dz) - base, block.dz);
+      mesh.rotation.y = rng.next() * Math.PI * 2;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+
+    // The lintel, bridging the jamb at 2.6 m — head height plus a margin, so
+    // the opening is unmistakably something a person walks into.
+    const lintelGeometry = generateRockGeometry({
+      seed: `${SCATTER_SEED}.denmouth.lintel`,
+      detail: 3,
+      radius: 1.6,
+      displacement: 0.34,
+      scale: [2.1, 0.62, 1.05],
+      flattenBase: 0.15,
+    });
+    this.#disposables.push(lintelGeometry);
+    const lintel = new THREE.Mesh(lintelGeometry, rock);
+    lintel.name = 'moor.denMouth.lintel';
+    lintel.position.set(0, 2.75, -0.6);
+    lintel.castShadow = true;
+    lintel.receiveShadow = true;
+    group.add(lintel);
+
+    /* the throat */
+    const throatMaterial = new THREE.MeshStandardNodeMaterial({
+      color: new THREE.Color(0.012, 0.013, 0.016),
+      roughness: 1,
+      metalness: 0,
+    });
+    throatMaterial.name = 'moor.denMouth.throat';
+    // The throat must not be relit by the sky. It is the one surface in this
+    // scene whose correct rendering is a controlled near-black, and the
+    // environment term is exactly what would take it back up to slope grey.
+    throatMaterial.envMapIntensity = 0.02;
+    this.#disposables.push(throatMaterial);
+
+    const throatGeometry = new THREE.BoxGeometry(4.6, 3.4, 5.2);
+    this.#disposables.push(throatGeometry);
+    const throat = new THREE.Mesh(throatGeometry, throatMaterial);
+    throat.name = 'moor.denMouth.throat';
+    throat.position.set(0, 1.1, -3.4);
+    throat.receiveShadow = true;
+    // Never a collider: the player walks into it and the portal takes over.
+    throat.userData['noCollide'] = true;
+    group.add(throat);
+
+    /* spoil */
+    const spoilGeometry = generateRockGeometry({
+      seed: `${SCATTER_SEED}.denmouth.spoil`,
+      detail: 2,
+      radius: 0.34,
+      displacement: 0.42,
+      scale: [1, 0.62, 0.9],
+      flattenBase: 0.5,
+    });
+    this.#disposables.push(spoilGeometry);
+    const spoil: ScatterSample[] = [];
+    for (let i = 0; i < 22; i++) {
+      const angle = rng.next() * Math.PI * 2;
+      const radius = 1.6 + rng.next() * 4.2;
+      const sx = Math.cos(angle) * radius;
+      const sz = Math.sin(angle) * radius * 0.7 + 1.4;
+      spoil.push({
+        position: new THREE.Vector3(sx, this.field.heightAt(x + sx, z + sz) - base + 0.05, sz),
+        normal: new THREE.Vector3(0, 1, 0),
+        scale: 0.45 + rng.next() * 1.1,
+        rotation: rng.next() * Math.PI * 2,
+        index: i,
+      });
+    }
+    const rubble = buildInstancedMesh(spoilGeometry, rock, spoil);
+    rubble.name = 'moor.denMouth.spoil';
+    group.add(rubble);
+  }
+
+  /* -- zone contract ------------------------------------------------------ */
+
+  /**
+   * The moor's subtree. Everything this scene builds hangs off it, which is
+   * what lets `world/ZoneManager` unload the zone by detaching one node.
+   */
+  get root(): THREE.Object3D {
+    return this.#root;
+  }
+
+  /**
+   * Arrival points.
+   *
+   * `from-camp` is south-east of the composition's focal point, on open ground
+   * clear of the six spawned skeletons — a player who steps out of the gate and
+   * is immediately inside an encounter has been ambushed by the level, not by
+   * the enemies. `from-den` is at the cave mouth on the west bank.
+   */
+  get entryPoints(): readonly ZoneEntryPoint[] {
+    return [
+      { id: 'from-camp', position: this.#ground(DEN_MOUTH.campApproach.x, DEN_MOUTH.campApproach.y) },
+      { id: 'from-den', position: this.#ground(DEN_MOUTH.approach.x, DEN_MOUTH.approach.y) },
+      { id: 'spawn', position: this.#ground(HERO.x, HERO.y) },
+    ];
+  }
+
+  /** Back to the camp, and down into the Den. */
+  get portals(): readonly PortalSpec[] {
+    return [
+      {
+        id: 'moor-to-camp',
+        targetZone: 'encampment',
+        targetEntry: 'gate',
+        position: this.#ground(DEN_MOUTH.campPortal.x, DEN_MOUTH.campPortal.y),
+        radius: 2.8,
+        height: 3.5,
+        label: 'the Rogue Encampment',
+        verb: 'return to',
+      },
+      {
+        id: 'moor-to-den',
+        targetZone: 'denOfEvil',
+        targetEntry: 'cave-mouth',
+        position: this.#ground(DEN_MOUTH.portal.x, DEN_MOUTH.portal.y),
+        radius: 2.4,
+        height: 3.2,
+        label: 'the Den of Evil',
+      },
+    ];
+  }
+
+  /**
+   * The terrain heightfield and every prop collider on the moor.
+   *
+   * Sampled from the same {@link TerrainField} the visual mesh is displaced by,
+   * at the same segment count: at equal resolution the collider surface and the
+   * rendered surface are the same surface, and at unequal resolution they are
+   * a character whose feet sink into a ridge.
+   */
+  buildColliders(physics: PhysicsWorld): void {
+    physics.buildTerrain(this.field, TERRAIN_SIZE, this.#terrainSegments);
+    physics.buildSceneColliders(this.#root);
+  }
+
+  /** A zone-local point on the terrain surface. */
+  #ground(x: number, z: number): { x: number; y: number; z: number } {
+    return { x, y: this.field.heightAt(x, z), z };
+  }
+
   /* -- diagnostics -------------------------------------------------------- */
 
   get hero(): THREE.Object3D | null {
@@ -2020,35 +2277,6 @@ export class BloodMoor implements GameModule {
  * same treatment at half the strength — enough that he belongs in the world,
  * not so much that he stops being the figure in it.
  */
-interface WeatheringGrade {
-  /** How far the sampled albedo is dragged toward its own luminance, 0–1. */
-  readonly desaturation: number;
-  /**
-   * Multiplied onto the *dark* end of the desaturated albedo.
-   *
-   * See {@link weatherMaterial}: the tint is a two-stop ramp driven by the
-   * albedo's own luminance, not a constant. This is the cold stop.
-   */
-  readonly shadowTint: THREE.Color;
-  /** The warm stop of the same ramp, multiplied onto the light end. */
-  readonly lightTint: THREE.Color;
-  /**
-   * How hard residual red chroma is pulled back after grading, 0–1.
-   *
-   * 0 leaves the hue alone; 1 removes warm chroma entirely. The palette rule
-   * is that the fire is the only warm source, so props get most of this and the
-   * hero gets almost none.
-   */
-  readonly warmClamp: number;
-  /** Peak strength of the world-space soot/grime multiply, 0–1. */
-  readonly grime: number;
-  /** Peak strength of the up-facing dust / edge-wear lift, 0–1. */
-  readonly wear: number;
-  /** Added to 0.6x the source roughness. Nothing out here is polished. */
-  readonly roughnessFloor: number;
-  readonly envMapIntensity: number;
-}
-
 /**
  * How far every prop albedo is dragged toward its own luminance.
  *
@@ -2306,173 +2534,6 @@ function isGLTF(value: unknown): value is GLTFLike {
     'scene' in value &&
     (value as { scene: unknown }).scene instanceof THREE.Object3D
   );
-}
-
-/**
- * Rebuild one prop material as a weathered node material.
- *
- * The colour correction has to happen in the shader, not on `material.color`.
- * These packs put all of their colour in a palette atlas and leave the
- * base-colour *factor* white, so multiplying the factor — which is what this
- * function used to do — can darken a prop but can never desaturate one. And
- * saturation was the actual problem: the moor was full of salmon-pink barrels
- * and primary-green conifers, dark but fully chromatic, and the warm firelight
- * then pushed them the rest of the way into candy.
- *
- * So the material is promoted to a `MeshStandardNodeMaterial` and given an
- * explicit `colorNode`:
- *
- * ```
- *   albedo = texture(map) · material.color
- *   albedo  = texture(map) · material.color
- *   flat    = mix(albedo, luminance(albedo), desaturation)
- *   tinted  = flat · mix(shadowTint, lightTint, luminance(flat))
- *   grimed  = tinted · worldSootNoise + upFacingDust
- *   graded  = grey(grimed) + chroma(grimed) · warmClampMatrix
- * ```
- *
- * The reason this is safe — and the reason the previous author was right to be
- * nervous about it — is `TextureNode.generate`, which wraps every sample in
- * `colorSpaceToWorking(…, texture.colorSpace)`. The sRGB decode the built-in
- * map path applies is therefore applied here too, automatically. Skipping it
- * would roughly double the midtones, in the exact opposite direction from the
- * point of this pass, and would be invisible until measured.
- *
- * Promoting to a node material has a second, unplanned benefit: `#applyOcclusion`
- * only folds the GTAO buffer into `THREE.NodeMaterial` instances, so before
- * this change every prop in the scene was silently missing its contact
- * occlusion. Now they all have it.
- */
-function weatherMaterial(source: THREE.Material, grade: WeatheringGrade): THREE.Material {
-  // Duck-typed rather than `instanceof`: three's own cross-realm type tags
-  // cannot be defeated by a second copy of the library arriving through the
-  // example loaders, and a material that fell through this check would pass
-  // straight out unweathered — a bug whose only symptom is a colour that is
-  // subtly wrong, three layers away from its cause.
-  if (!isStandardLike(source)) return source.clone();
-
-  const clone = source.clone();
-  const node = new THREE.MeshStandardNodeMaterial();
-  // The same key-copy `NodeLibrary.fromMaterial` performs, which is three's own
-  // supported route from a loaded material to its node equivalent. Done against
-  // a *clone* so nothing mutable (`normalScale`, `color`) is aliased back into
-  // the `AssetManager`'s cache. The two casts are the boundary: `for…in` over a
-  // material is untyped by construction.
-  const from = clone as unknown as Record<string, unknown>;
-  const to = node as unknown as Record<string, unknown>;
-  for (const key in from) {
-    // Identity fields must stay the node material's own, or three's caches key
-    // two different materials to one entry.
-    if (key === 'uuid' || key === 'id' || key === 'version' || key === 'type') continue;
-    if (key in to) to[key] = from[key];
-  }
-
-  const map = node.map;
-  const factor = new THREE.Color().copy(clone.color);
-  const sampled = map === null ? vec4(1, 1, 1, 1) : texture(map);
-  const albedo = sampled.rgb.mul(vec3(factor.r, factor.g, factor.b));
-
-  // 1. Desaturate, lightly. See `WEATHERING_DESATURATION`.
-  const flattened = mix(albedo, vec3(luminance(albedo)), float(grade.desaturation)).toVar(
-    'weatherFlattened',
-  );
-
-  // 2. The two-stop tint. The ramp parameter is the albedo's *own* luminance,
-  //    so a prop's dark half and its light half get different hues rather than
-  //    different brightnesses of one hue. That is the entire difference between
-  //    a limited palette and a monochrome one, and it costs one `mix`.
-  // NB: every `toVar` name in this function is prefixed. TSL emits the name
-  // verbatim as a GLSL identifier, and `flat` — the obvious name for the
-  // desaturated albedo — is a reserved interpolation qualifier in GLSL ES 3.0.
-  // It compiles silently on the WebGPU/WGSL path and hard-fails the WebGL2
-  // fragment shader, which is a divergence between backends introduced by a
-  // variable name.
-  const key = saturate(luminance(flattened)).toVar('weatherKey');
-  const tinted = flattened
-    .mul(
-      mix(
-        vec3(grade.shadowTint.r, grade.shadowTint.g, grade.shadowTint.b),
-        vec3(grade.lightTint.r, grade.lightTint.g, grade.lightTint.b),
-        key,
-      ),
-    )
-    .toVar('weatherTinted');
-
-  // 3. Surface craft, in two world-space terms that cost four noise samples
-  //    between them and give the kit props the painterly variation their flat
-  //    atlas cells cannot.
-  //
-  //    - soot/grime: a two-octave world-space noise multiply. World space, not
-  //      UV space, so the pattern does not repeat per instance — fifty crates
-  //      cloned from one mesh stop reading as fifty copies of one crate.
-  //    - dust/wear: up-facing surfaces get a slight cold lift. This is the
-  //      cheapest legible substitute for curvature-driven edge wear: on the
-  //      chunky, hard-edged, large-facet KayKit silhouettes the top faces *are*
-  //      the worn edges, so an N·up term lands almost exactly where a curvature
-  //      map would and needs no extra vertex data.
-  const grimeSpace = positionWorld.mul(0.85);
-  const soot = mx_noise_float(grimeSpace)
-    .mul(0.5)
-    .add(mx_noise_float(grimeSpace.mul(3.3).add(vec3(19, 4, 7))).mul(0.28))
-    .add(0.5);
-  const grimed = tinted
-    .mul(mix(float(1), saturate(soot), float(grade.grime)))
-    .add(
-      vec3(0.055, 0.058, 0.066).mul(
-        float(grade.wear).mul(smoothstep(0.35, 0.98, normalWorldGeometry.y)),
-      ),
-    )
-    .toVar('weatherGrimed');
-
-  // 4. The warm clamp. Mixing toward luminance preserves hue *direction*, so a
-  //    salmon barrel desaturates into a paler salmon barrel and stays the most
-  //    chromatic warm thing in a frame whose whole premise is that the fire is
-  //    the only warm source. Scaling the red component of the residual chroma
-  //    vector — not the red channel of the colour — pulls warm props toward the
-  //    cold ambient while leaving cold ones and overall value untouched.
-  const grey = luminance(grimed);
-  const chroma = grimed.sub(vec3(grey));
-  const graded = vec3(grey).add(
-    vec3(
-      chroma.x.mul(float(1 - grade.warmClamp)),
-      chroma.y.mul(float(1 - grade.warmClamp * 0.35)),
-      chroma.z,
-    ),
-  );
-
-  // Alpha is forced to 1 and the material forced opaque. The kit atlases carry
-  // padding cells with alpha < 1, and any prop whose source material happened
-  // to arrive with `transparent: true` — which the key-copy above faithfully
-  // preserves — then punched a hole through itself. Nothing in this prop set is
-  // legitimately translucent, so the correct fix is to say so once here rather
-  // than to audit fifty-seven glTF materials.
-  node.colorNode = vec4(graded.max(vec3(0)), 1);
-  node.transparent = false;
-  node.opacity = 1;
-  node.alphaTest = 0;
-  node.depthWrite = true;
-  // The factor is folded into the node above; leaving it on would apply twice.
-  node.color.setRGB(1, 1, 1);
-
-  node.roughness = THREE.MathUtils.clamp(clone.roughness * 0.6 + grade.roughnessFloor, 0.5, 1);
-  node.metalness = Math.min(clone.metalness, 0.2);
-  // Trimmed so a bright overcast sky does not relight the props past the
-  // terrain they stand on.
-  node.envMapIntensity = grade.envMapIntensity;
-  node.name = `${source.name}.weathered`;
-  clone.dispose();
-  return node;
-}
-
-/** three's own cross-realm type tag for the standard/physical material family. */
-function isStandardLike(
-  material: THREE.Material,
-): material is THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
-  const tagged = material as unknown as {
-    isMeshStandardMaterial?: boolean;
-    isMeshPhysicalMaterial?: boolean;
-  };
-  return tagged.isMeshStandardMaterial === true || tagged.isMeshPhysicalMaterial === true;
 }
 
 function countRenderables(root: THREE.Object3D): number {

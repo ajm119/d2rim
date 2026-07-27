@@ -146,18 +146,57 @@ describe('standoffRadius', () => {
     }
   });
 
-  it('stops no further out than the swing can actually reach', () => {
-    // Measured against the real rig: during the authored window the nearest
-    // point of a skeleton's swinging arm sits 0.25 m outside the player's hit
-    // capsule at a 1.10 m separation, and lengthening the blade does not move
-    // it — the closest point is the elbow. So contact needs a stand-off of
-    // about 0.85 m or less. A regression that widens this disarms the enemy,
-    // which is invisible in a screenshot and fatal to the fight.
-    const CONTACT_LIMIT = 1.1 - 0.25;
+  it('stops no further out than every one of its swings can actually reach', () => {
+    // This is the guard for the phase-3 blocker in which enemy attacks dealt
+    // no damage at all for a whole phase.
+    //
+    // The old version of this test asserted a single hand-waved 0.85 m
+    // "contact limit" derived from watching one clip's elbow, and it passed
+    // throughout — because the thing it constrained (the stand-off) was never
+    // the problem. The problem was the *attack*: every variant's standard swing
+    // was authored onto `1H_Melee_Attack_Chop`, whose implied blade never gets
+    // past 0.66 m from the enemy's centre on any of the four rigs. The AI held
+    // 0.70 m, the hit window opened on time, the swept hitbox ran, and it swept
+    // empty air. Nothing in the code claimed a reach, so nothing could disagree.
+    //
+    // So the assertion is now per attack against a number measured from the
+    // GLB by `tools/measure-enemy-reach.mjs`. An attack retargeted onto a clip
+    // that cannot reach fails here instead of silently disarming the enemy.
+    for (const variant of SKELETON_VARIANTS) {
+      const profile = SKELETON_PROFILES[variant];
+      expect(profile).toBeDefined();
+      if (profile === undefined) continue;
+      const standoff = standoffRadius(profile);
+      for (const attack of profile.attacks) {
+        expect(
+          attack.reachDuringWindow,
+          `${variant}/${attack.id} reaches ${attack.reachDuringWindow} m but stands off ${standoff} m`,
+        ).toBeGreaterThan(standoff);
+      }
+    }
+  });
+
+  it('keeps a margin of error on top of the bare stand-off', () => {
+    // The enemy settles a few centimetres outside the ring (the pursuit stops
+    // when the remaining gap is under 0.05 m) and the player is free to back
+    // off mid-swing, so a reach that only just clears the stand-off is a reach
+    // that connects in a test and misses in play.
+    const MARGIN = 0.12;
     for (const variant of SKELETON_VARIANTS) {
       const profile = SKELETON_PROFILES[variant];
       if (profile === undefined) continue;
-      expect(standoffRadius(profile)).toBeLessThanOrEqual(CONTACT_LIMIT);
+      for (const attack of profile.attacks) {
+        expect(attack.reachDuringWindow - standoffRadius(profile)).toBeGreaterThanOrEqual(MARGIN);
+      }
+    }
+  });
+
+  it('never authors a damage window past the end of its own clip', () => {
+    for (const variant of SKELETON_VARIANTS) {
+      for (const attack of SKELETON_PROFILES[variant]?.attacks ?? []) {
+        expect(attack.window[1]).toBeLessThan(1);
+        expect(attack.window[1] - attack.window[0]).toBeGreaterThan(0.05);
+      }
     }
   });
 });

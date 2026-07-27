@@ -21,12 +21,20 @@
  * The consequence is that foot sliding becomes this module's problem rather
  * than the animator's, and it is solved by
  * {@link AnimationGraph.measureStrideDistance}: each locomotion clip is played
- * once at load and the travel of its planted feet is measured, giving the real
- * metres-per-cycle the pose covers. The mixer is then advanced at
- * `groundSpeed / blendedStride` cycles per second, so the planted foot moves
- * backward through the world at exactly the speed the world moves past the
- * character. Change the walk speed in `PlayerController` and the feet still do
- * not slide, because nothing here is a hand-tuned constant.
+ * once at load and the *backward travel of its feet while they are on the
+ * ground* is measured, giving the real metres-per-cycle the pose covers. The
+ * mixer is then advanced at `groundSpeed / blendedStride` cycles per second, so
+ * the planted foot moves backward through the world at exactly the speed the
+ * world moves past the character. Change the walk speed in `PlayerController`
+ * and the feet still do not slide, because nothing here is a hand-tuned
+ * constant.
+ *
+ * "While they are on the ground" is load-bearing and was the phase-3 bug: the
+ * first version measured each foot's total peak-to-peak excursion instead, and
+ * a run has a flight phase during which the body covers ground that no foot can
+ * account for. It under-reported this rig's run cycle by 54% and the character
+ * span its legs at twice the rate it needed. See
+ * {@link plantedTravelPerCycle}.
  *
  * The dodges' root translation is measured and exposed on the action handle so
  * a future dodge can drive the capsule from the clip, but it is *not* applied
@@ -84,6 +92,11 @@ export const CLIP_CANDIDATES = {
   'jump.land': ['Jump_Land'],
   attack: ['1H_Melee_Attack_Chop', 'Unarmed_Melee_Attack_Punch_A'],
   'attack.slice': ['1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal'],
+  // Distinct from `attack.slice` because the two slices sweep through very
+  // different volumes: the diagonal comes down across the body, the horizontal
+  // scythes level at chest height. An enemy that only owns "slice" cannot pick
+  // the one whose blade actually passes through the target.
+  'attack.sweep': ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Slice_Diagonal'],
   'attack.stab': ['1H_Melee_Attack_Stab', '2H_Melee_Attack_Stab'],
   'attack.heavy': ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
   'attack.spin': ['2H_Melee_Attack_Spin', '2H_Melee_Attack_Spinning'],
@@ -249,7 +262,15 @@ export interface AnimationGraphOptions {
    * Stride matching is exact inside this band and degrades gracefully outside
    * it. The upper bound is the honest admission that an asset's clips have a
    * stride the game's speeds may not agree with: push it too high and a run
-   * becomes a cartoon, cap it too low and the feet slide. Default `[0.4, 2.05]`.
+   * becomes a cartoon, cap it too low and the feet slide.
+   *
+   * Default `[0.5, 2.9]`. On the shipped Barbarian rig that covers the walk
+   * (1.25 m/s over a 0.56 m cycle → 2.25 c/s) and the run (4.4 m/s over a
+   * 1.97 m cycle → 2.23 c/s) exactly, and clips only at the top of the sprint,
+   * where 6.0 m/s wants 3.05 c/s and gets 2.9 — a 5% slide bought in exchange
+   * for the sprint not turning into a cartoon. 2.9 c/s is 2.3× the run clip's
+   * authored rate, which is about as far as time-scaling a gait can be pushed
+   * before the ankles start to read as vibration rather than as steps.
    */
   readonly cadenceRange?: readonly [number, number];
 }
@@ -313,6 +334,118 @@ export function stripRootMotion(clip: THREE.AnimationClip, rootNode: string): TH
     return new THREE.VectorKeyframeTrack(track.name, Array.from(track.times), Array.from(values));
   });
   return new THREE.AnimationClip(clip.name, clip.duration, tracks, clip.blendMode);
+}
+
+/** A sampled foot position. Only the planar components and the height matter. */
+export interface FootSample {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/**
+ * Metres of ground one animation cycle covers, from a single foot's trace.
+ *
+ * ### What this number has to be, and what it is not
+ *
+ * The playback rate that keeps a foot planted is `groundSpeed / S`, where `S`
+ * is the distance the *body* must travel in one cycle. `S` is fixed by one
+ * constraint and one only: while a foot is on the ground it must be
+ * stationary in the world, so the body has to advance at exactly the rate the
+ * foot is sliding backwards through body space. So
+ *
+ * ```
+ *   S = (backward travel of the foot, per unit of cycle phase, while planted)
+ * ```
+ *
+ * The previous implementation used each foot's **peak-to-peak excursion**,
+ * summed over both feet. That is only equal to `S` when each foot is on the
+ * ground for exactly half the cycle. Measured on the shipped Barbarian rig:
+ *
+ * | clip        | Σ peak-to-peak | stance travel per cycle | error  |
+ * |-------------|----------------|-------------------------|--------|
+ * | `Walking_A` | 0.62 m         | 0.56 m                  | +12%   |
+ * | `Running_A` | 0.93 m         | 1.97 m                  | **−53%** |
+ *
+ * The run is the killer. A run has a flight phase — for most of the cycle
+ * *neither* foot is down, and the body covers that ground for free. Peak-to-peak
+ * cannot see any of it, so it reported a 0.93 m stride for a cycle that really
+ * carries the body 1.97 m, the graph then span the run clip at more than twice
+ * the rate it needed, and the planted foot shot backwards. That is the bulk of
+ * "severe foot sliding": a 2.1× error in one number.
+ *
+ * ### The estimator
+ *
+ * 1. Call a sample *planted* when the foot is in the bottom `plantBand` of its
+ *    own vertical range. Relative, so it works on a clip with a 3 cm shuffle
+ *    and on one with a 30 cm knee lift.
+ * 2. Take the dominant travel direction across the planted samples. Whichever
+ *    way the clip walks — forward, backwards, sideways — the planted foot's net
+ *    motion points the opposite way, so this needs no axis convention.
+ * 3. Report the **median** per-phase speed along that direction, over planted
+ *    samples that are actually moving along it.
+ *
+ * The median is what makes step 1's threshold harmless. Samples caught either
+ * side of the true plant are still descending or already lifting, and they are
+ * both a minority and outliers; a mean would be dragged by them (which is the
+ * failure the old comment on this function correctly predicted and then dodged
+ * by measuring the wrong thing entirely).
+ *
+ * @param trace one cycle of foot positions in body space, metres. The last
+ *   sample may be a duplicate of the first; a wrapped cycle is expected.
+ * @param plantBand fraction of the foot's vertical range counted as planted.
+ * @returns metres per cycle, or 0 when the trace has no usable stance.
+ */
+export function plantedTravelPerCycle(
+  trace: readonly FootSample[],
+  plantBand = 0.3,
+): number {
+  if (trace.length < 4) return 0;
+  // The trace wraps: the final sample is the same pose as the first, so there
+  // are `length - 1` real intervals and each spans `1 / (length - 1)` of phase.
+  const intervals = trace.length - 1;
+
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const sample of trace) {
+    if (sample.y < minY) minY = sample.y;
+    if (sample.y > maxY) maxY = sample.y;
+  }
+  if (!Number.isFinite(minY) || !Number.isFinite(maxY)) return 0;
+  const ceiling = minY + Math.max(1e-6, (maxY - minY) * plantBand);
+
+  const deltas: Array<{ x: number; z: number }> = [];
+  let sumX = 0;
+  let sumZ = 0;
+  for (let i = 0; i < intervals; i++) {
+    const a = trace[i];
+    const b = trace[i + 1];
+    if (a === undefined || b === undefined || a.y > ceiling) continue;
+    const delta = { x: b.x - a.x, z: b.z - a.z };
+    deltas.push(delta);
+    sumX += delta.x;
+    sumZ += delta.z;
+  }
+  if (deltas.length < 2) return 0;
+
+  const length = Math.hypot(sumX, sumZ);
+  if (length < 1e-9) return 0;
+  const ux = sumX / length;
+  const uz = sumZ / length;
+
+  const rates: number[] = [];
+  for (const delta of deltas) {
+    const along = (delta.x * ux + delta.z * uz) * intervals;
+    if (along > 1e-6) rates.push(along);
+  }
+  if (rates.length === 0) return 0;
+  rates.sort((a, b) => a - b);
+  const middle = rates.length >> 1;
+  const median =
+    rates.length % 2 === 1
+      ? (rates[middle] ?? 0)
+      : ((rates[middle - 1] ?? 0) + (rates[middle] ?? 0)) / 2;
+  return median > 0 ? median : 0;
 }
 
 /** Total horizontal travel of a node's position track, in track units. */
@@ -460,7 +593,7 @@ export class AnimationGraph {
     this.#root = root;
     this.#mixer = new THREE.AnimationMixer(root);
     this.#blend = options.blend ?? DEFAULT_BLEND_PARAMS;
-    this.#cadence = options.cadenceRange ?? [0.4, 2.05];
+    this.#cadence = options.cadenceRange ?? [0.5, 2.9];
 
     this.#nodeNames = collectNodeNames(root);
     // Longest first so `splitTrackName` matches `hand.l` before `hand`.
@@ -529,6 +662,26 @@ export class AnimationGraph {
     const clipName = this.#resolved.get(state);
     if (clipName === undefined) return 0;
     return this.#entries.get(clipName)?.stride ?? 0;
+  }
+
+  /**
+   * The ground speed a locomotion clip covers when played at its *authored*
+   * rate, m/s — its measured stride over its own duration.
+   *
+   * This is the speed at which the clip needs no time-scaling at all, so it is
+   * the right place to put the top of a blend ramp: below it the pose is being
+   * blended down toward a slower gait, above it the pose is one clip and the
+   * extra speed is spent entirely on playback rate. A ramp that instead runs
+   * from the walk speed all the way to the run speed leaves the character in a
+   * two-clip blend across almost his whole usable range, and a blended stance
+   * plants worse than either clip does alone.
+   */
+  naturalSpeedForState(state: string): number {
+    const clipName = this.#resolved.get(state);
+    if (clipName === undefined) return 0;
+    const entry = this.#entries.get(clipName);
+    if (entry === undefined || entry.duration <= 1e-4) return 0;
+    return entry.stride / entry.duration;
   }
 
   /** Measured metres-per-cycle for each locomotion clip. Diagnostics. */
@@ -778,18 +931,7 @@ export class AnimationGraph {
    * Measure how far a clip carries the body in one animation cycle.
    *
    * The clip is stepped through on a throwaway mixer and both feet are traced
-   * in the character's own space. The estimator is each foot's **peak-to-peak
-   * excursion**: over one cycle a foot swings from its furthest-forward pose to
-   * its furthest-back pose and returns, and that excursion is exactly the step
-   * length, because while the foot is planted the ground is what moves. One
-   * cycle contains one step per foot, so the two excursions sum to the stride.
-   *
-   * Peak-to-peak rather than "integrate the motion while the heel is down",
-   * which is the obvious alternative and is worse: it needs a plant threshold,
-   * and every sample either side of the threshold that is still descending gets
-   * counted, which over-reports the stride by 20–25%. This version has no
-   * threshold and no tuning constant, and it is direction-agnostic, so it
-   * measures a strafe as correctly as a run.
+   * in the character's own space, then handed to {@link plantedTravelPerCycle}.
    *
    * Returns 0 when the measurement is implausible, which makes the caller fall
    * back to the authored default rather than trusting a number that would set
@@ -830,25 +972,16 @@ export class AnimationGraph {
     mixer.stopAllAction();
     mixer.uncacheRoot(this.#root);
 
-    let stride = 0;
+    let total = 0;
+    let counted = 0;
     for (const trace of traces) {
-      if (trace.length < 3) continue;
-      // Widest planar separation between any two poses in the cycle. Only ~50
-      // samples, so the quadratic scan is free and it needs no assumption about
-      // which axis the clip travels along.
-      let excursion = 0;
-      for (let i = 0; i < trace.length; i++) {
-        const a = trace[i];
-        if (a === undefined) continue;
-        for (let j = i + 1; j < trace.length; j++) {
-          const b = trace[j];
-          if (b === undefined) continue;
-          excursion = Math.max(excursion, Math.hypot(b.x - a.x, b.z - a.z));
-        }
-      }
-      stride += excursion;
+      const rate = plantedTravelPerCycle(trace);
+      if (rate <= 0) continue;
+      total += rate;
+      counted++;
     }
-
+    if (counted === 0) return 0;
+    const stride = total / counted;
     return stride >= 0.3 && stride <= 5 ? stride : 0;
   }
 

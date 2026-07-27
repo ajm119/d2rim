@@ -7,7 +7,6 @@
 
 import * as THREE from 'three/webgpu';
 
-import { EnemyDirector } from './ai/EnemyDirector';
 import { AssetManager } from './assets/AssetManager';
 import { CameraRig } from './character/CameraRig';
 import { FootIK } from './character/FootIK';
@@ -17,11 +16,15 @@ import { CombatFeedback } from './combat/Feedback';
 import { Engine } from './core/Engine';
 import type { GameContext } from './core/types';
 import { PhysicsWorld } from './physics/PhysicsWorld';
-import { WorldColliders } from './physics/WorldColliders';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
 import { BloodMoor } from './scene/BloodMoor';
+import { DenOfEvil } from './scene/DenOfEvil';
+import { RogueEncampment } from './scene/RogueEncampment';
 import { CombatHud } from './ui/CombatHud';
 import { DebugOverlay } from './ui/DebugOverlay';
+import { PortalSystem } from './world/Portal';
+import type { Zone } from './world/Zone';
+import { ZoneManager } from './world/ZoneManager';
 
 /**
  * The handle headless capture and automated tests drive the game through.
@@ -57,7 +60,18 @@ export interface D2RimGlobal {
    * is a `PostStack`, where `services.get('render.post')` needs a cast.
    */
   readonly render: FrameGraph;
-  readonly scene: BloodMoor;
+  /**
+   * The **active zone**.
+   *
+   * Was a `BloodMoor` instance for the whole session; is now whichever zone
+   * `ZoneManager` currently has loaded, and is `null` while a transition is in
+   * flight. Capture shots that reach for `d2rim.scene.field` or
+   * `d2rim.scene.constructor.defaultCamera` therefore need the moor to be the
+   * loaded zone — see `?zone=` below.
+   */
+  readonly scene: Zone | null;
+  /** Zone registry and travel. `d2rim.zones.travelTo('denOfEvil')` from a shot. */
+  readonly zones: ZoneManager;
 }
 
 declare global {
@@ -106,7 +120,24 @@ const canvas = requireCanvas();
  * capture time depends on how long the harness took to issue its next command.
  * Suppressing autostart makes the caller the sole source of frame advancement.
  */
-const autoStart = new URLSearchParams(window.location.search).get('autostart') !== '0';
+const params = new URLSearchParams(window.location.search);
+const autoStart = params.get('autostart') !== '0';
+
+/**
+ * `?zone=<id>` chooses the starting zone. Default: the Rogue Encampment.
+ *
+ * The act now has three zones and the hub is where a session begins, so `/`
+ * boots into the camp. The one thing that changes for tooling is that
+ * `d2rim.scene` is the *active* zone rather than always a `BloodMoor`: the shots
+ * in `tools/capture/shots.json` reach for `d2rim.scene.field.heightAt` and
+ * `d2rim.scene.constructor.defaultCamera`, so they need `?zone=bloodMoor`, which
+ * restores exactly the previous boot state.
+ */
+const startZone = params.get('zone') ?? 'encampment';
+/** `?enemies=0` boots the zones unpopulated, for capture and for drive tests. */
+const enemies = params.get('enemies') !== '0';
+/** `?fade=0` removes the transition wait, which a headless harness does not want. */
+const fadeSeconds = params.get('fade') === '0' ? 0 : 0.35;
 
 const engine = new Engine({ canvas, autoStart });
 
@@ -117,30 +148,53 @@ const engine = new Engine({ canvas, autoStart });
 //   - AssetManager first: everything downstream resolves textures and models
 //     through it, and it must have registered before any `init` asks for it.
 //   - the frame graph next: twelve render modules in dependency order.
-//   - content last, so the scene resolves a fully-built renderer.
+//   - content last, so the zones resolve a fully-built renderer.
 const render = buildFrameGraph();
-// `driveCamera: false` and `controlHero: false` hand the two things the scene
-// used to own — the camera pose and the Barbarian's mixer — to the gameplay
-// modules. The scene still builds, scales and weathers the figure; it just no
-// longer animates him, because two mixers on one skeleton cannot work.
-const scene = new BloodMoor({
-  settings: render.settings,
-  driveCamera: false,
-  controlHero: false,
-});
+
+/**
+ * The act's zones, registered as factories.
+ *
+ * Registration is free — nothing is built and no asset is fetched until a zone
+ * is travelled to — so all three are declared here and exactly one of them is
+ * ever resident.
+ *
+ * `driveCamera: false` and `controlHero: false` hand the two things the Blood
+ * Moor used to own — the camera pose and the Barbarian's mixer — to the gameplay
+ * modules. `loadHero: false` is the zone-system addition: the player module owns
+ * the figure and keeps it across transitions, so the scene must not build a
+ * second one.
+ */
+const zones = new ZoneManager({ startZone, startEntry: '', fadeSeconds, enemies });
+zones.register('encampment', () => new RogueEncampment({ settings: render.settings }));
+zones.register(
+  'bloodMoor',
+  () =>
+    new BloodMoor({
+      settings: render.settings,
+      driveCamera: false,
+      controlHero: false,
+      loadHero: false,
+    }),
+);
+zones.register('denOfEvil', () => new DenOfEvil());
 
 engine.add(new AssetManager());
 for (const module of render.modules) engine.add(module);
-engine.add(scene);
 
 // Gameplay, in dependency order. Physics first so its service exists before
-// anything resolves it; colliders next, because they read a fully built scene;
-// then the player, whose capsule needs a world to stand on; then foot IK, which
-// re-poses the legs after the animation graph has run; then the camera, which
-// must observe a settled character. `lateUpdate` order follows registration
-// order, so this list *is* the frame order.
+// anything resolves it; the zone manager next, because its zones build
+// colliders against that world during their own load and the player asks where
+// the ground is immediately afterward; then the player, whose capsule needs a
+// world to stand on; then foot IK, which re-poses the legs after the animation
+// graph has run; then the camera, which must observe a settled character.
+// `lateUpdate` order follows registration order, so this list *is* the frame
+// order.
 engine.add(new PhysicsWorld());
-engine.add(new WorldColliders());
+// Replaces the old `WorldColliders` module, which read one hard-coded scene
+// module by name. Zones build their own colliders now, and the manager tracks
+// and reclaims them per zone — a per-zone lifetime that a single global collider
+// build cannot express.
+engine.add(zones);
 // Combat *before* the player: `PlayerController.init` checks for a registered
 // `combat` service and stands its placeholder attack input down when it finds
 // one, so the service has to exist by then. Combat binds to the player lazily
@@ -149,12 +203,14 @@ engine.add(new CombatSystem());
 engine.add(new PlayerController());
 engine.add(new FootIK());
 engine.add(new CameraRig());
-// Enemies after the camera so their models are posed against a settled frame.
-engine.add(new EnemyDirector());
 // Feedback last of the gameplay modules: its `lateUpdate` adds the camera
 // shake, and it must run after `CameraRig` has placed the camera or the rig
 // simply overwrites it.
 engine.add(new CombatFeedback());
+// Portals read the player's settled position, so they follow him. Their volumes
+// are built by the zone manager, inside its collider-tracking window; this
+// module only owns the prompt and the interact key.
+engine.add(new PortalSystem());
 
 engine.add(new CombatHud());
 engine.add(new DebugOverlay());
@@ -179,7 +235,10 @@ window.__d2rim = {
   ready,
   three: THREE,
   render,
-  scene,
+  get scene(): Zone | null {
+    return zones.active;
+  },
+  zones,
 };
 
 // Vite HMR: without an explicit teardown the old engine keeps its rAF loop and
