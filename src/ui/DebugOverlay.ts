@@ -64,7 +64,8 @@
 
 import { AssetManagerKey } from '../assets/AssetManager';
 import type { FrameStatsSnapshot } from '../core/FrameStats';
-import type { GameContext, GameModule } from '../core/types';
+import type { GameContext, GameModule, GpuTimerState } from '../core/types';
+import { describeRenderFlags, renderFlags } from '../render/DebugFlags';
 import { collectMemoryReport } from '../render/MemoryReport';
 import { PostStackKey, type PostStack } from '../render/post/PostStack';
 import { gpuErrorReport } from '../render/RendererFactory';
@@ -101,6 +102,58 @@ export function statsRequested(search?: string): boolean {
   const query = search ?? (typeof window === 'undefined' ? '' : window.location.search);
   const params = new URLSearchParams(query);
   return params.get('stats') === '1' || params.get('mem') === '1';
+}
+
+/** Inputs to {@link gpuTimeLabel}. Named so the call site reads as a sentence. */
+export interface GpuLabelInput {
+  /** Whether any frame in the window carried a real timer-query measurement. */
+  readonly gpuAvailable: boolean;
+  /** Median GPU milliseconds, meaningful only when `gpuAvailable`. */
+  readonly gpuMs: number;
+  /** What the renderer decided about timer queries at construction. */
+  readonly state: GpuTimerState | undefined;
+  /** Whether the expanded readout (and therefore the query pool) was asked for. */
+  readonly statsRequested: boolean;
+  /** Whether a resolve attempt has already come back empty. */
+  readonly refused: boolean;
+}
+
+/**
+ * What to print after `gpu`, and specifically *never* an ellipsis for a device
+ * that will never answer.
+ *
+ * ### The bug this replaces
+ *
+ * The previous version fell through to `…` in every case that was not a
+ * resolved measurement, and on the reporter's machine it printed `…` for the
+ * entire session. It reads as "loading". It meant "impossible", and the chain
+ * that produced it is worth writing down because every link looks reasonable:
+ *
+ * 1. `?stats=1` asks three for `trackTimestamp`.
+ * 2. `WebGLBackend.initTimestampQuery` returns early without
+ *    `EXT_disjoint_timer_query_webgl2`, so no timestamp query pool is created.
+ * 3. `Backend.resolveTimestampsAsync` hits `if (!queryPool) return;` and
+ *    resolves with `undefined`, **never writing `info.render.timestamp`**.
+ * 4. three initialises that field to `0` and leaves it there.
+ * 5. `resolveGpuTime` read the 0, found it finite, and reported a successful
+ *    measurement of zero — four times a second, forever.
+ * 6. `FrameStats.gpuAvailable` only flips on a sample greater than zero, so it
+ *    stayed false, and the overlay's three-way display fell through to
+ *    "pending".
+ *
+ * The renderer now settles the question once at construction (see
+ * `RendererHandle.gpuTimer`), so the states are genuinely distinguishable and
+ * only a device that *can* answer and has not yet is ever spelled with an
+ * ellipsis. A diagnostic that says "loading" when it means "impossible" costs
+ * the reader every minute they spend waiting for it.
+ */
+export function gpuTimeLabel(input: GpuLabelInput): string {
+  if (input.gpuAvailable) return `${input.gpuMs.toFixed(1)} ms`;
+  if (!input.statsRequested || input.state === 'off') return 'off (?stats=1)';
+  if (input.state === 'unsupported' || input.refused) {
+    return 'n/a — timer unavailable, try ?gpusync=1';
+  }
+  return 'pending…';
 }
 
 interface RendererSizeProbe {
@@ -279,7 +332,11 @@ export class DebugOverlay implements GameModule {
       // through the fixed-step clamp. See the module header.
       `fps    ${frames.fps.toFixed(1).padStart(5)}  p50 ${frames.p50Ms.toFixed(1)} ms  ` +
         `p95 ${frames.p95Ms.toFixed(1)} ms (${frames.fpsLow.toFixed(1)} fps)`,
-      `worst  ${frames.maxMs.toFixed(1)} ms over ${frames.samples} frames`,
+      // Which frame, not just how bad. A 25-second stall at frame 3 is a
+      // shader compile or a texture upload; the same stall at frame 400 is not,
+      // and the overlay used to make those two indistinguishable.
+      `worst  ${frames.maxMs.toFixed(1)} ms at frame ${frames.maxFrame} ` +
+        `(over ${frames.samples} frames)`,
       `frame  ${ctx.time.frame}`,
       // Two sizes, because only one of them costs anything.
       //
@@ -301,16 +358,36 @@ export class DebugOverlay implements GameModule {
       // update+render is the browser blocking before it grants the next
       // animation frame, i.e. the frame is GPU-bound.
       `time   update ${frames.updateMs.toFixed(1)} ms  render ${frames.renderMs.toFixed(1)} ms  ` +
-        `gpu ${
-          frames.gpuAvailable
-            ? `${frames.gpuMs.toFixed(1)} ms`
-            : !this.#stats
-              ? 'off (?stats=1)'
-              : this.#gpuTimerUnavailable
-                ? 'n/a'
-                : '…'
-        }`,
+        `gpu ${gpuTimeLabel({
+          gpuAvailable: frames.gpuAvailable,
+          gpuMs: frames.gpuMs,
+          state: ctx.renderer.gpuTimer,
+          statsRequested: this.#stats,
+          refused: this.#gpuTimerUnavailable,
+        })}`,
     ];
+
+    // What the frame cost that neither timer saw. On a GPU-bound frame this is
+    // the browser blocking before it will grant the next animation frame, and
+    // stating it as its own line is the difference between a reader inferring
+    // the diagnosis and being handed it.
+    const unaccounted = frames.p50Ms - frames.updateMs - frames.renderMs - frames.syncMs;
+    if (frames.p50Ms > 0 && unaccounted > 1) {
+      lines.push(
+        `blocked ${unaccounted.toFixed(1)} ms/frame unaccounted ` +
+          `(${((unaccounted / frames.p50Ms) * 100).toFixed(0)}% — GPU or compositor)`,
+      );
+    }
+    if (frames.syncAvailable) {
+      lines.push(`gpusync ${frames.syncMs.toFixed(1)} ms forced readback stall (?gpusync=1)`);
+    }
+
+    // The configuration this frame time was measured under. A screenshot with
+    // no record of which systems were switched off is not a measurement, and
+    // the whole point of the kill switches is that the numbers come back from
+    // someone else's laptop.
+    const flags = renderFlags();
+    lines.push(`flags  ${describeRenderFlags(flags)}`);
 
     // The clamp, stated separately and only when it is doing something. This
     // is *not* the frame time; it says simulation time is falling behind wall
@@ -357,9 +434,20 @@ export class DebugOverlay implements GameModule {
     const fog = ctx.services.tryGet<VolumetricsService>(VolumetricsKey);
     if (fog !== undefined) {
       const s = fog.stats;
+      // Whether the fog is *composited*, which is a different question from
+      // which mode it would use — and the one that decides whether it costs
+      // anything. `LightShaftsPass` is the only consumer of
+      // `Volumetrics.createResolveNode`, and it is a `high`+ pass, so at the
+      // `medium` tier the ray march is never built and never runs. The overlay
+      // reported `fog raymarch noise=on` regardless, which reads as "a
+      // per-pixel ray march is running" and sent this investigation straight at
+      // a pass that was not in the frame.
+      const composited =
+        post !== undefined && post.passes.some((pass) => pass.id === 'lightshafts');
       lines.push(
         `fog    ${s.mode} noise=${s.detailNoise ? 'on' : 'off'} ` +
-          `dispatch=${s.froxelDispatches} scope=${s.errorScopeFramesLeft}` +
+          `dispatch=${s.froxelDispatches} scope=${s.errorScopeFramesLeft} ` +
+          `composited=${composited ? 'yes' : 'NO (no consumer pass)'}` +
           (s.froxelFailed ? ' FELL BACK' : ''),
       );
     }
@@ -384,6 +472,12 @@ export class DebugOverlay implements GameModule {
    */
   #pollGpuTime(ctx: GameContext): void {
     if (!this.#stats || this.#gpuTimerUnavailable || this.#gpuResolveInFlight) return;
+    // Settled at construction, so a device with no extension is never asked at
+    // all rather than being asked four times a second forever.
+    if (ctx.renderer.gpuTimer !== undefined && ctx.renderer.gpuTimer !== 'available') {
+      this.#gpuTimerUnavailable = true;
+      return;
+    }
     const resolve = ctx.renderer.resolveGpuTime;
     if (typeof resolve !== 'function') {
       this.#gpuTimerUnavailable = true;

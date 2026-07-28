@@ -135,7 +135,68 @@ export interface RendererHandle {
    * it, a frame-time number can only say that something is slow.
    */
   resolveGpuTime?(): Promise<number | null>;
+
+  /**
+   * Why {@link resolveGpuTime} will or will not produce a number, decided once
+   * at construction rather than inferred from a stream of nulls.
+   *
+   * ### Why this had to become an explicit state
+   *
+   * The overlay printed `gpu …` forever on the machine under investigation, and
+   * that ellipsis was read — reasonably — as "still resolving". It was not. It
+   * was a false negative with a very specific cause:
+   *
+   * `WebGLBackend.initTimestampQuery` returns early unless
+   * `EXT_disjoint_timer_query_webgl2` is present, so the timestamp query *pool*
+   * is never created. `Backend.resolveTimestampsAsync` then hits its
+   * `if (!queryPool) return;` and resolves with `undefined` **without writing
+   * `info.render.timestamp`** — which three initialises to `0` and leaves
+   * there. `resolveGpuTime` read that 0, decided `Number.isFinite(0)` was a
+   * successful measurement, and handed 0 to `FrameStats` every quarter second.
+   * `FrameStats.gpuAvailable` only flips on a sample greater than zero, so it
+   * stayed false, and the overlay's three-way `available / unavailable /
+   * pending` display fell through to `pending` in perpetuity.
+   *
+   * A diagnostic that says "loading" when it means "impossible" is worse than
+   * one that says nothing, because it costs the reader the time they spend
+   * waiting for it. The extension is now probed directly at construction —
+   * `renderer.hasFeature('timestamp-query')`, which three maps onto exactly
+   * that extension for the WebGL2 backend — and the answer is reported.
+   *
+   * - `'available'`  — queries are on and a number is coming.
+   * - `'unsupported'` — the device or browser has no timer query. Common:
+   *   Chromium gates `EXT_disjoint_timer_query_webgl2` for the timing side
+   *   channel it is, and hardened builds such as Brave gate it harder.
+   * - `'off'` — timestamps were never requested (no `?stats=1`).
+   */
+  readonly gpuTimer?: GpuTimerState;
+
+  /**
+   * Additive extension. How many render pipelines the renderer has compiled so
+   * far, or 0 where the backend does not expose a countable cache.
+   *
+   * The one measurement that distinguishes "a 25-second frame was shader
+   * compilation" from "a 25-second frame was something else": if the count
+   * climbs across the stall, it was compilation.
+   */
+  programCount?(): number;
+
+  /**
+   * Additive extension. Compile every pipeline the scene needs, up front.
+   *
+   * Called on the loading screen, where a multi-second stall is expected. See
+   * the implementation in `render/RendererFactory` for why lazy compilation is
+   * the leading explanation for a multi-second frame in an otherwise steady
+   * (if slow) session.
+   */
+  warmup?(
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+  ): Promise<{ millis: number; programs: number; before: number }>;
 }
+
+/** See {@link RendererHandle.gpuTimer}. */
+export type GpuTimerState = 'available' | 'unsupported' | 'off';
 
 /** Raw RGBA8 pixel readback produced by {@link RendererHandle.captureFrame}. */
 export interface CapturedFrame {

@@ -19,8 +19,10 @@ function sample(rawMs: number, extra: Partial<FrameSample> = {}): FrameSample {
     updateMs: 0,
     renderMs: 0,
     gpuMs: 0,
+    syncMs: 0,
     clamped: false,
     starved: false,
+    frame: 0,
     ...extra,
   };
 }

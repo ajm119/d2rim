@@ -61,10 +61,20 @@ export interface FrameSample {
   readonly renderMs: number;
   /** GPU time from a timer query, or 0 when unavailable. */
   readonly gpuMs: number;
+  /**
+   * Wall time of the forced synchronous readback under `?gpusync=1`, or 0.
+   *
+   * See `Engine`'s `#gpuSyncProbe`. This is not GPU time; it is how long the
+   * main thread had to sit still before the driver would return one pixel, and
+   * on a GPU-bound frame that is a lower bound on the queued work.
+   */
+  readonly syncMs: number;
   /** Whether the fixed-step clamp truncated this frame's delta. */
   readonly clamped: boolean;
   /** Whether the fixed-step accumulator dropped simulation backlog. */
   readonly starved: boolean;
+  /** `TimeState.frame` this sample came from, so the worst frame can be named. */
+  readonly frame: number;
 }
 
 /** Aggregated view over the rolling window. All times in milliseconds. */
@@ -91,6 +101,19 @@ export interface FrameStatsSnapshot {
   readonly gpuMs: number;
   /** Whether any sample in the window carried a GPU timing. */
   readonly gpuAvailable: boolean;
+  /** Median forced-readback stall under `?gpusync=1`, or 0. */
+  readonly syncMs: number;
+  /** Whether any sample carried a forced-readback measurement. */
+  readonly syncAvailable: boolean;
+  /**
+   * The frame number of {@link maxMs}.
+   *
+   * Present because "worst 25625.1 ms over 91 frames" is not actionable and
+   * "worst 25625.1 ms at frame 3" is: a multi-second stall in the first handful
+   * of frames is shader compilation or a texture upload, and the same stall at
+   * frame 400 is not.
+   */
+  readonly maxFrame: number;
   /** How many frames in the window hit the fixed-step delta clamp. */
   readonly clampedFrames: number;
   /** How many frames in the window dropped simulation backlog. */
@@ -109,6 +132,9 @@ const EMPTY: FrameStatsSnapshot = {
   renderMs: 0,
   gpuMs: 0,
   gpuAvailable: false,
+  syncMs: 0,
+  syncAvailable: false,
+  maxFrame: 0,
   clampedFrames: 0,
   starvedFrames: 0,
 };
@@ -145,6 +171,8 @@ export class FrameStats {
   readonly #update: Float64Array;
   readonly #render: Float64Array;
   readonly #gpu: Float64Array;
+  readonly #sync: Float64Array;
+  readonly #frame: Float64Array;
   readonly #clamped: Uint8Array;
   readonly #starved: Uint8Array;
 
@@ -158,6 +186,8 @@ export class FrameStats {
     this.#update = new Float64Array(this.capacity);
     this.#render = new Float64Array(this.capacity);
     this.#gpu = new Float64Array(this.capacity);
+    this.#sync = new Float64Array(this.capacity);
+    this.#frame = new Float64Array(this.capacity);
     this.#clamped = new Uint8Array(this.capacity);
     this.#starved = new Uint8Array(this.capacity);
   }
@@ -183,6 +213,8 @@ export class FrameStats {
     this.#update[i] = clean(sample.updateMs);
     this.#render[i] = clean(sample.renderMs);
     this.#gpu[i] = clean(sample.gpuMs);
+    this.#sync[i] = clean(sample.syncMs);
+    this.#frame[i] = sample.frame;
     this.#clamped[i] = sample.clamped ? 1 : 0;
     this.#starved[i] = sample.starved ? 1 : 0;
 
@@ -200,21 +232,32 @@ export class FrameStats {
     const update: number[] = [];
     const render: number[] = [];
     const gpu: number[] = [];
+    const sync: number[] = [];
     let clampedFrames = 0;
     let starvedFrames = 0;
     let gpuAvailable = false;
+    let syncAvailable = false;
     let maxMs = 0;
+    let maxFrame = 0;
 
     for (let i = 0; i < n; i++) {
       const r = this.#raw[i] ?? 0;
       raw.push(r);
-      if (r > maxMs) maxMs = r;
+      if (r > maxMs) {
+        maxMs = r;
+        maxFrame = this.#frame[i] ?? 0;
+      }
       update.push(this.#update[i] ?? 0);
       render.push(this.#render[i] ?? 0);
       const g = this.#gpu[i] ?? 0;
       if (g > 0) {
         gpuAvailable = true;
         gpu.push(g);
+      }
+      const s = this.#sync[i] ?? 0;
+      if (s > 0) {
+        syncAvailable = true;
+        sync.push(s);
       }
       if (this.#clamped[i] === 1) clampedFrames++;
       if (this.#starved[i] === 1) starvedFrames++;
@@ -225,6 +268,7 @@ export class FrameStats {
     update.sort(ascending);
     render.sort(ascending);
     gpu.sort(ascending);
+    sync.sort(ascending);
 
     const p50Ms = percentile(raw, 0.5);
     const p95Ms = percentile(raw, 0.95);
@@ -241,6 +285,9 @@ export class FrameStats {
       renderMs: percentile(render, 0.5),
       gpuMs: percentile(gpu, 0.5),
       gpuAvailable,
+      syncMs: percentile(sync, 0.5),
+      syncAvailable,
+      maxFrame,
       clampedFrames,
       starvedFrames,
     };

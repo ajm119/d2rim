@@ -117,7 +117,7 @@
 import * as THREE from 'three/webgpu';
 
 import { trackRenderTarget } from '../MemoryReport';
-import { texture as textureNodeFactory } from 'three/tsl';
+import { texture as textureNodeFactory, uniform, vec4 } from 'three/tsl';
 
 import { serviceKey } from '../../core/ServiceLocator';
 import type {
@@ -132,6 +132,7 @@ import { unpackRows } from '../RendererFactory';
 import { BloomPass, type BloomOptions } from './Bloom';
 import { ColorGrade, type ColorGradeOptions } from './ColorGrade';
 import { MotionVectors, MotionVectorsKey, type MotionVectorsOptions } from './Motion';
+import { safeNodeName } from './nodeNames';
 import { FxaaPass, TAAPass, type TAAOptions } from './TAA';
 import { CompositePass, type TonemapOptions } from './Tonemap';
 
@@ -578,6 +579,22 @@ export class PostStack implements GameModule {
   /** Blit material for the degenerate "nothing is enabled" path. */
   #copyMaterial: THREE.NodeMaterial | null = null;
   #copyTexture: THREE.Node | null = null;
+  #copyExposure: THREE.Node | null = null;
+
+  /**
+   * Debug kill switches, which outrank the tier table.
+   *
+   * Stored rather than assigned straight onto the passes because `#applyTier`
+   * re-derives `bloom.enabled` and `fxaa.enabled` from `TIERS` on every quality
+   * change and at `init` — so a caller that set `post.bloom.enabled = false`
+   * before `init` would find bloom quietly back on by the first frame. Exactly
+   * the class of "the flag did nothing" failure these switches exist to avoid.
+   */
+  readonly #overrides: { enabled: boolean | null; bloom: boolean | null; fxaa: boolean | null } = {
+    enabled: null,
+    bloom: null,
+    fxaa: null,
+  };
 
   /** Mutable per-pass frame descriptor; identity is stable. */
   readonly #frame: {
@@ -723,6 +740,31 @@ export class PostStack implements GameModule {
     return this.#antiAlias === 'auto' ? TIERS[this.#quality].antiAlias : this.#antiAlias;
   }
 
+  /**
+   * Force passes on or off regardless of the tier. `undefined` leaves a switch
+   * alone; there is deliberately no way to *re-enable* something the tier does
+   * not support, because that is a quality decision and this is a debug one.
+   *
+   * Safe to call before or after `init`: the overrides are re-applied at the
+   * end of every `#applyTier`, which is the only thing that would undo them.
+   */
+  setOverrides(overrides: {
+    readonly enabled?: boolean;
+    readonly bloom?: boolean;
+    readonly fxaa?: boolean;
+  }): void {
+    if (overrides.enabled !== undefined) this.#overrides.enabled = overrides.enabled;
+    if (overrides.bloom !== undefined) this.#overrides.bloom = overrides.bloom;
+    if (overrides.fxaa !== undefined) this.#overrides.fxaa = overrides.fxaa;
+    this.#applyOverrides();
+  }
+
+  #applyOverrides(): void {
+    if (this.#overrides.enabled !== null) this.enabled = this.#overrides.enabled;
+    if (this.#overrides.bloom === false) this.bloom.enabled = false;
+    if (this.#overrides.fxaa === false) this.fxaa.enabled = false;
+  }
+
   /** Toggle a single pass by id (`'post.taa'`, `'post.bloom'`, ...). */
   setPassEnabled(id: string, enabled: boolean): boolean {
     const pass = this.#passes.find((candidate) => candidate.id === id);
@@ -851,6 +893,13 @@ export class PostStack implements GameModule {
       this.#renderScene(renderer, internals, scene, camera, sceneTarget);
 
       if (!this.enabled) {
+        // The counters have to be maintained on this path too, or the overlay
+        // reports the pass list and draw count from whenever the chain was last
+        // run — which, under `?post=off`, is never. A stale `post medium 3
+        // passes / 11 draws` on a run with no chain at all is precisely the
+        // kind of lie that sends an investigation down the wrong branch.
+        this.#passDraws = 0;
+        this.#active = ['post.copy'];
         this.#copyToDestination(sceneTarget.textures[0] ?? sceneTarget.texture, target);
         return;
       }
@@ -1143,6 +1192,11 @@ export class PostStack implements GameModule {
     const material = this.#ensureCopyMaterial();
     const source = this.#copyTexture as THREE.TextureNode | null;
     if (source !== null) source.value = texture;
+    const exposure = this.#copyExposure as { value: number } | null;
+    if (exposure !== null) {
+      exposure.value =
+        this.composite.exposure * Math.pow(2, this.composite.exposureCompensation);
+    }
     this.#blit(material, destination, 'post.copy');
   }
 
@@ -1180,6 +1234,9 @@ export class PostStack implements GameModule {
     if (capabilities !== null) {
       for (const pass of this.#passes) pass.configure(this.#quality, capabilities);
     }
+
+    // Last, so a debug switch always wins over the tier table.
+    this.#applyOverrides();
   }
 
   #renderScale(): number {
@@ -1348,17 +1405,38 @@ export class PostStack implements GameModule {
     return target;
   }
 
+  /**
+   * The single blit that stands in for the whole chain when it is switched off.
+   *
+   * It is not a bare copy, and the two extra instructions are load-bearing. The
+   * scene target is scene-referred HDR: with a locked key of 1.72 the sky sits
+   * well above 1.0 and the fire far above that, so copying it straight to an
+   * 8-bit canvas clips most of the frame to white and `?post=off` returns a
+   * picture nobody can read. Exposure plus a Reinhard shoulder — one multiply
+   * and one divide, per pixel, in one pass — gives a viewable, correctly-keyed
+   * image while leaving out everything `?post=off` is meant to leave out: the
+   * bloom pyramid, the four-stage metering reduction, the grade, the LUT, the
+   * vignette, the grain and the FXAA resolve.
+   *
+   * It is deliberately *not* AgX. The point of this path is that it is
+   * obviously and visibly not the shipping tone curve, so nobody mistakes a
+   * `?post=off` screenshot for a colour regression.
+   */
   #ensureCopyMaterial(): THREE.NodeMaterial {
     let material = this.#copyMaterial;
     if (material === null) {
       const source = makeTextureNode('post.copy.source');
+      const exposure = uniform(1);
+      const exposed = source.rgb.max(0).mul(exposure);
+      const mapped = exposed.div(exposed.add(1));
       material = new THREE.NodeMaterial();
       material.name = 'post.copy';
       material.depthTest = false;
       material.depthWrite = false;
-      material.fragmentNode = source as unknown as THREE.Node;
+      material.fragmentNode = vec4(mapped, 1) as unknown as THREE.Node;
       this.#copyMaterial = material;
       this.#copyTexture = source as unknown as THREE.Node;
+      this.#copyExposure = exposure as unknown as THREE.Node;
     }
     return material;
   }
@@ -1405,7 +1483,9 @@ export function makeTextureNode(name: string): THREE.TextureNode {
   placeholder.name = `${name}.placeholder`;
   placeholder.needsUpdate = true;
   const node = textureNodeFactory(placeholder);
-  node.name = name;
+  // The *texture's* name may keep the dots — it is only ever read back by the
+  // memory report. The *node's* name becomes a shader identifier.
+  node.name = safeNodeName(name);
   return node;
 }
 

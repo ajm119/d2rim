@@ -21,7 +21,9 @@ import { DenOfEvilQuest } from './quest/DenOfEvil';
 import { NpcSystem } from './quest/NPC';
 import { LootSystem } from './rpg/Loot';
 import { RpgSystem } from './rpg/RpgSystem';
+import { logRenderFlags, renderFlags } from './render/DebugFlags';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
+import { SceneToggles } from './render/SceneToggles';
 import { RENDER_TIERS, qualityFromUrl } from './render/RenderSettings';
 import { collectMemoryReport, formatMemoryReport } from './render/MemoryReport';
 import { BloodMoor } from './scene/BloodMoor';
@@ -174,6 +176,20 @@ const loadingScreen = new LoadingScreen(events);
 // the URL is read once here and the two agree from the first frame.
 const bootTier = RENDER_TIERS[qualityFromUrl()];
 
+/**
+ * The per-system kill switches, resolved and announced before anything is
+ * built.
+ *
+ * Logged here rather than inside `buildFrameGraph` so that the very first line
+ * in the console states the configuration. Every performance number this build
+ * produces comes back to us as a screenshot from a machine we cannot touch, and
+ * a number with no configuration attached is not evidence. See
+ * `render/DebugFlags` for the full list and for why each switch removes work
+ * rather than scaling it to zero.
+ */
+const flags = renderFlags();
+logRenderFlags(flags);
+
 const engine = new Engine({
   canvas,
   autoStart,
@@ -183,6 +199,8 @@ const engine = new Engine({
   // render pass and, on some drivers, a pipeline flush — worth it to tell a
   // CPU-bound frame from a GPU-bound one, not worth it by default.
   renderer: { timestamps: statsRequested() },
+  gpuSync: flags.gpuSync,
+  warmup: flags.warmup,
 });
 
 // Registration order *is* frame order — see `render/FrameGraph.ts`, which owns
@@ -193,7 +211,7 @@ const engine = new Engine({
 //     through it, and it must have registered before any `init` asks for it.
 //   - the frame graph next: twelve render modules in dependency order.
 //   - content last, so the zones resolve a fully-built renderer.
-const render = buildFrameGraph();
+const render = buildFrameGraph({ flags });
 
 /**
  * The act's zones, registered as factories.
@@ -224,6 +242,14 @@ zones.register('denOfEvil', () => new DenOfEvil());
 
 engine.add(new AssetManager());
 for (const module of render.modules) engine.add(module);
+
+// Scene-graph kill switches (`?props=off`, `?terrain=off`, `?chars=off`,
+// `?flat=1`). Registered only when at least one of them is set, so a normal
+// session does not carry even the cost of an empty `lateUpdate`. It goes here,
+// after the renderer and before gameplay, because it must be initialised before
+// the zone manager builds anything — but it re-sweeps on every zone load
+// anyway, so the ordering is belt-and-braces rather than load-bearing.
+if (!SceneToggles.isNoOp(flags)) engine.add(new SceneToggles(flags));
 
 // Gameplay, in dependency order. Physics first so its service exists before
 // anything resolves it; the zone manager next, because its zones build

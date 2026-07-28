@@ -60,7 +60,12 @@
 
 import * as THREE from 'three/webgpu';
 
-import type { CapturedFrame, RendererBackend, RendererHandle } from '../core/types';
+import type {
+  CapturedFrame,
+  GpuTimerState,
+  RendererBackend,
+  RendererHandle,
+} from '../core/types';
 import { installWebGPUCompat } from './webgpuCompat';
 
 export interface CreateRendererOptions {
@@ -321,6 +326,41 @@ export async function createRenderer(
 
   const capabilities = detectCapabilities(renderer, backend);
 
+  // Decide *now* whether a GPU timer can ever answer, rather than inferring it
+  // from a stream of zeroes at 4 Hz for the rest of the session. See
+  // `RendererHandle.gpuTimer` for the full account of why the previous
+  // arrangement reported "pending" forever on a device with no extension.
+  let gpuTimer: GpuTimerState = 'off';
+  if (trackTimestamp) {
+    let supported = false;
+    try {
+      supported =
+        (renderer as unknown as { hasFeature?: (name: string) => boolean }).hasFeature?.(
+          'timestamp-query',
+        ) === true;
+    } catch {
+      supported = false;
+    }
+    gpuTimer = supported ? 'available' : 'unsupported';
+    if (supported) {
+      console.info(
+        '[RendererFactory] GPU timer queries are available ' +
+          `(${backend === 'webgpu' ? 'timestamp-query feature' : 'EXT_disjoint_timer_query_webgl2'}).`,
+      );
+    } else {
+      console.warn(
+        '[RendererFactory] GPU timer queries are UNAVAILABLE on this device. ' +
+          (backend === 'webgl2'
+            ? 'WebGL2 needs EXT_disjoint_timer_query_webgl2, which Chromium gates as a ' +
+              'timing side channel and hardened builds (Brave with fingerprint protection, ' +
+              'Safari) withhold entirely. '
+            : 'WebGPU needs the timestamp-query feature, which the adapter did not expose. ') +
+          'The overlay will report "gpu n/a". Use ?gpusync=1 for a crude but real ' +
+          'wall-clock measurement of the queued GPU work instead.',
+      );
+    }
+  }
+
   console.info(
     `[RendererFactory] backend=${backend} requested=${requested} shim=${shimState} ` +
       `compute=${capabilities.compute} float32Filterable=${capabilities.float32Filterable} ` +
@@ -375,8 +415,76 @@ export async function createRenderer(
      * leak. The overlay resolves on its refresh cadence, which keeps the pool
      * shallow without putting an async round trip in the frame path.
      */
+    gpuTimer,
+
+    programCount(): number {
+      // `Renderer._pipelines` is three's own pipeline cache: `caches` is keyed
+      // per render object + material + lights configuration, and `programs`
+      // holds the deduplicated shader stages. Reaching into a private field is
+      // ugly and it is the only way to answer "how many programs has this
+      // session compiled", which is the number that separates a compile stall
+      // from every other kind of multi-second frame. One cast, guarded, and it
+      // degrades to 0 rather than throwing if three renames it.
+      const pipelines = (three as unknown as {
+        _pipelines?: {
+          caches?: Map<unknown, unknown>;
+          programs?: { vertex?: Map<unknown, unknown>; fragment?: Map<unknown, unknown> };
+        };
+      })._pipelines;
+      return pipelines?.caches?.size ?? 0;
+    },
+
+    /**
+     * Compile every pipeline the scene needs, before the first frame.
+     *
+     * ### Why a loading screen is the right place for this
+     *
+     * three compiles a render pipeline the first time a given
+     * material+geometry+lights combination is actually drawn. With TSL node
+     * materials the generated shaders are large, and on Apple hardware ANGLE's
+     * GLSL→Metal translation and link step can take a substantial fraction of a
+     * second *per program*. The frame that happens to be the first to draw a
+     * new material therefore absorbs the whole compile, synchronously, inside
+     * `render()` — which is exactly the shape of a 25-second frame in a session
+     * that is otherwise running at 1.4 fps.
+     *
+     * `compileAsync` walks the same render list and asks for the same cache
+     * keys as a real render (three is explicit about this), so it front-loads
+     * those compiles into a moment where the player is already looking at a
+     * progress bar and a stall is expected rather than pathological.
+     *
+     * It does **not** cover the post chain: those materials are full-screen
+     * quads owned by `PostStack` and are not in the scene graph, so they still
+     * compile on their first use. That is a handful of programs against the
+     * scene's many, and covering them would mean teaching this function about
+     * the post stack, which is the wrong direction of dependency.
+     *
+     * @returns how long the compile took and how many pipelines exist after it.
+     */
+    async warmup(
+      scene: THREE.Scene,
+      camera: THREE.Camera,
+    ): Promise<{ millis: number; programs: number; before: number }> {
+      const before = handle.programCount?.() ?? 0;
+      const start = typeof performance === 'undefined' ? 0 : performance.now();
+      try {
+        const compile = (three as unknown as {
+          compileAsync?: (scene: THREE.Scene, camera: THREE.Camera) => Promise<unknown>;
+        }).compileAsync;
+        if (typeof compile === 'function') await compile.call(three, scene, camera);
+      } catch (error) {
+        console.warn('[RendererFactory] pipeline warmup failed; falling back to lazy compilation:', error);
+      }
+      const millis = (typeof performance === 'undefined' ? 0 : performance.now()) - start;
+      return { millis, programs: handle.programCount?.() ?? 0, before };
+    },
+
     async resolveGpuTime(): Promise<number | null> {
-      if (!trackTimestamp) return null;
+      // `gpuTimer` rather than `trackTimestamp`: asking a backend with no query
+      // pool resolves with `undefined` and leaves `info.render.timestamp` at
+      // its initial 0, which the caller cannot distinguish from a genuine
+      // zero-cost frame. Refusing up front is the whole fix.
+      if (gpuTimer !== 'available') return null;
       try {
         const probe = three as unknown as {
           resolveTimestampsAsync?: (type?: string) => Promise<number | undefined>;

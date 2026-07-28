@@ -111,6 +111,7 @@ import {
 
 import type { BloomPass } from './Bloom';
 import type { ColorGrade } from './ColorGrade';
+import { safeNodeName } from './nodeNames';
 import type { PostCapabilities, PostFrame, PostPass, QualityTier } from './PostStack';
 
 /* ------------------------------------------------------------------------- *
@@ -852,6 +853,19 @@ export class CompositePass implements PostPass {
       this.#curve,
       this.#encodeOutput ? 'srgb' : 'linear',
       this.#autoExposure ? 'auto' : 'manual',
+      // Bloom is part of the *structure*, not just a uniform.
+      //
+      // It used to be neither: `#buildComposite` sampled `#uBloom`
+      // unconditionally and `render()` set the intensity to 0 when the pyramid
+      // was off, so a disabled bloom still cost a full-resolution texture fetch
+      // in the frame's one full-resolution pass — and the tier table carried a
+      // comment forbidding anyone from turning bloom off at all, on the
+      // strength of a black frame that turned out to belong to a different bug.
+      // (The sampler was never actually unbound: `makeSourceNode` seeds every
+      // source with a 1x1 opaque black `DataTexture`.) Putting it in the key
+      // means `?bloom=off` recompiles the composite without the fetch, which is
+      // what "off" has to mean for a kill switch to be worth measuring with.
+      this.#bloom.enabled ? 'bloom' : '-',
       this.#grade.aberrationActive ? 'ca' : '-',
       this.#grade.vignetteActive ? 'vig' : '-',
       this.#grade.grainActive ? 'grain' : '-',
@@ -920,10 +934,13 @@ export class CompositePass implements PostPass {
     // energy, and the mip count changes the *radius* of the glow rather than
     // the exposure of the frame. Tier-invariance then holds by construction
     // rather than by luck.
-    const bloomColor = this.#uBloom.sample(base).rgb.max(0);
-    let color = scene.add(
-      bloomColor.mul(this.#uBloomIntensity),
-    ) as unknown as THREE.Node<'vec3'>;
+    // ...and when the pyramid is off the term is not multiplied by zero, it is
+    // absent. See `#structureKey`.
+    let color = scene;
+    if (this.#bloom.enabled) {
+      const bloomColor = this.#uBloom.sample(base).rgb.max(0);
+      color = scene.add(bloomColor.mul(this.#uBloomIntensity)) as unknown as THREE.Node<'vec3'>;
+    }
 
     // -- white balance, still scene-referred ------------------------------
     color = this.#grade.whiteBalance(color);
@@ -1040,6 +1057,9 @@ function makeSourceNode(name: string): THREE.TextureNode {
   const placeholder = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
   placeholder.needsUpdate = true;
   const node = textureNode(placeholder);
-  node.name = name;
+  // Sanitised for the same reason as `PostStack.makeTextureNode` — three emits
+  // a named uniform node's name straight into the shader source, and a dot in
+  // an identifier is a compile error that presents as a black frame.
+  node.name = safeNodeName(name);
   return node;
 }

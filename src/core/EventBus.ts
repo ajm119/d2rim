@@ -56,6 +56,11 @@ export interface GameEvents {
   'boot:failed': { phase: BootPhase; message: string };
   /** Fired once, after the renderer exists and every module has initialised. */
   'engine:ready': { backend: RendererBackend };
+  /**
+   * Pipeline warmup finished. `compiled` is how many render pipelines were
+   * built during the loading screen rather than inside a frame.
+   */
+  'engine:warmup': { millis: number; compiled: number; programs: number };
   /** Fired on every accepted resize, after the renderer has been resized. */
   'engine:resize': { width: number; height: number; pixelRatio: number };
   /** Fired when the loop pauses or resumes (tab visibility, manual control). */

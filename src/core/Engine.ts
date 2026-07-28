@@ -90,6 +90,20 @@ export interface EngineOptions {
   /** Injectable monotonic clock, in milliseconds. Defaults to `performance.now`. */
   now?: () => number;
   /**
+   * Force a 1×1 `readPixels` after each frame and time it. Default false.
+   *
+   * See {@link Engine.gpuSyncEnabled} for what the number means and why it is
+   * opt-in.
+   */
+  gpuSync?: boolean;
+  /** Compile the scene's pipelines on the loading screen. Default true. */
+  warmup?: boolean;
+  /**
+   * Log a console warning for any frame slower than this, in milliseconds.
+   * Default 250. Set to `Infinity` to silence it.
+   */
+  slowFrameMs?: number;
+  /**
    * Supply the event bus rather than letting the engine create one.
    *
    * Boot emits its first `boot:phase` synchronously, before the constructor
@@ -136,6 +150,13 @@ export class Engine {
   #pixelRatioCap: number;
   readonly #autoStart: boolean;
   readonly #rendererOptions: CreateRendererOptions;
+  readonly #gpuSync: boolean;
+  readonly #warmup: boolean;
+  readonly #slowFrameMs: number;
+  /** One-pixel scratch for the `?gpusync=1` readback. Allocated once. */
+  readonly #syncPixel = new Uint8Array(4);
+  #syncUnavailable = false;
+  #slowFramesLogged = 0;
 
   #renderer: RendererHandle | null = null;
   #input: Input | null = null;
@@ -161,6 +182,9 @@ export class Engine {
     this.#autoStart = options.autoStart ?? true;
     this.#rendererOptions = options.renderer ?? {};
     this.#now = options.now ?? (() => performance.now());
+    this.#gpuSync = options.gpuSync ?? false;
+    this.#warmup = options.warmup ?? true;
+    this.#slowFrameMs = options.slowFrameMs ?? 250;
     this.#clock = new Clock(this.#now);
     const hz = options.fixedHz ?? 60;
     const maxSubSteps = options.maxSubSteps ?? 5;
@@ -445,6 +469,8 @@ export class Engine {
     }
     phase('modules', 'modules ready', queued.length, queued.length);
 
+    await this.#warmPipelines(phase);
+
     phase('ready', 'entering the world', 1, 1);
     this.events.emit('engine:ready', { backend: this.#renderer.backend });
     if (this.#autoStart) this.start();
@@ -526,6 +552,8 @@ export class Engine {
       await renderer.render(this.scene, this.camera);
       const renderEnd = this.#now();
 
+      const syncMs = this.#gpuSyncProbe(renderer);
+
       // Recorded from the *raw* delta, never from `scaled`. This is the one
       // number a player on hardware this project cannot buy will read back to
       // us, and every clamp between the wall clock and the overlay is a way for
@@ -535,9 +563,13 @@ export class Engine {
         updateMs: updateEnd - updateStart,
         renderMs: renderEnd - updateEnd,
         gpuMs: this.#gpuMs,
+        syncMs,
         clamped: this.#accumulator.wasClamped,
         starved: this.#accumulator.wasStarved,
+        frame: this.#time.frame,
       });
+
+      this.#reportSlowFrame(rawDelta * 1000, updateEnd - updateStart, renderEnd - updateEnd, syncMs);
 
       this.events.emit('engine:frame', {
         frame: this.#time.frame,
@@ -548,6 +580,139 @@ export class Engine {
     } finally {
       this.#stepInFlight = false;
     }
+  }
+
+  /**
+   * Compile the scene's pipelines while the loading screen is still up.
+   *
+   * The zone is fully built by this point — `ZoneManager` is a module and every
+   * module's `init` has been awaited — so the scene graph the first frame will
+   * draw is the scene graph compiled here. That ordering is the whole value of
+   * doing it: a warmup before the zone exists would compile nothing.
+   *
+   * Failures are logged and swallowed. Warming pipelines is an optimisation;
+   * refusing to boot because an optimisation failed would be a strictly worse
+   * outcome than the stall it is trying to avoid.
+   */
+  async #warmPipelines(
+    phase: (name: BootPhase, label: string, completed?: number, total?: number) => void,
+  ): Promise<void> {
+    const renderer = this.#renderer;
+    if (renderer === null || typeof renderer.warmup !== 'function') return;
+    if (!this.#warmup) {
+      console.info('[Engine] pipeline warmup skipped (?warmup=0).');
+      return;
+    }
+    phase('ready', 'compiling shaders', 0, 1);
+    try {
+      const result = await renderer.warmup(this.scene, this.camera);
+      const compiled = result.programs - result.before;
+      console.info(
+        `[Engine] pipeline warmup: ${result.millis.toFixed(0)} ms, ` +
+          `${compiled} pipeline${compiled === 1 ? '' : 's'} compiled ` +
+          `(${result.programs} total). Anything compiled after this point is a ` +
+          'material the scene did not contain at load — a lazily-loaded texture ' +
+          'swap, a post-chain pass, or a hot-swapped archetype — and shows up as a ' +
+          'single very slow frame. Compare against the first "slow frame" report.',
+      );
+      this.events.emit('engine:warmup', {
+        millis: result.millis,
+        compiled,
+        programs: result.programs,
+      });
+    } catch (error) {
+      console.warn('[Engine] pipeline warmup failed:', error);
+    }
+  }
+
+  /** Whether `?gpusync=1` is arming the forced readback. */
+  get gpuSyncEnabled(): boolean {
+    return this.#gpuSync && !this.#syncUnavailable;
+  }
+
+  /**
+   * Force the GPU pipeline to drain, and time how long that takes.
+   *
+   * ### Why this exists
+   *
+   * In WebGL, `render()` returns as soon as the commands are queued. The GPU
+   * work happens later and the browser absorbs the wait somewhere the page
+   * cannot see — typically before it will grant the next animation frame. That
+   * is why the machine under investigation reports 29 ms of update plus 66 ms
+   * of render against a 730 ms frame: the missing 630 ms is real, it is GPU
+   * work, and no CPU timer in the page can attribute it.
+   *
+   * `gl.readPixels` cannot be answered until everything queued before it has
+   * retired, so the call blocks the main thread for approximately the
+   * outstanding GPU work. One pixel is read, because the transfer is irrelevant
+   * — the *synchronisation* is the measurement. It is crude: it includes
+   * driver round-trip overhead, it serialises CPU and GPU where they would
+   * normally overlap, and it will make the frame rate worse while it is on.
+   * All three are acceptable in exchange for converting invisible queued work
+   * into a number, on a device whose driver refuses to expose a timer query.
+   *
+   * Behind `?gpusync=1` and off by default for exactly those reasons.
+   *
+   * @returns the stall in milliseconds, or 0 when the probe is off or the
+   *   context does not offer a readback.
+   */
+  #gpuSyncProbe(renderer: RendererHandle): number {
+    if (!this.#gpuSync || this.#syncUnavailable) return 0;
+    const gl = (
+      renderer.three as unknown as { getContext?: () => unknown }
+    ).getContext?.() as WebGL2RenderingContext | null | undefined;
+    if (gl === null || gl === undefined || typeof gl.readPixels !== 'function') {
+      this.#syncUnavailable = true;
+      console.warn(
+        '[Engine] ?gpusync=1 asked for a forced readback, but this backend exposes no ' +
+          'WebGL context to read from. Disabling the probe.',
+      );
+      return 0;
+    }
+    const start = this.#now();
+    try {
+      // Read from whatever is currently bound — after `render()` that is the
+      // canvas's default framebuffer. Binding a target of our own would add an
+      // extra state change to every frame for no extra information.
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.#syncPixel);
+    } catch (error) {
+      this.#syncUnavailable = true;
+      console.warn('[Engine] ?gpusync=1 readback failed; disabling the probe:', error);
+      return 0;
+    }
+    return this.#now() - start;
+  }
+
+  /**
+   * Name a pathological frame in the console while it is still fresh.
+   *
+   * The overlay can say `worst 25625.1 ms over 91 frames`, which establishes
+   * that a 25-second stall happened and nothing whatsoever about *when* or
+   * *around what*. A console line stamped with the frame number, the phase
+   * split and the draw count turns that into evidence: a multi-second stall in
+   * the first few frames, with update and render both small, is shader
+   * compilation or a synchronous texture upload inside the driver; the same
+   * stall at frame 400 with a large `update` is a GC pause or a zone load.
+   *
+   * Rate-limited to twelve reports, because a machine at 1 fps trips the
+   * threshold on every single frame and a console with ten thousand identical
+   * warnings in it is not a diagnostic either.
+   */
+  #reportSlowFrame(rawMs: number, updateMs: number, renderMs: number, syncMs: number): void {
+    if (rawMs < this.#slowFrameMs || this.#slowFramesLogged >= 12) return;
+    this.#slowFramesLogged++;
+    const info = (this.#renderer?.three as unknown as {
+      info?: { render?: { drawCalls?: number; triangles?: number } };
+    })?.info?.render;
+    const unaccounted = Math.max(0, rawMs - updateMs - renderMs - syncMs);
+    console.warn(
+      `[Engine] slow frame #${this.#time.frame}: ${rawMs.toFixed(1)} ms ` +
+        `(update ${updateMs.toFixed(1)} + render ${renderMs.toFixed(1)}` +
+        (syncMs > 0 ? ` + gpusync ${syncMs.toFixed(1)}` : '') +
+        ` + ${unaccounted.toFixed(1)} unaccounted), ` +
+        `draws ${info?.drawCalls ?? '?'}, tris ${Math.round(info?.triangles ?? 0)}` +
+        (this.#slowFramesLogged === 12 ? ' — further slow-frame reports suppressed' : ''),
+    );
   }
 
   /**

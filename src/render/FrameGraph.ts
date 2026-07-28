@@ -110,6 +110,7 @@ import { texture as textureNodeFactory } from 'three/tsl';
 import type { GameContext, GameModule } from '../core/types';
 
 import { AtmosphereKey, type AtmosphereService } from './Atmosphere';
+import { renderFlags, type RenderFlags } from './DebugFlags';
 import { initialExposureStops } from './DisplaySettings';
 import type { CascadedShadowMapNode } from './CascadedShadowMaps';
 import { IBLModule, IBLKey, type IBLService } from './IBL';
@@ -316,6 +317,7 @@ class RenderBridges implements GameModule {
   readonly #ssr: SSRModule;
   readonly #lightShafts: LightShaftsModule;
   readonly #tier: RenderTier;
+  readonly #flags: RenderFlags;
 
   #lighting: LightingService | null = null;
   #atmosphere: AtmosphereService | null = null;
@@ -332,11 +334,13 @@ class RenderBridges implements GameModule {
     ssr: SSRModule;
     lightShafts: LightShaftsModule;
     tier: RenderTier;
+    flags: RenderFlags;
   }) {
     this.#post = parts.post;
     this.#ssr = parts.ssr;
     this.#lightShafts = parts.lightShafts;
     this.#tier = parts.tier;
+    this.#flags = parts.flags;
   }
 
   init(ctx: GameContext): void {
@@ -557,7 +561,11 @@ class RenderBridges implements GameModule {
     // materially better than installing it disabled: the module's four
     // half-resolution half-float buffers are allocated on first render, so a
     // pass that never runs never allocates them. See `RenderTier.lightShafts`.
-    if (this.#tier.lightShafts) {
+    //
+    // `?fog=off` and `?post=off` both suppress it, and for the same reason:
+    // this pass is the *only* consumer of `Volumetrics.createResolveNode`, so
+    // not installing it is what actually deletes the ray march from the frame.
+    if (this.#tier.lightShafts && this.#flags.fog && this.#flags.post) {
       this.#post.addPass(this.#lightShafts.pass, { before: 'post.taa' });
       this.#installedShafts = true;
     }
@@ -698,6 +706,15 @@ export interface FrameGraph {
 
 export interface FrameGraphOptions {
   readonly quality?: RenderQuality;
+  /**
+   * Per-system kill switches. Defaults to {@link renderFlags}, i.e. the URL.
+   *
+   * Passed explicitly by the capture harness and by tests, which have no
+   * `window.location` to read and must not inherit whatever the last caller
+   * cached. See `render/DebugFlags` for what each switch removes and why "off"
+   * has to mean *not issued* rather than *scaled to zero*.
+   */
+  readonly flags?: RenderFlags;
   /** Time-of-day preset. Blood Moor's cold overcast morning by default. */
   readonly preset?: 'bloodMoor' | 'dawn' | 'clearNoon' | 'dusk' | 'night' | 'storm';
   /**
@@ -736,6 +753,7 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
       : new RenderSettings({ quality: options.quality });
   const tier = settings.tier;
   const preset = options.preset ?? 'bloodMoor';
+  const flags = options.flags ?? renderFlags();
 
   const post = new PostStack({
     quality: tier.post,
@@ -955,6 +973,18 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
     // separation of concerns a cinematographer has between a gel and a dimmer.
     keyLightScale: 1.55,
     ambientFromSky: true,
+    // `?shadows=off`. `castShadow: false` is what `LightingModule` reads to
+    // decide whether to call `attachCascadedShadowMaps` at all — so with the
+    // flag off there is no cascade node, no shadow camera renders, and no
+    // material graph ever compiles a shadow sampler. That is a *different*
+    // thing from setting the cascade count to zero, which would still build the
+    // node, still allocate the array texture and still sample it.
+    sun: { castShadow: flags.shadows },
+    // ...and the local shadow slots with it. A shadow-casting *point* light is
+    // six shadow-map renders of the whole scene every frame it is active, and
+    // the camp has a bonfire and a forge in it. `?shadows=off` has to mean all
+    // shadows or it is not a bisection, it is a hint.
+    ...(flags.shadows ? {} : { maxShadowedPointLights: 0, maxShadowedSpotLights: 0 }),
     shadows: {
       cascades: tier.shadowCascades,
       mapSize: tier.shadowMapSize,
@@ -1083,7 +1113,14 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
   });
 
   const volumetrics = new VolumetricsModule({
-    quality: tier.volumetrics,
+    // `?fog=off` → quality `off` → `#chooseMode` returns `'off'`, which is the
+    // switch that makes the module skip the froxel dispatch, skip baking the
+    // 32³ 3D noise volume, and return a pass-through resolve node. It is the
+    // only setting that removes the per-pixel march rather than shortening it.
+    quality: flags.fog ? tier.volumetrics : 'off',
+    // Belt and braces: with the fog off there is nothing to add turbulence to,
+    // and the bake is 32k voxels of 3-octave fBm on the main thread at boot.
+    ...(flags.fog ? {} : { detailNoise: 'off' as const }),
     ...(tier.froxelDimensions === null ? {} : { froxelDimensions: tier.froxelDimensions }),
     // Base (2,3,5) with a per-frame offset; TAA owns base (2,3) in 2D. See the
     // "three noise sources" note at the top of this file.
@@ -1142,7 +1179,18 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
     radialDecay: 0.94,
   });
 
-  const bridges = new RenderBridges({ post, ssr, lightShafts, tier });
+  const bridges = new RenderBridges({ post, ssr, lightShafts, tier, flags });
+
+  // The post switches, applied after construction because `PostStack` derives
+  // its own pass enablement from the tier in `#applyTier` and this has to
+  // outrank it. See `PostStack.setOverrides` for why these are stored rather
+  // than assigned to the passes directly: `#applyTier` runs again on any
+  // quality change and would otherwise put bloom straight back.
+  post.setOverrides({
+    enabled: flags.post,
+    bloom: flags.bloom,
+    fxaa: flags.fxaa,
+  });
 
   const modules: GameModule[] = [
     settings,
