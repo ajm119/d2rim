@@ -1139,6 +1139,75 @@ export const VOLUMETRIC_TIERS: Readonly<Record<Exclude<VolumetricsQuality, 'off'
   ultra: { froxels: [192, 108, 80], marchSteps: 48, lights: 6 },
 };
 
+/** What one pixel of the WebGL2 ray march costs. See {@link raymarchCost}. */
+export interface RaymarchCost {
+  readonly steps: number;
+  /** 3D noise fetches per step: warp, coarse, detail. Zero with `noise=off`. */
+  readonly noiseFetchesPerStep: number;
+  /** Shadow-map fetches per step — one per cascade, the loop is unrolled. */
+  readonly shadowFetchesPerStep: number;
+  /** Total texture fetches for the pixel, across the whole march. */
+  readonly fetches: number;
+  /** Local-light iterations across the whole march. */
+  readonly lightIterations: number;
+}
+
+/**
+ * The analytic per-pixel cost of the WebGL2 ray march.
+ *
+ * ### Why this is written down as code rather than as a comment
+ *
+ * The fog was the leading suspect for the deployed build's 630 ms of
+ * unaccounted frame time — "a per-pixel loop sampling 3D noise per step across
+ * 1.9 megapixels" is a perfectly reasonable thing to suspect. Turning the
+ * suspicion into a number is the only way to rule it in or out without a GPU,
+ * and a number that lives in a comment cannot be asserted when the tier table
+ * changes underneath it.
+ *
+ * Per step the march evaluates, from `#buildRaymarchResolveNode`:
+ *
+ * - `mediaAt` — one `exp` for the height profile; the fog-volume loop
+ *   (`volumeCount` iterations, ~4 `smoothstep`s each, and normally zero
+ *   volumes); and, with detail noise on, **three** trilinear fetches into the
+ *   32³ `Data3DTexture`: a warp lookup, the warped coarse band, and a detail
+ *   band at 3.1× the frequency.
+ * - `inscatterAt` — a dual-lobe Henyey-Greenstein phase for the sun; sun
+ *   visibility, which is `cascadeCount` unrolled iterations each costing a
+ *   `mat4` transform and one `textureLoad` on the cascade depth array;
+ *   `ambientAt`, which walks the fog-volume list a second time; and
+ *   `lightCount` local-light iterations, each a `normalize`, a windowed inverse
+ *   square and a second phase evaluation.
+ * - one `exp` and one divide for Hillaire's analytic slice integral.
+ *
+ * ### And the conclusion it supports
+ *
+ * The march is genuinely expensive at `high` and `ultra` — 32 steps × (3 noise
+ * + 4 cascade) fetches is 224 texture fetches per marched pixel. But it runs at
+ * `RenderTier.lightShaftScale` (½ per axis, so ¼ the pixels), and, decisively,
+ * **it does not run at all below `high`**: `LightShaftsPass` is the only caller
+ * of `createResolveNode`, and `FrameGraph.#installPasses` only installs that
+ * pass when `RenderTier.lightShafts` is true, which it is not at `low` or
+ * `medium`. The overlay's `fog raymarch noise=on` line reported the mode the
+ * module *would* use and was read — reasonably — as "a ray march is running".
+ * It was not. See `tests/volumetrics.marchCost.test.ts`.
+ */
+export function raymarchCost(
+  quality: Exclude<VolumetricsQuality, 'off'>,
+  options: { readonly detailNoise?: boolean; readonly shadowCascades?: number } = {},
+): RaymarchCost {
+  const tier = VOLUMETRIC_TIERS[quality];
+  const steps = tier.marchSteps;
+  const noiseFetchesPerStep = options.detailNoise === false ? 0 : 3;
+  const shadowFetchesPerStep = Math.max(0, options.shadowCascades ?? 0);
+  return {
+    steps,
+    noiseFetchesPerStep,
+    shadowFetchesPerStep,
+    fetches: steps * (noiseFetchesPerStep + shadowFetchesPerStep),
+    lightIterations: steps * tier.lights,
+  };
+}
+
 /* ------------------------------------------------------------------------- *
  * Defaults — the Blood Moor register
  * ------------------------------------------------------------------------- */
