@@ -37,6 +37,13 @@ import {
 const SPEC = {
   zones: { type: 'string', default: 'encampment,bloodMoor', help: 'comma-separated zone ids' },
   tiers: { type: 'string', default: 'low,medium', help: 'comma-separated ?quality= values' },
+  flags: {
+    type: 'string',
+    default: '',
+    help:
+      'comma-separated render-flag sets to compare, each an & -joined query fragment; ' +
+      'use "-" for the unmodified baseline (e.g. "-,shadows=off,fog=off,minimal=1")',
+  },
   backend: { type: 'string', default: 'webgl2', help: 'webgl2 | webgpu' },
   width: { type: 'number', default: 1528, help: 'CSS viewport width' },
   height: { type: 'number', default: 794, help: 'CSS viewport height' },
@@ -71,6 +78,8 @@ const PROBE = `
     triangles: Math.round(render.triangles ?? 0),
     geometries: memory.geometries ?? 0,
     textures: memory.textures ?? 0,
+    flags: window.__d2rimFlags ?? null,
+    programs: d2rim.ctx.renderer.programCount?.() ?? null,
     postQuality: post?.quality ?? null,
     postPasses: stats ? stats.active.slice() : null,
     postDraws: stats ? stats.passDraws : null,
@@ -107,23 +116,33 @@ async function main() {
       viewport: { width: args.width, height: args.height },
     });
 
+    // `-` is the baseline: no extra query at all. Spelled explicitly rather
+    // than as an empty string so a trailing comma in `--flags` cannot silently
+    // add a duplicate baseline row and make a comparison look like a no-op.
+    const flagSets = args.flags === '' ? ['-'] : args.flags.split(',').filter(Boolean);
+
     for (const tier of args.tiers.split(',').filter(Boolean)) {
       for (const zone of args.zones.split(',').filter(Boolean)) {
-        const url =
-          `${server.url}/?autostart=0&enemies=0&fade=0&stats=1` +
-          `&backend=${args.backend}&quality=${tier}&zone=${zone}`;
-        process.stdout.write(`  ${tier.padEnd(7)} ${zone.padEnd(12)} ... `);
-        await page.goto(url, { waitUntil: 'load', timeout: 180_000 });
-        const result = await page.evaluate(
-          new Function(`return (async () => { ${PROBE.replace('FRAMES', args.frames)} })();`),
-        );
-        rows.push({ tier, zone, ...result });
-        process.stdout.write(
-          `${String(result.drawCalls).padStart(5)} draws  ` +
-            `${result.triangles.toLocaleString('en-US').padStart(9)} tris  ` +
-            `${mb(result.assetBytes).padStart(6)} MB tex  ` +
-            `${mb(result.postBytes).padStart(6)} MB post-rt\n`,
-        );
+        for (const flagSet of flagSets) {
+          const extra = flagSet === '-' ? '' : `&${flagSet}`;
+          const url =
+            `${server.url}/?autostart=0&enemies=0&fade=0&stats=1` +
+            `&backend=${args.backend}&quality=${tier}&zone=${zone}${extra}`;
+          process.stdout.write(
+            `  ${tier.padEnd(7)} ${zone.padEnd(12)} ${flagSet.padEnd(22)} ... `,
+          );
+          await page.goto(url, { waitUntil: 'load', timeout: 180_000 });
+          const result = await page.evaluate(
+            new Function(`return (async () => { ${PROBE.replace('FRAMES', args.frames)} })();`),
+          );
+          rows.push({ tier, zone, flagSet, ...result });
+          process.stdout.write(
+            `${String(result.drawCalls).padStart(5)} draws  ` +
+              `${result.triangles.toLocaleString('en-US').padStart(9)} tris  ` +
+              `${mb(result.assetBytes).padStart(6)} MB tex  ` +
+              `${mb(result.postBytes).padStart(6)} MB post-rt\n`,
+          );
+        }
       }
     }
   } finally {
@@ -132,13 +151,23 @@ async function main() {
   }
 
   console.log('');
-  console.log('tier    zone           draws     triangles   tex MB  post-rt MB  cascades  passes');
-  console.log('-'.repeat(88));
+  console.log(
+    'tier    zone           flags                   draws     triangles  post-rt MB  passes',
+  );
+  console.log('-'.repeat(104));
+  const baseline = rows.find((r) => r.flagSet === '-');
   for (const r of rows) {
+    // The delta against the unmodified run is the whole point of `--flags`: a
+    // kill switch that does not move the draw count has not removed any work,
+    // whatever the frame time does.
+    const delta =
+      baseline && r !== baseline && r.tier === baseline.tier && r.zone === baseline.zone
+        ? ` (${r.drawCalls - baseline.drawCalls >= 0 ? '+' : ''}${r.drawCalls - baseline.drawCalls})`
+        : '';
     console.log(
-      `${r.tier.padEnd(7)} ${r.zone.padEnd(14)} ${String(r.drawCalls).padStart(5)}  ` +
-        `${r.triangles.toLocaleString('en-US').padStart(11)}  ${mb(r.assetBytes).padStart(6)}  ` +
-        `${mb(r.postBytes).padStart(10)}  ${String(r.shadowCascades).padStart(8)}  ` +
+      `${r.tier.padEnd(7)} ${r.zone.padEnd(14)} ${String(r.flagSet ?? '-').padEnd(22)} ` +
+        `${String(r.drawCalls).padStart(5)}${delta.padEnd(8)}  ` +
+        `${r.triangles.toLocaleString('en-US').padStart(11)}  ${mb(r.postBytes).padStart(10)}  ` +
         `${(r.postPasses ?? []).join(' ')}`,
     );
   }

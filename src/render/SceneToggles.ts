@@ -56,20 +56,20 @@
  * ## `?flat=1`
  *
  * The single biggest lever available. Every scene material is swapped for an
- * unlit `MeshBasicNodeMaterial` carrying the original's base colour, which
+ * unlit `MeshBasicNodeMaterial` with a hard-coded directional wrap term, which
  * removes — in one step — the terrain uber-shader's triplanar sample sets, all
- * IBL and environment sampling, all shadow-map sampling and every BRDF
- * evaluation from every fragment in the frame. Geometry, draw count and
- * triangle count are unchanged, so a comparison against the unflagged run
- * isolates *shading cost* from *submission cost* exactly.
+ * IBL and environment sampling, all shadow-map sampling, every texture fetch
+ * and every BRDF evaluation from every fragment in the frame. Geometry, draw
+ * count and triangle count are unchanged, so a comparison against the unflagged
+ * run isolates *shading cost* from *submission cost* exactly.
  *
- * The originals are kept in a map and restored on dispose, and the swap is
- * skipped for anything the material library may still be hot-swapping (see
- * `#swapMaterial`), so a flat run is not a different scene, only a differently
- * shaded one.
+ * The originals are kept in a map and restored on dispose, so a flat run is not
+ * a different scene, only a differently shaded one. See `#flatFor` for why the
+ * stand-in is not a pure fill.
  */
 
 import * as THREE from 'three/webgpu';
+import { materialColor, normalize, normalWorld, vec3 } from 'three/tsl';
 
 import type { GameContext, GameModule } from '../core/types';
 
@@ -299,15 +299,32 @@ export class SceneToggles implements GameModule {
   }
 
   /**
-   * An unlit stand-in carrying the source material's base colour.
+   * An unlit stand-in with just enough shading to read as a picture.
    *
    * `MeshBasicNodeMaterial` still handles skinning and instancing — those are
    * geometry-stage concerns the node system attaches independently of the
    * shading model — so a flat run keeps the same silhouettes and the same
-   * animation, and only the fragment work disappears. Transparency and side are
-   * carried across because a flat frame with the foliage cards turned into
-   * opaque quads would be a *different* number of shaded pixels, which defeats
-   * the comparison.
+   * animation, and only the fragment work disappears. Transparency, side and
+   * alpha test are carried across because a flat frame with the foliage cards
+   * turned into opaque quads would shade a *different* number of pixels, which
+   * defeats the comparison this flag exists to make.
+   *
+   * ### Why there is a lambert term rather than a pure fill
+   *
+   * A first version copied only `material.color`, and the resulting frame was
+   * a near-uniform white slab: this project's materials are TSL, so their
+   * albedo lives in a `colorNode` and the legacy `color` field is left at its
+   * default white almost everywhere. The measurement was perfect and the
+   * picture was uninterpretable — which matters, because the reader has to be
+   * able to confirm they are looking at the right scene from the right camera
+   * before they believe the frame time attached to it.
+   *
+   * One hard-coded directional wrap term fixes that for about five ALU per
+   * fragment. It is not lighting: there is no shadow map, no environment probe,
+   * no BRDF, no texture fetch and no light list. Set against the terrain
+   * uber-shader's three triplanar sample sets plus detail, macro variation and
+   * wetness, it is indistinguishable from free, and it is what makes
+   * `?minimal=1` a frame somebody can screenshot and reason about.
    */
   #flatFor(material: THREE.Material): THREE.Material {
     const cached = this.#flatCache.get(material);
@@ -315,9 +332,19 @@ export class SceneToggles implements GameModule {
 
     const flat = new THREE.MeshBasicNodeMaterial();
     flat.name = `flat(${material.name.length > 0 ? material.name : material.type})`;
-    const source = material as unknown as { color?: THREE.Color; map?: THREE.Texture | null };
+    const source = material as unknown as { color?: THREE.Color };
     if (source.color instanceof THREE.Color) flat.color.copy(source.color);
     else flat.color.setRGB(0.5, 0.5, 0.5);
+
+    // A fixed world-space key, roughly where the overcast sun sits, so the
+    // shading does not depend on any live lighting state — the point is that
+    // nothing in the light rig is being evaluated. `materialColor` reads
+    // `flat.color`, so the assignment above stays the single source of truth
+    // and the material remains introspectable.
+    const key = normalize(vec3(0.32, 0.62, -0.72));
+    const wrap = normalWorld.dot(key).mul(0.5).add(0.5);
+    flat.colorNode = materialColor.mul(wrap.mul(0.72).add(0.28));
+
     flat.transparent = material.transparent;
     flat.opacity = material.opacity;
     flat.alphaTest = material.alphaTest;

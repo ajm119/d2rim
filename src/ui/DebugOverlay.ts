@@ -211,6 +211,10 @@ export class DebugOverlay implements GameModule {
   /** True once a GPU timer query has been asked for and refused. */
   #gpuTimerUnavailable = false;
   #gpuResolveInFlight = false;
+  /** Consecutive zero-millisecond resolves. See `#pollGpuTime`. */
+  #gpuZeroStreak = 0;
+  /** Pipelines compiled during the loading-screen warmup, or null if it did not run. */
+  #warmedPrograms: number | null = null;
   #sinceRefresh = 0;
   #sinceMemory = MEMORY_INTERVAL;
   #lastText = '';
@@ -221,6 +225,7 @@ export class DebugOverlay implements GameModule {
   #deviceRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
   #unsubscribeResize: (() => void) | null = null;
   #unsubscribeFrame: (() => void) | null = null;
+  #unsubscribeWarmup: (() => void) | null = null;
   #drawCalls = 0;
   #triangles = 0;
 
@@ -257,6 +262,12 @@ export class DebugOverlay implements GameModule {
       if (typeof window !== 'undefined') this.#deviceRatio = window.devicePixelRatio || 1;
       // Force a redraw on the next update so a resize shows immediately.
       this.#sinceRefresh = REFRESH_INTERVAL;
+    });
+
+    // The warmup total, so the overlay can say how many pipelines were
+    // compiled *after* boot — which is how many stalls the session has taken.
+    this.#unsubscribeWarmup = ctx.events.on('engine:warmup', ({ programs }) => {
+      this.#warmedPrograms = programs;
     });
 
     // Draw calls and triangles have to be sampled *after* the render, and a
@@ -313,6 +324,8 @@ export class DebugOverlay implements GameModule {
     this.#unsubscribeResize = null;
     this.#unsubscribeFrame?.();
     this.#unsubscribeFrame = null;
+    this.#unsubscribeWarmup?.();
+    this.#unsubscribeWarmup = null;
     this.#element?.remove();
     this.#element = null;
   }
@@ -452,6 +465,29 @@ export class DebugOverlay implements GameModule {
       );
     }
 
+    // How many render pipelines three has compiled, and how many of those the
+    // loading screen paid for.
+    //
+    // This is the line that identifies a compile stall. Lazy pipeline creation
+    // means the frame that first draws a given material+lights combination
+    // absorbs the whole compile synchronously, and with TSL node materials on
+    // Apple hardware — where ANGLE has to translate the generated GLSL to Metal
+    // and link it — that can be a substantial fraction of a second per program.
+    // A session that reports `worst 25625.1 ms` with no idea what happened in
+    // that frame is unactionable; a session where this counter jumps from 40 to
+    // 90 across the same frame is a diagnosis. Watch it while walking around:
+    // every increment is a stall that has already happened.
+    const programs = ctx.renderer.programCount?.();
+    if (programs !== undefined) {
+      lines.push(
+        `prog   ${programs} pipelines` +
+          (this.#warmedPrograms === null
+            ? ' (warmup skipped or unsupported)'
+            : ` — ${this.#warmedPrograms} precompiled on the loading screen, ` +
+              `${Math.max(0, programs - this.#warmedPrograms)} since`),
+      );
+    }
+
     const gpu = gpuErrorReport();
     lines.push(`gpuerr ${gpu.count}${gpu.first === null ? '' : ` — ${gpu.first.slice(0, 60)}`}`);
 
@@ -491,6 +527,26 @@ export class DebugOverlay implements GameModule {
           this.#gpuTimerUnavailable = true;
           return;
         }
+        // A run of exact zeroes means the query pool is answering but never
+        // producing data — three's WebGL pool returns its `lastValue` (0) when
+        // the disjoint bit is set, which some drivers keep set permanently
+        // under load. Twenty consecutive zeroes at 4 Hz is five seconds, which
+        // is long enough to be certain and short enough that the reader is
+        // still looking. Giving up and saying `n/a` is strictly better than
+        // showing an ellipsis forever; that is the whole bug being fixed here.
+        if (milliseconds <= 0) {
+          this.#gpuZeroStreak++;
+          if (this.#gpuZeroStreak >= 20) {
+            this.#gpuTimerUnavailable = true;
+            console.warn(
+              '[DebugOverlay] the GPU timer query is present but has returned zero ' +
+                '20 times running (a permanently-set GPU_DISJOINT bit does this). ' +
+                'Reporting "n/a"; use ?gpusync=1 for a wall-clock measurement instead.',
+            );
+          }
+          return;
+        }
+        this.#gpuZeroStreak = 0;
         ctx.engine.setGpuFrameTime(milliseconds);
       })
       .catch(() => {

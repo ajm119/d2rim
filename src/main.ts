@@ -21,7 +21,7 @@ import { DenOfEvilQuest } from './quest/DenOfEvil';
 import { NpcSystem } from './quest/NPC';
 import { LootSystem } from './rpg/Loot';
 import { RpgSystem } from './rpg/RpgSystem';
-import { logRenderFlags, renderFlags } from './render/DebugFlags';
+import { describeRenderFlags, logRenderFlags, renderFlags } from './render/DebugFlags';
 import { buildFrameGraph, type FrameGraph } from './render/FrameGraph';
 import { SceneToggles } from './render/SceneToggles';
 import { RENDER_TIERS, qualityFromUrl } from './render/RenderSettings';
@@ -94,6 +94,8 @@ export interface D2RimGlobal {
 declare global {
   interface Window {
     __d2rim?: D2RimGlobal;
+    /** The active kill-switch set, as `describeRenderFlags` renders it. */
+    __d2rimFlags?: string;
   }
 }
 
@@ -189,6 +191,10 @@ const bootTier = RENDER_TIERS[qualityFromUrl()];
  */
 const flags = renderFlags();
 logRenderFlags(flags);
+// Published for `tools/capture/frame-cost.mjs --flags`, which compares draw
+// counts across kill-switch configurations and has to be able to record which
+// configuration each row came from.
+window.__d2rimFlags = describeRenderFlags(flags);
 
 const engine = new Engine({
   canvas,
