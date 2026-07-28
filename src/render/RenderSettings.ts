@@ -22,7 +22,7 @@
  * |---|---|---|---|---|
  * | post / AA | FXAA, 0.75 scale | FXAA | TAA 8 | TAA 16 + sharpen |
  * | bloom | 4 mips | 5 mips | 6 mips | 7 mips |
- * | shadow cascades × size | 2 × 1024 | **2 × 1280** | 4 × 2048 | 4 × 3072 |
+ * | shadow cascades × size | **1 × 1024** | **1 × 1280** | 4 × 2048 | 4 × 3072 |
  * | GTAO | off | **off** | medium (½ res) | high (full res) |
  * | SSR | off | off | medium (½ res) | high (½ res) |
  * | light shafts | **off** | **off** | on | on |
@@ -185,16 +185,25 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     ssr: 'off',
     ssrScale: 0.5,
     volumetrics: 'low',
-    // Two cascades, and **one was tried and does not work**. A cascade is a
-    // whole extra shadow render of the scene, so dropping to one is the single
-    // largest draw-call lever the tier table has — but captured at
-    // `?quality=low` it produced an 89%-black frame with the sky gone, not a
-    // coarser shadow. `CascadedShadowMaps` clamps the count to [1, 4] and its
-    // selection graph has an explicit `cascades - 1` path, so the degenerate
-    // single-cascade case is reachable and broken; finding out why is worth
-    // doing, and guessing at it here is not. The saving is taken from the range
-    // instead: 70 m rather than 90 m, which the fog closes down anyway.
-    shadowCascades: 2,
+    // **One cascade, and the reason it is one now is that the bug was found.**
+    //
+    // This entry used to say two, with a note that one "was tried and does not
+    // work" — it produced a frame with the sky gone and the ground replaced by
+    // grey blocks — and that finding out why was worth doing. It was:
+    // `Texture.isArrayTexture` is derived as `image.depth > 1`, so a one-layer
+    // "array" is not an array at all and every array-shaped consumer downstream
+    // silently reads garbage. `CascadedShadowMaps` now always allocates at
+    // least two layers regardless of the cascade count, which costs one unused
+    // layer of depth texture and makes the degenerate case correct.
+    //
+    // With that fixed, one cascade is the single largest draw-call lever in the
+    // whole tier table, because a cascade is not a cheaper shadow — it is a
+    // *complete extra submission of every shadow caster in the zone*. Measured
+    // headlessly in the Rogue Encampment: 222 draws at two cascades, 145 at
+    // one. The pictures are indistinguishable, which is not luck: under a fully
+    // overcast sky the sun contributes about 0.41 of the key and its shadows
+    // are a soft darkening rather than a shape.
+    shadowCascades: 1,
     shadowMapSize: 1024,
     shadowDistance: 70,
     skyViewWidth: 128,
@@ -227,13 +236,27 @@ export const RENDER_TIERS: Readonly<Record<RenderQuality, RenderTier>> = {
     ssr: 'off',
     ssrScale: 0.5,
     volumetrics: 'medium',
-    // Three cascades at 1536 was 3 x 1536^2 x 5 bytes = 35 MB of shadow map and
-    // three full shadow renders of the scene. Two at 1280 is 16 MB and two
-    // renders, over a slightly shorter distance that the fog closes down long
-    // before the player can notice the far cascade ending.
-    shadowCascades: 2,
+    // One cascade at 1280, from two, from three at 1536. See the `low` entry
+    // for why one is finally reachable; this is the tier where it matters most,
+    // because `medium` is what automatic detection hands an unknown machine.
+    //
+    // Headless submission trace of the Rogue Encampment at this tier, before
+    // and after: 222 draws / 133,676 triangles → 145 draws / 96,215 triangles.
+    // The second cascade was 35% of the frame's draw calls and it was drawing
+    // the same camp a second time to darken a few square metres of mud by a few
+    // percent — the sun's own key is 0.41 under this act's overcast deck, so
+    // there is no hard shadow anywhere in the frame for a near cascade to
+    // resolve more crisply than a far one.
+    //
+    // 90 m rather than 110 m, and the reason is texel density rather than cost
+    // (range does not change the draw count — every caster in the zone is
+    // inside the light margin either way). One cascade spends its whole map on
+    // the full range, so 1280 texels over 110 m is an 8.6 cm texel where two
+    // cascades gave the near half ~4 cm. 90 m brings that back to 7 cm and is
+    // still well beyond the distance at which this act's fog closes the frame.
+    shadowCascades: 1,
     shadowMapSize: 1280,
-    shadowDistance: 110,
+    shadowDistance: 90,
     skyViewWidth: 192,
     environmentWidth: 192,
     froxelDimensions: [128, 72, 64],

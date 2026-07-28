@@ -316,6 +316,23 @@ const ready = engine.ready
     // than at boot. Harmless in headless runs, where no click ever arrives.
     canvas.addEventListener('click', () => engine.input.requestPointerLock());
     document.body.classList.add('d2rim-ready');
+    // Take the boot curtain out of the document rather than leaving it at
+    // `opacity: 0`.
+    //
+    // It is `position: fixed; inset: 0` with an opaque background and an
+    // opacity *transition*, which is exactly the recipe for a promoted
+    // compositor layer the size of the viewport sitting on top of the canvas
+    // for the rest of the session. A fully transparent layer paints nothing,
+    // but its presence is still a reason for the compositor to keep the canvas
+    // on the general-purpose blend path instead of scanning it out directly —
+    // and that cost, like every cost in this investigation, is charged per
+    // frame regardless of what is being drawn. `LoadingScreen` already removes
+    // itself for the same reason; this element predates it and was missed.
+    //
+    // Removal waits for the transition so the fade is still seen. A 600 ms
+    // timer rather than a `transitionend` listener because the element may
+    // already be at its target opacity, in which case no event is ever fired.
+    window.setTimeout(() => document.getElementById('boot')?.remove(), 600);
   })
   .catch((error: unknown) => {
     // The loading screen is already on top of the page and already styled, so

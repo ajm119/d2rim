@@ -586,6 +586,33 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
     const { cascades, mapSize } = this.options;
     this.#reversedDepth = renderer.reversedDepthBuffer === true;
 
+    // **Why the texture always has at least two layers, even for one cascade.**
+    //
+    // The tier table has carried a comment for several rounds saying that
+    // `shadowCascades: 1` "was tried and does not work" — it produced a frame
+    // with the sky gone and the ground replaced by a field of grey blocks — and
+    // that finding out why was worth doing. This is why.
+    //
+    // `Texture.isArrayTexture` is not a mode anyone opts into. three derives it,
+    // in the constructor, as `image.depth > 1`. Ask for a depth texture with
+    // `depth: 1` and you do not get a one-layer array, you get a plain 2D
+    // texture — and every consumer downstream silently changes shape with it:
+    // the backend's array-render-target path is gated on
+    // `depthTexture.isArrayTexture && camera.isArrayCamera`, and this module's
+    // own sampling graph reads `textureLoad(depthTexture, …).depth(layer)`,
+    // which is meaningless against a 2D sampler. The result is not an error; it
+    // is a shader that compiles, runs, and reads garbage, which is exactly the
+    // picture that was captured.
+    //
+    // Allocating the layer the array path needs is a far better trade than
+    // refusing the configuration. One spare layer at the shipping tier is
+    // 1280² × 4 bytes ≈ 6.6 MB that is never written and never sampled; the
+    // cascade it buys the right to remove is a **complete extra submission of
+    // every shadow caster in the zone**, measured headlessly at 77 of 222 draws
+    // in the Rogue Encampment. Memory for draw calls, at roughly 90 KB per draw
+    // removed, is not a close decision.
+    const layers = Math.max(2, cascades);
+
     // One depth array texture, one layer per cascade. No `compareFunction`:
     // the PCSS blocker search must read raw occluder depth, which a comparison
     // sampler cannot provide. Nearest filtering because depth textures are not
@@ -602,7 +629,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
       THREE.NearestFilter,
       undefined,
       undefined,
-      cascades,
+      layers,
     );
     depthTexture.name = 'CSMDepthArray';
     depthTexture.compareFunction = null;
@@ -612,7 +639,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
       // shadow pass writes nothing to it; R8 is the cheapest legal choice.
       format: THREE.RedFormat,
       type: THREE.UnsignedByteType,
-      depth: cascades,
+      depth: layers,
       useArrayDepthTexture: true,
       depthBuffer: true,
     };

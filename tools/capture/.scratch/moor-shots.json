@@ -1,0 +1,54 @@
+{
+  "shots": [
+    {
+      "id": "moor-wide",
+      "description": "Blood Moor wide establishing, one sun cascade",
+      "url": "/?zone=bloodMoor&quality=medium",
+      "warmupFrames": 20,
+      "pose": [
+        "const view = d2rim.scene.constructor.defaultCamera;",
+        "camera.position.copy(view.position);",
+        "camera.lookAt(view.target);",
+        "camera.fov = view.fov;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+    {
+      "id": "moor-wide-2cascade",
+      "description": "Blood Moor wide establishing, two sun cascades (previous shipping config)",
+      "url": "/?zone=bloodMoor&quality=medium&cascades=2&shadowdist=110",
+      "warmupFrames": 20,
+      "pose": [
+        "const view = d2rim.scene.constructor.defaultCamera;",
+        "camera.position.copy(view.position);",
+        "camera.lookAt(view.target);",
+        "camera.fov = view.fov;",
+        "camera.updateProjectionMatrix();"
+      ]
+    },
+    {
+      "id": "moor-contact",
+      "description": "Blood Moor contact shadows at ground level, one sun cascade",
+      "url": "/?zone=bloodMoor&quality=medium",
+      "warmupFrames": 20,
+      "pose": [
+        "camera.position.set(6.2, 1.15, 1.6);",
+        "camera.lookAt(2.2, 0.35, -5.0);",
+        "camera.fov = 40; camera.updateProjectionMatrix();",
+        "camera.updateMatrixWorld(true);"
+      ]
+    },
+    {
+      "id": "moor-contact-2cascade",
+      "description": "Blood Moor contact shadows at ground level, two sun cascades",
+      "url": "/?zone=bloodMoor&quality=medium&cascades=2&shadowdist=110",
+      "warmupFrames": 20,
+      "pose": [
+        "camera.position.set(6.2, 1.15, 1.6);",
+        "camera.lookAt(2.2, 0.35, -5.0);",
+        "camera.fov = 40; camera.updateProjectionMatrix();",
+        "camera.updateMatrixWorld(true);"
+      ]
+    }
+  ]
+}

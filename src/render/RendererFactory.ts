@@ -231,6 +231,54 @@ function safeHasFeature(renderer: THREE.Renderer, name: string): boolean {
   }
 }
 
+/**
+ * Read the driver's own description of itself. See `RendererHandle.gpuDescription`.
+ *
+ * Wrapped in try/catch at every step: `getExtension` may return `null`,
+ * `getParameter` on an extension constant that was never granted throws
+ * `INVALID_ENUM` on some implementations, and a diagnostic must never be the
+ * thing that takes the boot down.
+ */
+function describeGpu(renderer: THREE.Renderer, backend: RendererBackend): string | null {
+  if (backend === 'webgpu') {
+    const adapter = (renderer as unknown as {
+      backend?: { adapter?: { info?: { vendor?: string; architecture?: string; device?: string } } };
+    }).backend?.adapter?.info;
+    if (adapter === undefined) return null;
+    const parts = [adapter.vendor, adapter.architecture, adapter.device].filter(
+      (part): part is string => typeof part === 'string' && part.length > 0,
+    );
+    return parts.length > 0 ? parts.join(' ') : null;
+  }
+
+  try {
+    const gl = renderer.getContext() as WebGL2RenderingContext | null;
+    if (gl === null || typeof gl.getParameter !== 'function') return null;
+
+    const read = (constant: number): string | null => {
+      try {
+        const value: unknown = gl.getParameter(constant);
+        return typeof value === 'string' && value.length > 0 ? value : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const debug = gl.getExtension('WEBGL_debug_renderer_info') as {
+      UNMASKED_RENDERER_WEBGL?: number;
+      UNMASKED_VENDOR_WEBGL?: number;
+    } | null;
+    const unmasked =
+      debug?.UNMASKED_RENDERER_WEBGL === undefined ? null : read(debug.UNMASKED_RENDERER_WEBGL);
+    // The masked string is the fallback, not the preference: Chromium has been
+    // returning a real answer here for some time, but it is also the one that
+    // reads `WebKit WebGL` on browsers that normalise it into uselessness.
+    return unmasked ?? read(gl.RENDERER);
+  } catch {
+    return null;
+  }
+}
+
 function detectCapabilities(
   renderer: THREE.Renderer,
   backend: RendererBackend,
@@ -325,6 +373,26 @@ export async function createRenderer(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap));
 
   const capabilities = detectCapabilities(renderer, backend);
+  const gpuDescription = describeGpu(renderer, backend);
+  // Loud, and at `warn` when it is a software rasteriser, because that single
+  // fact reframes every frame-time number the session will produce.
+  if (gpuDescription === null) {
+    console.warn(
+      '[RendererFactory] the browser withholds the GPU renderer string ' +
+        '(WEBGL_debug_renderer_info is blocked). This is what a hardened browser ' +
+        'does — Brave with fingerprint protection, Safari — and such a browser may ' +
+        'also be withholding GPU features that would otherwise be used.',
+    );
+  } else if (/swiftshader|swangle|software|llvmpipe|basic render/i.test(gpuDescription)) {
+    console.warn(
+      `[RendererFactory] GPU: "${gpuDescription}" — this is a SOFTWARE RASTERISER. ` +
+        'Every frame is being drawn on the CPU. No amount of reducing draw calls or ' +
+        'triangles will make this fast, and any frame-time measurement taken here ' +
+        'says nothing about the same build on hardware.',
+    );
+  } else {
+    console.info(`[RendererFactory] GPU: ${gpuDescription}`);
+  }
 
   // Decide *now* whether a GPU timer can ever answer, rather than inferring it
   // from a stream of zeroes at 4 Hz for the rest of the session. See
@@ -386,6 +454,7 @@ export async function createRenderer(
     backend,
     three,
     capabilities,
+    gpuDescription,
 
     setSize(w: number, h: number): void {
       // `updateStyle: false` — the canvas is sized by CSS to fill the window,

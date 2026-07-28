@@ -568,6 +568,38 @@ class RenderBridges implements GameModule {
     if (this.#tier.lightShafts && this.#flags.fog && this.#flags.post) {
       this.#post.addPass(this.#lightShafts.pass, { before: 'post.taa' });
       this.#installedShafts = true;
+    } else {
+      // **Not installing the pass was never enough, and that was measured.**
+      //
+      // `LightShaftsModule` is a `GameModule` on the frame graph's list, so its
+      // `lateUpdate` runs every frame whether or not its composite pass is in
+      // the chain — and that `lateUpdate` is where the *whole* effect lives. A
+      // headless submission trace at the shipping tier (`medium`, where the
+      // tier table says `lightShafts: false`) caught it red-handed:
+      //
+      // ```
+      // 0 PerspectiveCamera   guide.normals            51 draws   <-- !
+      // 0 OrthographicCamera  guide.full                1
+      // 0 OrthographicCamera  guide.half                1
+      // 0 OrthographicCamera  lightShafts.scatter       1
+      // 0 OrthographicCamera  lightShafts.history.1     1
+      // 1 PerspectiveCamera   CSMShadowColour         154
+      // 0 PerspectiveCamera   output                  211
+      // ```
+      //
+      // `guide.normals` is a **complete extra geometry submission of the
+      // scene** — a normal/depth prepass — followed by four full-screen
+      // half-float passes, every frame, and every byte of it was thrown away
+      // because no pass in the chain ever sampled the result. That is 51 of 277
+      // draws at the harness camera (roughly a fifth of the frame) plus the
+      // fill and bandwidth of five passes, bought for nothing.
+      //
+      // `setEnabled(false)` is the switch that actually stops it: `lateUpdate`
+      // returns on the first line, the owned `GuideBufferPass` is never
+      // rendered, and its render targets stay at their 1x1 constructor size, so
+      // the memory goes too. The module stays registered so
+      // `render.lightShafts` still resolves and the audit stays quiet.
+      this.#lightShafts.setEnabled(false);
     }
   }
 
@@ -757,6 +789,10 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
 
   const post = new PostStack({
     quality: tier.post,
+    // `?scale=` — the resolution bisector. `undefined` (not `null`) leaves the
+    // tier's own render scale in charge, which is what the shipping build gets.
+    // See `DebugFlags.parseRenderScale` for what a measurement with it means.
+    ...(flags.renderScale === null ? {} : { renderScale: flags.renderScale }),
     tonemap: {
       // AgX with the project's own restrained CDL. Not ACES: ACES's notorious
       // hue skew turns exactly the two colours this frame lives on — orange
@@ -980,15 +1016,27 @@ export function buildFrameGraph(options: FrameGraphOptions = {}): FrameGraph {
     // thing from setting the cascade count to zero, which would still build the
     // node, still allocate the array texture and still sample it.
     sun: { castShadow: flags.shadows },
-    // ...and the local shadow slots with it. A shadow-casting *point* light is
-    // six shadow-map renders of the whole scene every frame it is active, and
-    // the camp has a bonfire and a forge in it. `?shadows=off` has to mean all
-    // shadows or it is not a bisection, it is a hint.
-    ...(flags.shadows ? {} : { maxShadowedPointLights: 0, maxShadowedSpotLights: 0 }),
+    // Local shadow casters are **off by default now**, not merely switched off
+    // by `?shadows=off`. See `RenderFlags.localShadows` for the measurement and
+    // the art-direction argument; the short version is that one shadowed point
+    // light is six complete scene submissions a frame plus a cube-shadow
+    // sampler in every lit material forever, to shadow a warm pool of firelight
+    // under an overcast sky.
+    //
+    // Zero slots rather than zero intensity: an unallocated slot is a light
+    // that is not in the scene, which is what keeps the sampler out of the
+    // shader graph. `?localshadows=on` puts both pools back at one apiece.
+    maxShadowedPointLights: flags.localShadows ? 1 : 0,
+    maxShadowedSpotLights: flags.localShadows ? 1 : 0,
     shadows: {
-      cascades: tier.shadowCascades,
+      // `?cascades=` and `?shadowdist=` outrank the tier. Both exist because a
+      // cascade is a whole extra submission of every shadow caster in the zone
+      // and the range decides how many casters that is — the two largest
+      // shadow-side levers there are, and neither was answerable without a
+      // rebuild before.
+      cascades: flags.cascades ?? tier.shadowCascades,
       mapSize: tier.shadowMapSize,
-      shadowDistance: tier.shadowDistance,
+      shadowDistance: flags.shadowDistance ?? tier.shadowDistance,
       // An overcast sky is a big soft source. 2.4° is far wider than the sun's
       // true 0.53° disc and it is the single strongest cue that the light is
       // coming through cloud rather than from a clear sky.

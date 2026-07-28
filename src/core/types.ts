@@ -193,6 +193,33 @@ export interface RendererHandle {
     scene: THREE.Scene,
     camera: THREE.Camera,
   ): Promise<{ millis: number; programs: number; before: number }>;
+
+  /**
+   * Additive extension. What the driver calls itself, unmasked where possible.
+   *
+   * ### Why a string on the overlay is worth this much ceremony
+   *
+   * Every performance report this project receives comes from a machine it
+   * cannot touch, and the first question about any of them — *is this hardware
+   * at all?* — has never been answerable. A browser that has fallen back to a
+   * software rasteriser (SwiftShader, or Chromium's SwANGLE) does not say so:
+   * it reports a working WebGL2 context, renders the correct image, and takes
+   * tens of milliseconds a frame to do it, with the cost sitting exactly where
+   * a GPU-bound frame's cost sits. That is indistinguishable from "the scene is
+   * too heavy" from the inside, and it is the explanation that survives every
+   * round of removing work — which is the position this investigation has been
+   * in for several rounds.
+   *
+   * `WEBGL_debug_renderer_info` answers it in one line: `Apple M4` is hardware,
+   * `Google SwiftShader` / `SwANGLE` is not. Chromium has been unmasking the
+   * *masked* `RENDERER` parameter for a while, so both are read and the more
+   * specific one wins; a browser that withholds both (Brave with fingerprint
+   * protection at its stricter settings does exactly this) yields `null`,
+   * which is itself worth printing — a hardened browser is also a browser that
+   * withholds `EXT_disjoint_timer_query_webgl2` and may be refusing other GPU
+   * features silently.
+   */
+  readonly gpuDescription?: string | null;
 }
 
 /** See {@link RendererHandle.gpuTimer}. */

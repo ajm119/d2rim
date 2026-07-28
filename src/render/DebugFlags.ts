@@ -113,6 +113,62 @@ export interface RenderFlags {
   readonly gpuSync: boolean;
   /** `?warmup=0`: skip the pre-render pipeline warmup on the loading screen. */
   readonly warmup: boolean;
+  /**
+   * `?localshadows=on`: give local point/spot lights real shadow maps.
+   *
+   * **Off by default, and that default is the single largest draw-call
+   * decision in the project.** A shadow-casting *point* light is a cube map:
+   * three's `PointShadowNode.renderShadow` loops six faces and issues
+   * `renderer.render(scene, camera)` on each one, so one campfire is six
+   * complete extra submissions of the whole scene, every frame it is lit. The
+   * player's bisection measured the total shadow bill at 574 → 161 draws,
+   * against 2 sun cascades that a headless submission trace prices at ~154 —
+   * i.e. the local cube was costing more than both cascades put together.
+   *
+   * It is not only draws. The slot pool is allocated once at boot and its
+   * lights stay in the scene forever (removing them would rebuild every
+   * shader), so a single shadowed point slot and a single shadowed spot slot
+   * put a cube-shadow sampler *and* a 2D shadow sampler into the node graph of
+   * every lit material in the game — evaluated per fragment, for the entire
+   * session, including every frame in which both lights are parked at
+   * `y = -100000` with zero intensity.
+   *
+   * What is given up is a real shadow from the bonfire, the forge and the
+   * torches. That is affordable here specifically because of what those lights
+   * are: a warm pool at ground level under a fully overcast sky. Direction
+   * comes from the sun cascades, which still run; contact comes from the
+   * terrain material's own slope cavity darkening. A stylised camp does not
+   * need a torch to cast a geometrically correct shadow of a crate, and it
+   * certainly does not need it at six scene submissions a frame.
+   */
+  readonly localShadows: boolean;
+  /**
+   * `?scale=<0.25..1>`: internal render scale, independent of the tier.
+   *
+   * `null` leaves the tier's own `renderScale` in charge. See
+   * {@link parseRenderScale} for what a measurement with it means.
+   */
+  readonly renderScale: number | null;
+  /**
+   * `?cascades=<1..4>`: sun shadow cascade count, overriding the tier.
+   *
+   * One cascade is one fewer complete submission of every shadow caster in the
+   * scene, and at the shipping tier that submission is the *single largest item
+   * in the frame*: a headless trace prices the two-cascade pass at 154 of 222
+   * draws in the encampment. Whether one is enough is a question about the size
+   * of the zone rather than about the renderer, so it needs to be answerable
+   * without a rebuild.
+   */
+  readonly cascades: number | null;
+  /**
+   * `?shadowdist=<metres>`: sun shadow range, overriding the tier.
+   *
+   * The other half of the same question. A cascade renders every caster inside
+   * its slice, so the range decides how much of the world is submitted a second
+   * time — and a 110 m range around a camp that is 40 m across is paying for
+   * geometry the fog closes down long before a cascade boundary could show.
+   */
+  readonly shadowDistance: number | null;
 }
 
 /** Everything on. The shipping configuration. */
@@ -128,6 +184,10 @@ export const DEFAULT_RENDER_FLAGS: RenderFlags = Object.freeze({
   lit: true,
   gpuSync: false,
   warmup: true,
+  localShadows: false,
+  renderScale: null,
+  cascades: null,
+  shadowDistance: null,
 });
 
 /** What `?minimal=1` means, before explicit flags are layered on top. */
@@ -177,10 +237,22 @@ export function parseRenderFlags(search: string): RenderFlags {
 
   if (readSwitch(params, 'minimal') === true) Object.assign(flags, MINIMAL);
 
-  /** Which switches the URL named explicitly, so implications never override them. */
-  const explicit = new Set<keyof RenderFlags>();
+  /**
+   * The boolean half of the flag set.
+   *
+   * Spelled as its own type because `renderScale` is a `number | null` and a
+   * plain `keyof RenderFlags` therefore makes `flags[key] = someBoolean`
+   * resolve to `never`. Deriving it rather than listing it means a new
+   * non-boolean flag cannot silently break the loop below.
+   */
+  type BooleanFlag = {
+    [K in keyof RenderFlags]: RenderFlags[K] extends boolean ? K : never;
+  }[keyof RenderFlags];
 
-  const named: readonly (readonly [string, keyof RenderFlags])[] = [
+  /** Which switches the URL named explicitly, so implications never override them. */
+  const explicit = new Set<BooleanFlag>();
+
+  const named: readonly (readonly [string, BooleanFlag])[] = [
     ['fog', 'fog'],
     ['shadows', 'shadows'],
     ['post', 'post'],
@@ -237,8 +309,97 @@ export function parseRenderFlags(search: string): RenderFlags {
 
   flags.gpuSync = readSwitch(params, 'gpusync') ?? false;
   flags.warmup = readSwitch(params, 'warmup') ?? true;
+  // A local shadow caster is a shadow, so the master switch outranks it in the
+  // "off" direction exactly the way `post` outranks `bloom`.
+  flags.localShadows = flags.shadows && (readSwitch(params, 'localshadows') ?? false);
+  flags.renderScale = parseRenderScale(params.get('scale'));
+  flags.cascades = parseBoundedNumber(params.get('cascades'), 'cascades', 1, 4, true);
+  flags.shadowDistance = parseBoundedNumber(params.get('shadowdist'), 'shadowdist', 10, 400, false);
 
   return Object.freeze(flags);
+}
+
+/**
+ * Parse a numeric override, refusing rather than clamping.
+ *
+ * Clamping is the wrong behaviour for a bisection flag: a run that measured
+ * something other than what the URL asked for, and did not say so, is a
+ * measurement that will be believed and is wrong. Out of range warns and
+ * yields `null`, which every caller reads as "keep the tier's own value".
+ */
+function parseBoundedNumber(
+  raw: string | null,
+  name: string,
+  min: number,
+  max: number,
+  integer: boolean,
+): number | null {
+  if (raw === null) return null;
+  const value = Number.parseFloat(raw.trim());
+  if (!Number.isFinite(value) || (integer && !Number.isInteger(value))) {
+    console.warn(
+      `[DebugFlags] unknown ?${name}=${raw}; expected ` +
+        `${integer ? 'an integer' : 'a number'} in [${min}, ${max}]. Ignoring.`,
+    );
+    return null;
+  }
+  if (value < min || value > max) {
+    console.warn(`[DebugFlags] ?${name}=${raw} is outside [${min}, ${max}]. Ignoring.`);
+    return null;
+  }
+  return value;
+}
+
+/** The bounds `?scale=` is clamped to. Below a quarter the image is unreadable. */
+export const MIN_RENDER_SCALE = 0.25;
+export const MAX_RENDER_SCALE = 1;
+
+/**
+ * Parse `?scale=`, the resolution bisector.
+ *
+ * ### What it is for
+ *
+ * At `?minimal=1` the player's machine draws 77 calls and 75k triangles with
+ * unlit materials, no shadows, no fog and a single copy pass — and still spends
+ * 61 ms a frame, of which our own instrumentation can account for 3.1 ms. The
+ * remaining 58 ms is the browser blocking before it will grant the next
+ * animation frame, and no amount of removing geometry has moved it. There are
+ * only two shapes that cost can have, and they are distinguishable by one
+ * experiment:
+ *
+ * - **It scales with pixel area.** Halving the scale quarters the pixels; if
+ *   the blocked time falls by roughly the same factor, the frame is bound by
+ *   fill rate or by render-target bandwidth, and the fix is formats,
+ *   resolution and the number of full-screen passes.
+ * - **It is flat.** If 0.25 costs what 1.0 costs, no amount of shading is
+ *   responsible: it is a fixed per-frame stall — compositing, a synchronising
+ *   present, a driver fallback — and the fix is somewhere outside the renderer
+ *   entirely.
+ *
+ * The tier's own `renderScale` cannot answer this, because changing tier
+ * changes a dozen other things at the same time. This is deliberately the one
+ * knob that moves nothing but the pixel count: the canvas keeps its size, the
+ * scene target and every chain pass shrink, and the final blit upscales.
+ *
+ * Unparseable and out-of-range values warn and are ignored rather than being
+ * silently clamped, because a bisection that measured 0.1 while believing it
+ * measured 0.25 is worse than one that did not run.
+ */
+export function parseRenderScale(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = Number.parseFloat(raw.trim());
+  if (!Number.isFinite(value)) {
+    console.warn(`[DebugFlags] unknown ?scale=${raw}; expected a number. Ignoring.`);
+    return null;
+  }
+  if (value < MIN_RENDER_SCALE || value > MAX_RENDER_SCALE) {
+    console.warn(
+      `[DebugFlags] ?scale=${raw} is outside [${MIN_RENDER_SCALE}, ${MAX_RENDER_SCALE}]. ` +
+        'Ignoring, so the tier keeps its own render scale.',
+    );
+    return null;
+  }
+  return value;
 }
 
 /** True when every rendering system is in its shipping state. */
@@ -280,6 +441,10 @@ export function describeRenderFlags(flags: RenderFlags): string {
   const extra: string[] = [];
   if (flags.gpuSync) extra.push('gpusync');
   if (!flags.warmup) extra.push('no-warmup');
+  if (flags.localShadows) extra.push('localshadows');
+  if (flags.renderScale !== null) extra.push(`scale=${flags.renderScale}`);
+  if (flags.cascades !== null) extra.push(`cascades=${flags.cascades}`);
+  if (flags.shadowDistance !== null) extra.push(`shadowdist=${flags.shadowDistance}`);
 
   const disabled = off.length === 0 ? 'all systems on' : `off: ${off.join(' ')}`;
   return extra.length === 0 ? disabled : `${disabled}  [${extra.join(' ')}]`;
@@ -314,11 +479,20 @@ export function setRenderFlags(flags: RenderFlags | null): void {
 /** Log the active set once, at boot. Returns what it logged, for tests. */
 export function logRenderFlags(flags: RenderFlags = renderFlags()): string {
   const line = describeRenderFlags(flags);
-  if (allFlagsDefault(flags) && !flags.gpuSync && flags.warmup) {
+  if (
+    allFlagsDefault(flags) &&
+    !flags.gpuSync &&
+    flags.warmup &&
+    !flags.localShadows &&
+    flags.renderScale === null &&
+    flags.cascades === null &&
+    flags.shadowDistance === null
+  ) {
     console.info(
       `[DebugFlags] ${line}. Bisect a slow frame with ?minimal=1, then re-enable ` +
         'one at a time: ?fog=off ?shadows=off ?post=off ?bloom=off ?fxaa=off ' +
-        '?props=off ?terrain=off ?chars=off ?flat=1 ?gpusync=1',
+        '?props=off ?terrain=off ?chars=off ?flat=1 ?gpusync=1 ' +
+        '?localshadows=on ?scale=0.5',
     );
   } else {
     console.warn(`[DebugFlags] NON-DEFAULT RENDER CONFIGURATION — ${line}`);

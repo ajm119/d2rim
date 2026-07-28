@@ -35,6 +35,20 @@
  *   displayed value is up to two seconds stale. That is fine for bytes, which
  *   move slowly, and it is why draw calls and triangles are read from the
  *   renderer's own counters instead.
+ * - **There is no `backdrop-filter` on this box, and there must never be one.**
+ *   It had `backdrop-filter: blur(6px)` and it looked good. What that property
+ *   asks the browser for is: on every composited frame, take the pixels
+ *   *behind* this element — which here is the game canvas — read them back into
+ *   a filter surface, blur them, and composite the result. Over a WebGL canvas
+ *   that is the classic way to force the canvas out of the compositor's
+ *   fast/overlay path and into a per-frame copy with a synchronisation point,
+ *   and the cost is charged to every frame regardless of what the scene
+ *   contains. This overlay is on in every measurement anyone has ever reported
+ *   from a real machine, including the `?minimal=1` run whose 58 ms of blocked
+ *   time no amount of removing geometry would shift, so it was inside every
+ *   number and outside every hypothesis. A flat translucent background reads
+ *   identically at a tenth the compositing cost. See `ui/theme` for the same
+ *   rule applied to the modal scrim.
  *
  * ### It used to lie about the frame rate too, and that was worse
  *
@@ -80,8 +94,7 @@ z-index: 10;
 padding: 8px 11px;
 border-radius: 6px;
 border: 1px solid rgba(255, 255, 255, 0.10);
-background: rgba(8, 10, 14, 0.62);
-backdrop-filter: blur(6px);
+background: rgba(8, 10, 14, 0.88);
 color: #d8dde6;
 font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 letter-spacing: 0.02em;
@@ -154,6 +167,16 @@ export function gpuTimeLabel(input: GpuLabelInput): string {
     return 'n/a — timer unavailable, try ?gpusync=1';
   }
   return 'pending…';
+}
+
+/** Names a renderer string, and says out loud when it is not a GPU at all. */
+export function describeGpuString(description: string | null | undefined): string {
+  if (description === undefined || description === null) {
+    return 'withheld by the browser (hardened/fingerprint-protected?)';
+  }
+  return /swiftshader|swangle|software|llvmpipe|basic render/i.test(description)
+    ? `${description}  ** SOFTWARE RASTERISER — not a GPU **`
+    : description;
 }
 
 interface RendererSizeProbe {
@@ -365,6 +388,12 @@ export class DebugOverlay implements GameModule {
         `@${this.#pixelRatio.toFixed(2)}x (device ${this.#deviceRatio.toFixed(2)}x) ` +
         `${((this.#width * this.#pixelRatio * this.#height * this.#pixelRatio) / 1e6).toFixed(2)} Mpx`,
       `caps   compute=${capabilities.compute ? 'yes' : 'no'} msaa=${capabilities.maxSamples}x`,
+      // The single most reframing fact this box can carry. See
+      // `RendererHandle.gpuDescription`: a software rasteriser reports a
+      // perfectly healthy WebGL2 context and then spends 50 ms a frame on the
+      // CPU, which is indistinguishable from "the scene is too heavy" unless
+      // somebody asks the driver its name.
+      `gpu    ${describeGpuString(ctx.renderer.gpuDescription)}`,
       // Where the median frame went. `gpu` is a real timer query where the
       // device has one; `—` means the extension is absent, which is a fact
       // about the driver rather than a failure. Whatever is left over after
@@ -441,6 +470,15 @@ export class DebugOverlay implements GameModule {
       lines.push(
         `post   ${post.quality} ${stats.active.length} passes / ${stats.passDraws} draws`,
         `       ${stats.active.join(' ')}`,
+        // The chain's own resolution, and what one full-screen pass of it costs
+        // to read and write once. Bandwidth is the term nobody computes and the
+        // one that decides a tile-based unified-memory GPU's fate: a half-float
+        // RGBA buffer at 1.9 Mpx is ~15 MB, and every chain pass touches two of
+        // them. Printing `scale` next to it is what makes `?scale=` legible —
+        // if this number falls by 4x and the frame time does not, the frame was
+        // never bound by fill or bandwidth.
+        `chain  ${stats.width}x${stats.height} @${stats.renderScale.toFixed(2)} scale  ` +
+          `${((stats.width * stats.height * 8) / 1048576).toFixed(1)} MB per RGBA16F pass`,
       );
     }
 

@@ -1,0 +1,32 @@
+{
+  "shots": [
+    {
+      "id": "cas-2x110",
+      "description": "2 cascades x 1280 over 110 m (shipping medium)",
+      "url": "/?quality=medium&zone=encampment",
+      "warmupFrames": 20,
+      "pose": ["camera.position.set(-6.5, 2.0, 9.0);", "camera.lookAt(2.0, 0.9, -2.0);", "camera.updateMatrixWorld(true);"]
+    },
+    {
+      "id": "cas-1x110",
+      "description": "1 cascade x 1280 over 110 m",
+      "url": "/?quality=medium&zone=encampment&cascades=1",
+      "warmupFrames": 20,
+      "pose": ["camera.position.set(-6.5, 2.0, 9.0);", "camera.lookAt(2.0, 0.9, -2.0);", "camera.updateMatrixWorld(true);"]
+    },
+    {
+      "id": "cas-1x55",
+      "description": "1 cascade x 1280 over 55 m",
+      "url": "/?quality=medium&zone=encampment&cascades=1&shadowdist=55",
+      "warmupFrames": 20,
+      "pose": ["camera.position.set(-6.5, 2.0, 9.0);", "camera.lookAt(2.0, 0.9, -2.0);", "camera.updateMatrixWorld(true);"]
+    },
+    {
+      "id": "cas-off",
+      "description": "no sun shadows at all",
+      "url": "/?quality=medium&zone=encampment&shadows=off",
+      "warmupFrames": 20,
+      "pose": ["camera.position.set(-6.5, 2.0, 9.0);", "camera.lookAt(2.0, 0.9, -2.0);", "camera.updateMatrixWorld(true);"]
+    }
+  ]
+}

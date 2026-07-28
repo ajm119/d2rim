@@ -255,6 +255,18 @@ export interface PostStackStats {
   readonly bytes: number;
   /** Ids of the passes that ran on the last frame, in order. */
   readonly active: readonly string[];
+  /**
+   * The internal resolution multiplier in force, tier default or `?scale=`.
+   *
+   * Reported because the two numbers a bisection needs — how many pixels were
+   * shaded and how long the frame took — have to come back on the same
+   * screenshot or they are two separate anecdotes.
+   */
+  readonly renderScale: number;
+  /** Width of the scene target and every chain pass, in pixels. */
+  readonly width: number;
+  /** Height of the scene target and every chain pass, in pixels. */
+  readonly height: number;
 }
 
 export interface PostStackOptions {
@@ -265,7 +277,14 @@ export interface PostStackOptions {
   /**
    * Internal resolution multiplier applied on top of the tier default. The
    * chain runs at this scale and the final pass upscales on the way to the
-   * destination. Clamped to `[0.5, 1]`.
+   * destination. Clamped to `[0.25, 1]`.
+   *
+   * The floor used to be 0.5. It is 0.25 so that `?scale=` can bisect a
+   * suspected fixed per-frame stall: quartering the linear scale is a
+   * *sixteenth* of the pixels, and if a frame that draws 77 calls still costs
+   * the same at 1/16 the fill then no amount of shading is responsible for it.
+   * 0.25 is not a playable setting and is not reachable from the tier table;
+   * it is an instrument.
    */
   renderScale?: number;
   /**
@@ -620,7 +639,7 @@ export class PostStack implements GameModule {
     this.#renderScaleOverride =
       options.renderScale === undefined
         ? null
-        : THREE.MathUtils.clamp(options.renderScale, 0.5, 1);
+        : THREE.MathUtils.clamp(options.renderScale, 0.25, 1);
 
     this.motion = new MotionVectors(options.motion ?? {});
     this.grade = new ColorGrade(options.grade ?? {});
@@ -847,6 +866,9 @@ export class PostStack implements GameModule {
       targets: (this.#pool?.count ?? 0) + (this.#sceneTarget === null ? 0 : 1),
       bytes: (this.#pool?.bytes ?? 0) + sceneBytes + this.bloom.bytes + this.taa.bytes,
       active: this.#active,
+      renderScale: this.#renderScale(),
+      width: this.#width,
+      height: this.#height,
     };
   }
 

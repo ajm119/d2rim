@@ -138,6 +138,14 @@ export function buttonStyle(extra = ''): string {
  *
  * Dark enough that the panel reads as the focus, transparent enough that the
  * player can still see they are standing in a camp and not a menu.
+ *
+ * **No `backdrop-filter`, deliberately.** Blurring the scene behind a
+ * full-screen scrim is the single most tempting effect in a UI kit and the most
+ * expensive thing that can be put over a WebGL canvas: it forces the compositor
+ * to read the canvas back, filter it and recomposite on every frame, which
+ * costs the same whether the scene under it is a hundred draws or ten thousand.
+ * See the module header of `ui/DebugOverlay` for the version of this that
+ * shipped and had to be measured out again.
  */
 export function scrimStyle(z: number): string {
   return (
