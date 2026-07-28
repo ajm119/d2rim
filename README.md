@@ -61,6 +61,61 @@ npm run build && node tools/verify-kill.mjs
 An unrecognised `?quality=` logs a warning and falls back to auto-detection
 rather than failing quietly.
 
+#### Bisecting a slow frame
+
+This project has no GPU: CI rasterises in software on four cores, so every
+performance claim about real hardware has to come back from a player reading the
+debug overlay. These switches exist so that player can remove one system at a
+time and watch the number move. Each one genuinely *stops the work being
+issued*; none of them turns an intensity down to zero and still pays for the
+pass. They compose freely.
+
+| Parameter | Default | Effect |
+| --- | --- | --- |
+| `?minimal=1` | off | The floor: `fog=off&shadows=off&post=off&flat=1`. An explicit flag still outranks it |
+| `?fog=off` / `?shadows=off` / `?post=off` / `?bloom=off` / `?fxaa=off` | on | One subsystem each |
+| `?props=off` / `?terrain=off` / `?chars=off` | on | Whole subtrees, so the draw counter proves the removal |
+| `?flat=1` | off | Swap every scene material for an unlit basic one |
+| **`?scale=<0.25..1>`** | tier | **Internal render scale, independent of tier.** The scene target and every chain pass shrink; the canvas does not. See below |
+| `?cascades=<1..4>` | tier | Sun shadow cascade count. A cascade is a complete extra submission of every shadow caster |
+| `?shadowdist=<metres>` | tier | Sun shadow range |
+| `?localshadows=on` | **off** | Give local point/spot lights real shadow maps again. One shadowed point light is a cube map, i.e. six more scene submissions per frame |
+| `?gpusync=1` | off | Force a 1×1 readback after each frame and time it: a crude but real measure of queued GPU work where no timer query exists |
+| `?warmup=0` | on | Skip the pre-render pipeline warmup, to see what it was hiding |
+
+Out-of-range numeric values are **refused, not clamped**, and say so. A run that
+measured something other than what the URL asked for — without mentioning it —
+is worse than a run that never happened.
+
+##### What `?scale=` tells you
+
+It is the one knob that changes the pixel count and nothing else, which makes it
+the experiment that separates the only two shapes a "blocked" frame time can
+have:
+
+- **Blocked time falls roughly with pixel area** (0.5 → a quarter of the pixels,
+  0.25 → a sixteenth). The frame is bound by fill rate or render-target
+  bandwidth. Fix formats, resolution and the number of full-screen passes.
+- **Blocked time barely moves.** No amount of shading is responsible. It is a
+  fixed per-frame stall — compositing, a synchronising present, a driver
+  fallback — and it lives outside the renderer entirely.
+
+The overlay's `chain` line reports the resulting resolution and the bytes one
+full-screen RGBA16F pass touches, so the two numbers a bisection needs arrive on
+the same screenshot.
+
+##### Read the `gpu` line first
+
+The overlay prints the unmasked driver string. A browser that has fallen back to
+a software rasteriser reports a perfectly healthy WebGL2 context, renders the
+correct image, and takes tens of milliseconds a frame with the cost sitting
+exactly where a GPU-bound frame's cost sits — indistinguishable from "the scene
+is too heavy" unless somebody asks the driver its name. `Apple M4` is hardware;
+anything containing `SwiftShader`, `SwANGLE`, `llvmpipe` or `software` is not,
+and the overlay says so in words. `withheld by the browser` means fingerprint
+protection is on, which also withholds `EXT_disjoint_timer_query_webgl2` and may
+be refusing other GPU features silently.
+
 #### Why the default backend is WebGL2
 
 three.js r185 uploads a `Data3DTexture` as separate 2D slices on its WebGPU
