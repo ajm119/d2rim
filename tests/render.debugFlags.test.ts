@@ -226,3 +226,96 @@ describe('the cached instance', () => {
     expect(renderFlags().fog).toBe(true);
   });
 });
+
+/**
+ * The bisection flags added for the fixed-per-frame-stall investigation.
+ *
+ * `?scale=` is the load-bearing one. A player's `?minimal=1` run draws 77 calls
+ * with unlit materials and still spends 58 ms a frame in a place no CPU timer
+ * can see, and there is exactly one experiment that separates "bound by fill
+ * or bandwidth" from "a fixed stall that has nothing to do with shading":
+ * change the pixel count and nothing else. That experiment is only worth
+ * running if the flag reports honestly, which is why an out-of-range value is
+ * *refused* rather than clamped — a run that measured 0.1 while the reader
+ * believed it measured 0.25 is worse than a run that never happened.
+ */
+describe('the resolution and shadow bisection flags', () => {
+  it('leaves the tier in charge when they are absent', () => {
+    const flags = parseRenderFlags('');
+    expect(flags.renderScale).toBeNull();
+    expect(flags.cascades).toBeNull();
+    expect(flags.shadowDistance).toBeNull();
+  });
+
+  it('accepts a render scale inside the documented range', () => {
+    expect(parseRenderFlags('?scale=0.5').renderScale).toBe(0.5);
+    expect(parseRenderFlags('?scale=0.25').renderScale).toBe(0.25);
+    expect(parseRenderFlags('?scale=1').renderScale).toBe(1);
+  });
+
+  it('refuses an out-of-range scale rather than clamping it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(parseRenderFlags('?scale=0.1').renderScale).toBeNull();
+    expect(parseRenderFlags('?scale=2').renderScale).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a scale that is not a number', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(parseRenderFlags('?scale=half').renderScale).toBeNull();
+  });
+
+  it('accepts an integer cascade count in [1, 4] and refuses anything else', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(parseRenderFlags('?cascades=1').cascades).toBe(1);
+    expect(parseRenderFlags('?cascades=4').cascades).toBe(4);
+    expect(parseRenderFlags('?cascades=0').cascades).toBeNull();
+    expect(parseRenderFlags('?cascades=5').cascades).toBeNull();
+    expect(parseRenderFlags('?cascades=1.5').cascades).toBeNull();
+  });
+
+  it('accepts a fractional shadow distance, because metres are not integers', () => {
+    expect(parseRenderFlags('?shadowdist=55.5').shadowDistance).toBe(55.5);
+  });
+
+  it('names both on the overlay line, so a screenshot records what it measured', () => {
+    const line = describeRenderFlags(parseRenderFlags('?scale=0.5&cascades=1'));
+    expect(line).toContain('scale=0.5');
+    expect(line).toContain('cascades=1');
+  });
+});
+
+/**
+ * Local (point/spot) shadow casters, which are off by default now.
+ *
+ * A shadow-casting point light is a cube map: six complete submissions of the
+ * whole scene, every frame it is lit. The player's own bisection put the total
+ * shadow bill at 574 → 161 draws against two sun cascades that this project's
+ * headless trace prices at 154, so the local cube was costing more than both
+ * cascades together — to shadow a warm pool of firelight under an overcast sky.
+ */
+describe('local shadow casters', () => {
+  it('are off unless asked for', () => {
+    expect(parseRenderFlags('').localShadows).toBe(false);
+    expect(DEFAULT_RENDER_FLAGS.localShadows).toBe(false);
+  });
+
+  it('come back with ?localshadows=on', () => {
+    expect(parseRenderFlags('?localshadows=on').localShadows).toBe(true);
+    expect(parseRenderFlags('?localshadows=1').localShadows).toBe(true);
+  });
+
+  it('cannot survive ?shadows=off, which has to mean all shadows', () => {
+    expect(parseRenderFlags('?shadows=off&localshadows=on').localShadows).toBe(false);
+    expect(parseRenderFlags('?minimal=1&localshadows=on').localShadows).toBe(false);
+  });
+
+  it('are named on the overlay line when on, and silent when off', () => {
+    expect(describeRenderFlags(parseRenderFlags('?localshadows=on'))).toContain('localshadows');
+    expect(describeRenderFlags(parseRenderFlags(''))).not.toContain('localshadows');
+  });
+
+  it('do not make an otherwise-default configuration read as non-default', () => {
+    expect(allFlagsDefault(parseRenderFlags(''))).toBe(true);
+  });
+});

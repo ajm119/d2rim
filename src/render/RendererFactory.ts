@@ -222,6 +222,67 @@ function configureRenderer(renderer: THREE.Renderer, exposure: number): void {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 }
 
+/**
+ * The context attributes an always-full-screen game canvas actually wants.
+ *
+ * Exported so a test can assert the two that matter and so the reasoning has
+ * somewhere to live:
+ *
+ * - `alpha: false` — the drawing buffer is opaque, so the compositor may treat
+ *   the canvas as an opaque layer instead of blending it every frame. This is
+ *   the one that three cannot choose for us; see the call site.
+ * - `powerPreference: 'high-performance'` — on any machine with two GPUs this
+ *   is the difference between the discrete part and the integrated one. It is
+ *   inert on Apple silicon and costs nothing to ask for.
+ * - `antialias` / `depth` / `stencil` — matched to what three would have asked
+ *   for, because whichever call runs first decides for both.
+ * - `preserveDrawingBuffer` is **absent, i.e. false**, and must stay that way.
+ *   Setting it obliges the browser to keep the back buffer readable after
+ *   present, which on most drivers means a full-resolution copy of the
+ *   framebuffer on every single frame. It is not set anywhere in this project;
+ *   this comment exists so that stays true.
+ * - `desynchronized` is deliberately **not** set: it can reduce present
+ *   latency, but it also opts the canvas out of the normal compositing
+ *   guarantees and has been observed to tear over a HUD.
+ */
+export const CANVAS_CONTEXT_ATTRIBUTES: Readonly<WebGLContextAttributes> = Object.freeze({
+  alpha: false,
+  depth: true,
+  stencil: false,
+  antialias: false,
+  powerPreference: 'high-performance',
+  failIfMajorPerformanceCaveat: false,
+});
+
+/**
+ * Create the WebGL2 context ourselves so the attributes are ours.
+ *
+ * Returns `null` when the canvas refuses — three then falls back to its own
+ * `getContext` call, which is the previous behaviour and still works.
+ */
+function claimWebGL2Context(
+  canvas: HTMLCanvasElement,
+  antialias: boolean,
+): WebGL2RenderingContext | null {
+  try {
+    const context = canvas.getContext('webgl2', {
+      ...CANVAS_CONTEXT_ATTRIBUTES,
+      antialias,
+    });
+    if (context === null) return null;
+    const actual = context.getContextAttributes();
+    console.info(
+      `[RendererFactory] WebGL2 context: alpha=${actual?.alpha} depth=${actual?.depth} ` +
+        `stencil=${actual?.stencil} antialias=${actual?.antialias} ` +
+        `preserveDrawingBuffer=${actual?.preserveDrawingBuffer}`,
+    );
+    return context;
+  } catch (error) {
+    console.warn('[RendererFactory] could not pre-create the WebGL2 context:', error);
+    return null;
+  }
+}
+
 /** Probe optional device features without letting a throw escape. */
 function safeHasFeature(renderer: THREE.Renderer, name: string): boolean {
   try {
@@ -358,12 +419,40 @@ export async function createRenderer(
   }
 
   if (renderer === null) {
+    // Claim the WebGL2 context first, with the attributes we want.
+    //
+    // three's `WebGLBackend.init` does
+    // `parameters.context ?? domElement.getContext('webgl2', contextAttributes)`
+    // with an attribute set it builds itself — and that set hardcodes
+    // `alpha: true` with the comment "always true for performance reasons".
+    // For a `<canvas>` that is one element in a document that is the right
+    // default; for a canvas that *is* the viewport it is the opposite. An
+    // alpha-enabled drawing buffer is a **translucent layer**, so the browser's
+    // compositor cannot treat it as opaque: every presented frame has to be
+    // blended against whatever the compositor believes is behind it, at full
+    // backing-store resolution, and on macOS that also disqualifies the canvas
+    // from the direct-scanout path. Nothing is ever behind this canvas.
+    //
+    // `getContext` returns the *existing* context, attributes and all, on any
+    // call after the first — so creating it here with `alpha: false` is simply
+    // how the attributes get chosen, and three's own call becomes a lookup. The
+    // other attributes are matched to what three would have asked for (no
+    // MSAA on the default framebuffer — see `CreateRendererOptions.antialias` —
+    // depth yes, stencil no) so that this cannot diverge from the renderer's
+    // expectations.
+    //
+    // Done only on the WebGL2 path, and only after WebGPU has either been
+    // declined or failed: claiming a `webgl2` context on a canvas makes a later
+    // `getContext('webgpu')` on the same canvas fail.
+    const context = claimWebGL2Context(canvas, antialias);
+
     const fallback = new THREE.WebGPURenderer({
       canvas,
       antialias,
       forceWebGL: true,
       trackTimestamp,
-    });
+      ...(context === null ? {} : { context }),
+    } as ConstructorParameters<typeof THREE.WebGPURenderer>[0]);
     await fallback.init();
     renderer = fallback;
     backend = 'webgl2';

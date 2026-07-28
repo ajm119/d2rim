@@ -211,6 +211,30 @@ function resolveOptions(options: CascadedShadowMapOptions): ResolvedOptions {
  * ------------------------------------------------------------------------- */
 
 /**
+ * How many layers the cascade depth-array texture must be allocated with.
+ *
+ * **Never fewer than two, whatever the cascade count.** `Texture.isArrayTexture`
+ * is not a mode a caller opts into — three derives it in the constructor as
+ * `image.depth > 1` — so asking for a one-layer array yields a plain 2D
+ * texture, and every array-shaped consumer downstream changes shape with it in
+ * silence: the backend's array-render-target path is gated on
+ * `depthTexture.isArrayTexture && camera.isArrayCamera`, and this module's own
+ * sampling graph reads `textureLoad(depthTexture, …).depth(layer)`, which is
+ * meaningless against a 2D sampler. Nothing throws. The shader compiles, runs,
+ * and reads garbage — which is exactly the frame that was captured when
+ * `shadowCascades: 1` was last attempted: the sky gone, the ground replaced by
+ * a field of grey blocks.
+ *
+ * The spare layer is 6.6 MB at the shipping tier's 1280² and is never written
+ * or sampled. What it buys is the right to run one cascade instead of two, and
+ * a cascade is a **complete extra submission of every shadow caster in the
+ * zone** — 77 of 222 draws in the Rogue Encampment, measured.
+ */
+export function shadowArrayLayers(cascades: number): number {
+  return Math.max(2, cascades);
+}
+
+/**
  * Practical split scheme (Zhang et al. 2006).
  *
  * Returns the `count` **far** distances of the cascades, in view-space units
@@ -611,7 +635,7 @@ export class CascadedShadowMapNode extends THREE.ShadowBaseNode {
     // every shadow caster in the zone**, measured headlessly at 77 of 222 draws
     // in the Rogue Encampment. Memory for draw calls, at roughly 90 KB per draw
     // removed, is not a close decision.
-    const layers = Math.max(2, cascades);
+    const layers = shadowArrayLayers(cascades);
 
     // One depth array texture, one layer per cascade. No `compareFunction`:
     // the PCSS blocker search must read raw occluder depth, which a comparison

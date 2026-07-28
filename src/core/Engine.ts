@@ -615,14 +615,119 @@ export class Engine {
           'swap, a post-chain pass, or a hot-swapped archetype — and shows up as a ' +
           'single very slow frame. Compare against the first "slow frame" report.',
       );
+      const settled = await this.#warmByRendering(result.programs);
       this.events.emit('engine:warmup', {
         millis: result.millis,
         compiled,
-        programs: result.programs,
+        programs: settled,
       });
     } catch (error) {
       console.warn('[Engine] pipeline warmup failed:', error);
     }
+  }
+
+  /**
+   * Finish the warmup by rendering real frames, still behind the loading screen.
+   *
+   * ### Why `compileAsync` alone was never going to be enough
+   *
+   * `Renderer.compileAsync` walks the scene graph and compiles the pipeline for
+   * each visible render object under the *scene* camera. That is a genuine and
+   * necessary head start, and it is also a strict subset of what a frame
+   * actually compiles. Measured on this project, in the Rogue Encampment at the
+   * shipping tier:
+   *
+   * ```
+   * after compileAsync   16 pipelines
+   * after frame 1        41 pipelines   <-- 25 compiled inside one frame
+   * after frames 2..90   41 pipelines
+   * ```
+   *
+   * Every one of those 25 is charged to a single frame, synchronously, inside
+   * `render()`, and on a machine where one TSL program takes tens of
+   * milliseconds to translate and link that is the 285 ms and 1443 ms frames in
+   * the reported traces. They are not exotic: they are the shadow-pass material
+   * variants (the shadow render swaps `scene.overrideMaterial` and the render
+   * object function, so nothing `compileAsync` saw applies), the array-camera
+   * variant of every caster, and the post chain's full-screen quads — which are
+   * owned by `PostStack`, are not in the scene graph, and are therefore
+   * invisible to any scene walk by construction.
+   *
+   * Trying to enumerate those cases would mean teaching this method about the
+   * shadow implementation and the post stack, which is the wrong direction of
+   * dependency and would rot the moment either changed. Rendering the frame
+   * compiles exactly what the frame compiles, for free, and it stays correct
+   * when the frame changes.
+   *
+   * ### And why the camera is opened all the way up while it happens
+   *
+   * A render only compiles what it draws, and what it draws is what survives
+   * frustum culling. The camera at boot is wherever it was constructed, not
+   * where the rig will put it on the first stepped frame, so a warmup render
+   * through the real frustum leaves out everything currently behind or beside
+   * the camera — and then the first real frame compiles it, which is precisely
+   * the hitch this is meant to remove. Bisected: with the naive version the
+   * Rogue Encampment still compiled 8 pipelines on frame 1, and `?props=off`
+   * took that to 0, i.e. every one of them was a prop that had been culled.
+   *
+   * Pipelines are keyed on material, geometry and lighting configuration, not
+   * on where the camera is standing, so widening the frustum costs two cheap
+   * over-drawn frames and buys the compile coverage of a full turn on the spot.
+   * The two passes are yawed 180° apart because even a 175° field of view
+   * cannot see behind itself. The camera is restored before anything else can
+   * observe it, and no world state moves — this is entirely inside `#boot`,
+   * before the first `#stepOnce`.
+   *
+   * Failures are swallowed for the same reason the compile is: a warmup is an
+   * optimisation, and refusing to boot because an optimisation failed is
+   * strictly worse than the stall it avoids.
+   */
+  async #warmByRendering(after: number): Promise<number> {
+    const renderer = this.#renderer;
+    if (renderer === null) return after;
+    const start = this.#now();
+    const camera = this.camera;
+    const savedFov = camera.fov;
+    const savedNear = camera.near;
+    const savedFar = camera.far;
+    const savedYaw = camera.rotation.y;
+    try {
+      camera.fov = 175;
+      camera.near = Math.min(savedNear, 0.05);
+      camera.far = Math.max(savedFar, 2000);
+      for (let i = 0; i < 2; i++) {
+        camera.rotation.y = savedYaw + i * Math.PI;
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld(true);
+        await renderer.render(this.scene, camera);
+      }
+    } catch (error) {
+      console.warn('[Engine] warmup render failed; pipelines will compile lazily:', error);
+      return after;
+    } finally {
+      camera.fov = savedFov;
+      camera.near = savedNear;
+      camera.far = savedFar;
+      camera.rotation.y = savedYaw;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+    }
+    // Counters must not carry boot frames into the player's first real frame,
+    // or the overlay's "draws" is the warmup plus the frame. `#stepOnce` resets
+    // per frame, but the first reset happens *after* this runs.
+    resetRendererInfo(renderer);
+
+    const settled = renderer.programCount?.() ?? after;
+    const late = settled - after;
+    console.info(
+      `[Engine] warmup render: ${(this.#now() - start).toFixed(0)} ms, ` +
+        `${late} further pipeline${late === 1 ? '' : 's'} compiled that ` +
+        '`compileAsync` could not see (shadow-pass variants, post-chain quads). ' +
+        `${settled} total. Anything compiled after this point is genuinely new ` +
+        'material — a zone change, a hot-swapped archetype — and is the only ' +
+        'remaining cause of a compile hitch during play.',
+    );
+    return settled;
   }
 
   /** Whether `?gpusync=1` is arming the forced readback. */

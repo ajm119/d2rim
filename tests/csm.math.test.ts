@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   frustumSliceSphere,
   practicalSplits,
+  shadowArrayLayers,
   snapToTexelGrid,
   vogelDiskSample,
 } from '../src/render/CascadedShadowMaps';
@@ -228,5 +229,30 @@ describe('vogelDiskSample', () => {
       sy += y;
     }
     expect(Math.hypot(sx / count, sy / count)).toBeLessThan(0.06);
+  });
+});
+
+/**
+ * The array-layer floor.
+ *
+ * This is not an optimisation, it is the fix for a real captured defect. The
+ * tier table carried `shadowCascades: 2` for several rounds with a note that
+ * one "was tried and does not work" — it rendered the sky away and replaced the
+ * ground with grey blocks. The cause is that three derives
+ * `Texture.isArrayTexture` from `image.depth > 1`, so a one-layer array is not
+ * an array and both the backend's array-target path and this module's
+ * `.depth(layer)` sampling silently take the wrong branch. Allocating a spare
+ * layer is what makes the single-cascade configuration correct, and the single
+ * cascade is worth 77 of 222 draws in the Rogue Encampment.
+ */
+describe('shadowArrayLayers', () => {
+  it('never returns fewer than two, because a one-layer array is not an array', () => {
+    expect(shadowArrayLayers(1)).toBe(2);
+  });
+
+  it('allocates exactly one layer per cascade above that', () => {
+    expect(shadowArrayLayers(2)).toBe(2);
+    expect(shadowArrayLayers(3)).toBe(3);
+    expect(shadowArrayLayers(4)).toBe(4);
   });
 });

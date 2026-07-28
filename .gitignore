@@ -52,3 +52,4 @@ tests/_*.test.ts
 tools/_diag.mjs
 tools/_zoneprobe.mjs
 _pagecheck.*
+tools/capture/.scratch/
